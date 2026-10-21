@@ -51,37 +51,9 @@ function drawCross(): THREE.CanvasTexture {
   const c = cv.getContext('2d')!
   c.translate(128, 128)
   c.lineCap = 'square'
-  // the crosshair: four arms with a gap in the middle, and a tick out on each arm
-  for (let i = 0; i < 4; i++) {
-    c.save()
-    c.rotate((i * Math.PI) / 2)
-    inked(c, 4, () => { c.beginPath(); c.moveTo(0, -22); c.lineTo(0, -64); c.stroke() })
-    inked(c, 4, () => { c.beginPath(); c.moveTo(-8, -88); c.lineTo(8, -88); c.stroke() })
-    c.restore()
-  }
-  c.fillStyle = 'rgba(0, 24, 8, 0.75)'
-  c.beginPath(); c.arc(0, 0, 6, 0, Math.PI * 2); c.fill()
-  c.fillStyle = GREEN
-  c.beginPath(); c.arc(0, 0, 3.5, 0, Math.PI * 2); c.fill()
   // corner brackets
   for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-    inked(c, 5, () => { c.beginPath(); c.moveTo(sx * 112, sy * 82); c.lineTo(sx * 112, sy * 112); c.lineTo(sx * 82, sy * 112); c.stroke() })
-  }
-  const t = new THREE.CanvasTexture(cv)
-  t.colorSpace = THREE.SRGBColorSpace
-  return t
-}
-
-function drawRing(): THREE.CanvasTexture {
-  const cv = document.createElement('canvas')
-  cv.width = cv.height = 256
-  const c = cv.getContext('2d')!
-  c.translate(128, 128)
-  c.setLineDash([16, 12])
-  inked(c, 3, () => { c.beginPath(); c.arc(0, 0, 100, 0, Math.PI * 2); c.stroke() })
-  c.setLineDash([])
-  for (let i = 0; i < 3; i++) { // three bright arcs on the ring
-    inked(c, 6, () => { c.beginPath(); c.arc(0, 0, 100, i * 2.094 + 0.2, i * 2.094 + 0.75); c.stroke() })
+    inked(c, 5, () => { c.beginPath(); c.moveTo(sx * 100, sy * 74); c.lineTo(sx * 100, sy * 100); c.lineTo(sx * 74, sy * 100); c.stroke() })
   }
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
@@ -177,7 +149,6 @@ interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; fla
 export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: string; live?: boolean } | null; held?: boolean }) {
   const root = useRef<THREE.Group>(null)
   const cross = useRef<THREE.Sprite>(null)
-  const ring = useRef<THREE.Sprite>(null)
   const label = useRef<THREE.Sprite>(null)
   // `spot` is a point on the planet's surface, in the planet's own frame (so it turns with the planet)
   const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), active: false, seekUntil: 0 })
@@ -197,10 +168,9 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
   const smokeTex = useMemo(() => drawSmoke(), [])
   useEffect(() => () => { glowTex.dispose(); shockTex.dispose(); smokeTex.dispose(); fireTex.forEach((t) => t.dispose()) }, [glowTex, shockTex, smokeTex, fireTex])
   const crossTex = useMemo(() => drawCross(), [])
-  const ringTex = useMemo(() => drawRing(), [])
   const labelCanvas = useMemo(() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; return cv }, [])
   const labelTex = useMemo(() => { const t = new THREE.CanvasTexture(labelCanvas); t.colorSpace = THREE.SRGBColorSpace; return t }, [labelCanvas])
-  useEffect(() => () => { crossTex.dispose(); ringTex.dispose(); labelTex.dispose() }, [crossTex, ringTex, labelTex])
+  useEffect(() => () => { crossTex.dispose(); labelTex.dispose() }, [crossTex, labelTex])
 
   // the guide lines are plain page elements laid over the map (made here, moved every frame, removed when the reticle goes)
   const gl = useThree((t) => t.gl)
@@ -349,19 +319,18 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
     }
     // closing in: the reticle starts large and tightens onto the spot
     const e = 1 - Math.pow(1 - Math.min(1, (now - k.since) / 0.5), 3)
-    const size = 0.46 * (1 + (1 - e) * 0.9)
+    const size = 0.38 * (1 + (1 - e) * 0.9)
     const alpha = k.level * (0.55 + 0.4 * e)
     // the reticle is drawn on the screen, flat and facing you, at wherever the spot is on the planet right now (so it follows the
     // spot as the planet turns or the camera orbits, is never sliced by the planet, and simply fades as the spot nears the edge)
     tmp.pos.copy(k.spot).multiplyScalar(RADIUS * 1.012)
     const edge = Math.min(1, Math.max(0, facing / 0.3))
-    for (const sp of [cross.current, ring.current]) {
+    for (const sp of [cross.current]) {
       if (!sp) continue
       sp.position.copy(tmp.pos)
       sp.scale.set(size, size, 1)
       ;(sp.material as THREE.SpriteMaterial).opacity = alpha * edge
     }
-    if (ring.current) (ring.current.material as THREE.SpriteMaterial).rotation = now * 0.7
 
     // the guide lines: from just outside the reticle to the top and the left and right edges of the map
     const L = lines.current
@@ -404,7 +373,6 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
   return (
     <>
       <group ref={root} visible={false}>
-        <sprite ref={ring} renderOrder={8}><spriteMaterial map={ringTex} {...common} {...keep} opacity={0} /></sprite>
         <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} {...common} {...keep} opacity={0} /></sprite>
         <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} {...keep} opacity={0} /></sprite>
       </group>
