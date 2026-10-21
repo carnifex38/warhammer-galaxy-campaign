@@ -9,7 +9,7 @@ import { Engine, flatEntries, flatGroups, newRoster, nextUid, rootSlots, slotsOf
 
 export interface Choice { id: string; name: string; pts: number; hidden?: boolean }
 export interface Issue { uid: string; level: 'error' | 'warning'; text: string }
-export interface SelSummary { uid: string; name: string; number: number; pts: number; issues: number }
+export interface SelSummary { uid: string; name: string; number: number; pts: number; issues: number; /** one short line under the name: what is in the unit */ brief: string }
 export interface RoleView { id: string; name: string; count: number; min?: number; max?: number; selections: SelSummary[]; choices: Choice[] }
 export interface ForceView { uid: string; name: string; catalogue: string; pts: number; roles: RoleView[]; forces: ForceView[]; childChoices: Choice[]; issues: number }
 export interface CostView { id: string; name: string; total: number; limit: number }
@@ -427,7 +427,26 @@ export class Builder {
   }
 
   private summary(s: Sel, counts: Map<string, number>): SelSummary {
-    return { uid: s.uid, name: label(this.eng, s), number: s.number, pts: this.eng.cost(s, this.pts), issues: counts.get(s.uid) ?? 0 }
+    return { uid: s.uid, name: label(this.eng, s), number: s.number, pts: this.eng.cost(s, this.pts), issues: counts.get(s.uid) ?? 0, brief: this.brief(s) }
+  }
+
+  /** A short line for under a unit's name: its models (or, for a single model, what it carries). */
+  private brief(s: Sel): string {
+    const e = this.eng
+    const shown = (c: Sel) => c.number > 0 && !e.isHidden(c.slot, { parent: c.parent })
+    const models = s.selections.filter((c) => shown(c) && c.slot.node.type === 'model')
+    const carried = (sel: Sel, out: string[] = []): string[] => {
+      for (const c of sel.selections) {
+        if (!shown(c)) continue
+        out.push(c.number > 1 ? `${label(e, c)} ×${c.number}` : label(e, c))
+        carried(c, out)
+      }
+      return out
+    }
+    if (models.length > 1) return models.map((m) => `${m.number}× ${label(e, m)}`).join(', ')
+    if (models.length === 1 && models[0].number > 1) return `${models[0].number}× ${label(e, models[0])}`
+    const list = carried(s).filter((n) => !/detachment|prime unit/i.test(n))
+    return list.slice(0, 6).join(', ') + (list.length > 6 ? '…' : '')
   }
 
   view(): RosterView {
