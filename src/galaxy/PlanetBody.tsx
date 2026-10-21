@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import SpaceHulk from './SpaceHulk'
 import TheRock from './TheRock'
 import { isHulkName } from './data'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { NOISE3 } from './glsl'
 import BaalMoons from './BaalMoons'
@@ -718,6 +718,13 @@ export const WARMUP_PLANETS: { label: string; name: string; era: Era }[] = [
   { label: 'other worlds', name: 'Tallarn', era: '40k' },
 ]
 
+/** Which planet shaders the graphics driver has already compiled (by shader, not by planet: several planets share one). */
+const compiledShaders = new Set<number>()
+const shaderKey = (name: string, era: Era) => { const h = lookFor(name, era).hero; return h > 0 && HERO_BODIES[h] ? h : 0 }
+export const shaderReady = (name: string, era: Era) => compiledShaders.has(shaderKey(name, era))
+export const markShaderReady = (name: string, era: Era) => { compiledShaders.add(shaderKey(name, era)) }
+const keptMaterials: THREE.Material[] = [] // held so a compiled program stays in the renderer's cache
+
 /** A planet material built exactly like the real one, so compiling it first means opening that planet later is instant. */
 export function createWarmupMaterial(name: string, era: Era) {
   return new THREE.ShaderMaterial({
@@ -733,6 +740,39 @@ const PLANET_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 96, 64)
 
 function SpherePlanet({ name, era, position, surface }: { name: string; era: Era; position: [number, number, number]; surface?: ReactNode }) {
   const spin = useRef<THREE.Group>(null)
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+
+  // If this planet's shader has not been compiled yet, show a plain placeholder globe straight away and compile the real one in
+  // the background (off the main thread where the browser can), then swap it in. Nothing waits on the compile.
+  const [ready, setReady] = useState(() => shaderReady(name, era))
+  useEffect(() => {
+    if (shaderReady(name, era)) { setReady(true); return }
+    setReady(false)
+    let live = true
+    void (async () => {
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))) // let the placeholder draw first
+      if (!live) return
+      const mat = createWarmupMaterial(name, era)
+      keptMaterials.push(mat)
+      const holder = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 4), mat)
+      holder.frustumCulled = false
+      scene.add(holder)
+      try { await gl.compileAsync(scene, camera) } catch { /* it will compile when first drawn instead */ }
+      scene.remove(holder)
+      // dev only: `?shaderdelay=4000` pretends the compile took that many ms, to look at the placeholder
+      const pretend = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('shaderdelay')) : 0
+      if (pretend) await new Promise((r) => setTimeout(r, pretend))
+      markShaderReady(name, era)
+      if (live) setReady(true)
+    })()
+    return () => { live = false }
+  }, [name, era, gl, scene, camera])
+  const placeholderColor = useMemo(() => {
+    const look = lookFor(name, era)
+    return new THREE.Color(look.landA).lerp(new THREE.Color(look.deep), 0.5).multiplyScalar(0.55)
+  }, [name, era])
 
   const planetUniforms = useMemo(() => makePlanetUniforms(name, era), [name, era])
 
@@ -769,15 +809,21 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
         {/* everything in here turns together: the planet and, on Mars, the ring held up by its elevators */}
         <group ref={spin}>
           {surface}
-          <mesh geometry={geometry} renderOrder={5}>
-            <shaderMaterial
-              key={`real${hero}-${era}`}
-              uniforms={planetUniforms}
-              vertexShader={PLANET_VERT}
-              fragmentShader={fragmentFor(hero)}
-              transparent
-            />
-          </mesh>
+          {ready ? (
+            <mesh geometry={geometry} renderOrder={5}>
+              <shaderMaterial
+                key={`real${hero}-${era}`}
+                uniforms={planetUniforms}
+                vertexShader={PLANET_VERT}
+                fragmentShader={fragmentFor(hero)}
+                transparent
+              />
+            </mesh>
+          ) : (
+            <mesh geometry={geometry} renderOrder={5}>
+              <meshBasicMaterial color={placeholderColor} transparent />
+            </mesh>
+          )}
           {hero === 2 && <MarsShipyard radius={PLANET_RADIUS} />}
           {hero === 4 && <NecromundaSpires radius={PLANET_RADIUS} />}
           {hero === 5 && <CadiaPylons radius={PLANET_RADIUS} />}

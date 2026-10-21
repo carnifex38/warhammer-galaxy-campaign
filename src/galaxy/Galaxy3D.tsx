@@ -7,7 +7,7 @@ import { sliced } from '../idle'
 import { SkyNebula } from './Nebula'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
-import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial } from './PlanetBody'
+import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, markShaderReady } from './PlanetBody'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
@@ -1150,6 +1150,7 @@ function Warmup() {
         const c0 = performance.now()
         try { await gl.compileAsync(scene, camera) } catch { /* compiled on demand instead */ }
         scene.remove(holder)
+        markShaderReady(w.name, w.era)
         if (performance.now() - c0 > 2500) {
           try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
           console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
