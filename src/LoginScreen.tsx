@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { AuthApi, Role } from './auth'
 import { usePreload } from './preloadGalaxy'
+import { DevPanel } from './devTools' // DEV-TOOLS
 
 const CHOICES: { role: Role; title: string; blurb: string; icon: string }[] = [
   { role: 'guest', title: 'Guest', blurb: 'Look around the galaxy. No name needed.', icon: '◇' },
@@ -93,6 +94,7 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
         )}
       </div>
       <PreloadBar />
+      <DevPanel auth={auth} /> {/* DEV-TOOLS */}
     </div>
   )
 }

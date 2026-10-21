@@ -9,7 +9,10 @@ import { gmLogin } from './api'
 
 export type Role = 'guest' | 'player' | 'gm'
 
-export interface Session { role: Role; name: string; /** gamemaster only: proves the server accepted the password */ token?: string }
+export interface Session { role: Role; name: string; /** gamemaster only: proves the server accepted the password */ token?: string; dev?: boolean /* DEV-TOOLS */ }
+
+/** DEV-TOOLS: the developer shortcuts exist only in the dev server (or a build made with VITE_DEV_TOOLS=true), never in the published site. */
+export const DEV_TOOLS = import.meta.env.DEV || import.meta.env.VITE_DEV_TOOLS === 'true'
 
 const KEY = 'galaxy-session'
 
@@ -21,6 +24,7 @@ function load(): Session | null {
     const raw = sessionStorage.getItem(KEY) ?? localStorage.getItem(KEY)
     if (!raw) return null
     const s = JSON.parse(raw) as Partial<Session>
+    if (s.dev === true && DEV_TOOLS && (s.role === 'guest' || s.role === 'player' || s.role === 'gm')) return { role: s.role, name: String(s.name ?? '').slice(0, 24), dev: true } // DEV-TOOLS
     if (s.role === 'guest' || s.role === 'player') return { role: s.role, name: String(s.name ?? '').slice(0, 24) }
     if (s.role === 'gm' && typeof s.token === 'string') return { role: 'gm', name: String(s.name ?? '').slice(0, 24), token: s.token }
   } catch { /* fall through */ }
@@ -32,7 +36,7 @@ function save(s: Session | null) {
     sessionStorage.removeItem(KEY)
     localStorage.removeItem(KEY)
     if (!s) return
-    ;(s.role === 'gm' ? sessionStorage : localStorage).setItem(KEY, JSON.stringify(s))
+    ;(s.role === 'gm' || s.dev ? sessionStorage : localStorage).setItem(KEY, JSON.stringify(s)) // DEV-TOOLS: dev sessions end with the tab
   } catch { /* private mode: it just won't be remembered */ }
 }
 
@@ -51,6 +55,7 @@ export function useAuth() {
       start({ role: 'gm', name, token })
       return true
     },
+    loginDev: (role: Role, name: string) => start({ role, name, dev: true }), // DEV-TOOLS
     logout: () => start(null),
   }
 }

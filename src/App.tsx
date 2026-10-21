@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import LoginScreen from './LoginScreen'
 import { preloadGalaxy } from './preloadGalaxy'
+import { DevSwitch } from './devTools' // DEV-TOOLS
 import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
 
@@ -57,6 +58,7 @@ export default function App() {
       <header className="topbar">
         <h1>Galaxy Campaign</h1>
         <div className="topbar-right">
+          <DevSwitch auth={auth} /> {/* DEV-TOOLS */}
           <span className={`userchip role-${auth.session.role}`} title={ROLE_LABEL[auth.session.role]}>
             <b>{auth.session.name}</b>
             <i>{ROLE_LABEL[auth.session.role]}</i>
