@@ -712,3 +712,4 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .zone-line.up { width: 1px; transform: translateX(-0.5px); background: linear-gradient(to top, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
 .zone-line.left { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to left, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
 .zone-line.right { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to right, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
+.zone-line.down { width: 1px; transform: translateX(-0.5px); background: linear-gradient(to bottom, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
