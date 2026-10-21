@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import SpaceHulk from './SpaceHulk'
 import TheRock from './TheRock'
 import { isHulkName } from './data'
@@ -731,7 +731,7 @@ export function createWarmupMaterial(name: string, era: Era) {
 /** Built once and reused by every planet that is picked, so choosing one does not rebuild the sphere. */
 const PLANET_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 96, 64)
 
-function SpherePlanet({ name, era, position }: { name: string; era: Era; position: [number, number, number] }) {
+function SpherePlanet({ name, era, position, surface }: { name: string; era: Era; position: [number, number, number]; surface?: ReactNode }) {
   const spin = useRef<THREE.Group>(null)
 
   const planetUniforms = useMemo(() => makePlanetUniforms(name, era), [name, era])
@@ -768,6 +768,7 @@ function SpherePlanet({ name, era, position }: { name: string; era: Era; positio
       <group rotation={tilt}>
         {/* everything in here turns together: the planet and, on Mars, the ring held up by its elevators */}
         <group ref={spin}>
+          {surface}
           <mesh geometry={geometry} renderOrder={5}>
             <shaderMaterial
               key={`real${hero}-${era}`}
@@ -813,7 +814,8 @@ function SpherePlanet({ name, era, position }: { name: string; era: Era; positio
 /** A number from a name, so each hulk gets its own shape. */
 const nameSeed = (name: string) => [...name].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7)
 
-export default function PlanetBody({ name, era, position }: { name: string; era: Era; position: [number, number, number] }) {
+/** `surface`: anything that should ride on a round planet's surface and turn with it (a targeting reticle, say). */
+export default function PlanetBody({ name, era, position, surface }: { name: string; era: Era; position: [number, number, number]; surface?: ReactNode }) {
   if (isHulkName(name)) return <SpaceHulk position={position} seed={nameSeed(name)} />
   if (lookNameFor(name, era) === 'rock') return <TheRock position={position} />
   if (lookNameFor(name, era) === 'shattered') {
@@ -823,5 +825,5 @@ export default function PlanetBody({ name, era, position }: { name: string; era:
       </group>
     )
   }
-  return <SpherePlanet name={name} era={era} position={position} />
+  return <SpherePlanet name={name} era={era} position={position} surface={surface} />
 }

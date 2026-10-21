@@ -974,8 +974,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       </mesh>
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
-          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} />
-          {roundWorld && <ZoneReticle zone={zone} />}
+          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <ZoneReticle zone={zone} /> : undefined} />
         </Arrive>
       ) : (
         <FadeWithBackdrop>

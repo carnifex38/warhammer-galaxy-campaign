@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// A green targeting reticle that settles on a spot of the planet when a battlezone is pointed at, and drifts slowly around it.
-// Every battlezone has its own spot (worked out from its id), always on the side of the planet facing the viewer, so the same
-// battlezone always points at the same place: the explosions planned for a claimed battlezone can use `zoneSpot` too.
-// Sits inside the planet's own group, so it grows with the planet as it arrives and uses the planet's local units.
+// A green targeting reticle that locks onto a spot of the planet when a battlezone is pointed at. The spot is a real point on the
+// planet's surface: the reticle is drawn inside the planet's own spinning group, so it turns with the planet, and orbiting the
+// camera just shows it from another side (it goes behind the planet when the spot turns away, and is picked up again). It starts
+// on the face the viewer can see, at a place worked out from the battlezone's id, so a battlezone points at roughly the same
+// part of the view each time.
 
 const GREEN = '#62ff9d'
 const RADIUS = 0.62 // the planet's radius (PLANET_RADIUS in Galaxy3D)
-const FACING = new THREE.Vector3(0, 0.3, 0.95).normalize() // the way the planet is first looked at from
 
 const hash = (s: string) => {
   let h = 2166136261
@@ -17,15 +17,16 @@ const hash = (s: string) => {
   return h >>> 0
 }
 
-/** The unit direction (from the planet's centre) that a battlezone points at. Stable for a given battlezone id. */
-export function zoneSpot(zoneId: string): THREE.Vector3 {
-  const h = hash(zoneId)
-  const around = ((h & 0x3ff) / 1023) * Math.PI * 2 // which way round the viewer's line of sight
-  const off = 0.12 + (((h >>> 10) & 0x3ff) / 1023) * 0.72 // how far off it (radians), so it never leaves the visible face
-  const u = new THREE.Vector3().crossVectors(FACING, new THREE.Vector3(1, 0, 0)).normalize()
-  const v = new THREE.Vector3().crossVectors(FACING, u).normalize()
-  const axis = u.multiplyScalar(Math.cos(around)).add(v.multiplyScalar(Math.sin(around)))
-  return FACING.clone().applyAxisAngle(axis, off)
+/**
+ * Where to lock on: a direction on the face the viewer sees, a stable pseudo-random distance from the middle for a given battlezone.
+ * It starts on the side the planet's surface is coming from, so the spot crosses the whole visible face before it turns away.
+ */
+export function zoneSpot(zoneId: string, toward: THREE.Vector3, right: THREE.Vector3, salt = 0): THREE.Vector3 {
+  const h = hash(`${zoneId}:${salt}`)
+  const left = 0.15 + (((h >>> 10) & 0x3ff) / 1023) * 0.5 // radians to the left of the middle (the planet turns toward the right)
+  const lift = (((h & 0x3ff) / 1023) - 0.5) * 0.9 // up or down a little
+  const dir = toward.clone().multiplyScalar(Math.cos(left)).addScaledVector(right, -Math.sin(left)).normalize()
+  return dir.applyAxisAngle(right, lift).normalize()
 }
 
 /** Draw a shape twice: a dark edge first, then the green line, so it stays readable over a bright planet. */
@@ -86,10 +87,11 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const cross = useRef<THREE.Sprite>(null)
   const ring = useRef<THREE.Sprite>(null)
   const label = useRef<THREE.Sprite>(null)
-  const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), seed: 0 })
-  const tmp = useMemo(() => ({ dir: new THREE.Vector3(), a: new THREE.Vector3(), b: new THREE.Vector3(), up: new THREE.Vector3() }), [])
-  const crossTex = useMemo(drawCross, [])
-  const ringTex = useMemo(drawRing, [])
+  // `spot` is a point on the planet's surface, in the planet's own frame (so it turns with the planet)
+  const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), salt: 0, hiddenSince: -1 })
+  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3() }), [])
+  const crossTex = useMemo(() => drawCross(), [])
+  const ringTex = useMemo(() => drawRing(), [])
   const labelCanvas = useMemo(() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; return cv }, [])
   const labelTex = useMemo(() => { const t = new THREE.CanvasTexture(labelCanvas); t.colorSpace = THREE.SRGBColorSpace; return t }, [labelCanvas])
   useEffect(() => () => { crossTex.dispose(); ringTex.dispose(); labelTex.dispose() }, [crossTex, ringTex, labelTex])
@@ -99,11 +101,26 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     if (!g) return
     const k = st.current
     const now = s.clock.elapsedTime
-    if (zone && zone.id !== k.id) { // a new battlezone is pointed at: lock onto its spot
-      k.id = zone.id
-      k.seed = (hash(zone.id) % 1000) / 1000
-      k.spot.copy(zoneSpot(zone.id))
+    const parent = g.parent // the planet's spinning group
+    if (!parent) return
+    parent.getWorldQuaternion(tmp.q)
+    tmp.qi.copy(tmp.q).invert()
+    parent.getWorldPosition(tmp.centre)
+    tmp.toCam.copy(s.camera.position).sub(tmp.centre).normalize() // from the planet toward the viewer
+
+    /** Lock onto a new spot: pick one on the face the viewer sees, then hold it in the planet's own frame. */
+    const lock = () => {
+      tmp.right.set(1, 0, 0).applyQuaternion(s.camera.quaternion)
+      tmp.world.copy(zoneSpot(k.id, tmp.toCam, tmp.right, k.salt))
+      k.spot.copy(tmp.world).applyQuaternion(tmp.qi)
       k.since = now
+      k.hiddenSince = -1
+    }
+
+    if (zone && zone.id !== k.id) { // a new battlezone is pointed at
+      k.id = zone.id
+      k.salt = 0
+      lock()
       if (zone.name !== k.name) {
         k.name = zone.name
         const c = labelCanvas.getContext('2d')!
@@ -126,34 +143,33 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     g.visible = k.level > 0.01
     if (!g.visible) return
 
-    // drift slowly around the spot, as if scanning the surface
-    tmp.dir.copy(k.spot)
-    tmp.a.set(0, 1, 0).cross(tmp.dir).normalize()
-    tmp.b.crossVectors(tmp.dir, tmp.a).normalize()
-    tmp.dir.applyAxisAngle(tmp.a, 0.11 * Math.sin(now * 0.8 + k.seed * 6.28))
-    tmp.dir.applyAxisAngle(tmp.b, 0.09 * Math.sin(now * 0.55 + k.seed * 11))
-    tmp.dir.normalize().multiplyScalar(RADIUS * 1.02)
+    // where the spot is now, in the world, and whether it faces the viewer
+    tmp.world.copy(k.spot).applyQuaternion(tmp.q)
+    const facing = tmp.world.dot(tmp.toCam)
+    if (zone) {
+      // if the spot has turned away for a moment, pick up a new one on the visible side
+      if (facing < 0.08) { if (k.hiddenSince < 0) k.hiddenSince = now; else if (now - k.hiddenSince > 0.5) { k.salt++; lock() } } else k.hiddenSince = -1
+    }
 
     // closing in: the reticle starts large and tightens onto the spot
     const e = 1 - Math.pow(1 - Math.min(1, (now - k.since) / 0.5), 3)
     const size = 0.46 * (1 + (1 - e) * 1.7)
     const alpha = k.level * (0.55 + 0.4 * e)
+    tmp.pos.copy(k.spot).multiplyScalar(RADIUS * 1.02)
     for (const sp of [cross.current, ring.current]) {
       if (!sp) continue
-      sp.position.copy(tmp.dir)
+      sp.position.copy(tmp.pos)
       sp.scale.set(size, size, 1)
       ;(sp.material as THREE.SpriteMaterial).opacity = alpha
     }
     if (ring.current) (ring.current.material as THREE.SpriteMaterial).rotation = now * 0.7
     if (label.current) {
-      // the name sits just under the reticle, drawn over the planet (so the curve of the surface never cuts it), and fades if the
-      // spot turns away from the viewer
-      g.getWorldPosition(tmp.up)
-      tmp.a.copy(s.camera.position).sub(tmp.up).normalize()
-      const facing = tmp.dir.clone().normalize().dot(tmp.a)
-      const seen = Math.min(1, Math.max(0, (facing - 0.05) / 0.25))
-      label.current.position.copy(tmp.dir).add(tmp.b.set(0, -0.36, 0))
+      // the name sits just under the reticle on the screen (not on the planet), drawn over the planet so the curve of the
+      // surface never cuts it, and fades as the spot turns away
+      tmp.down.set(0, -1, 0).applyQuaternion(s.camera.quaternion).applyQuaternion(tmp.qi).multiplyScalar(0.36)
+      label.current.position.copy(tmp.pos).add(tmp.down)
       label.current.scale.set(0.62, 0.62 * (96 / 512), 1)
+      const seen = Math.min(1, Math.max(0, (facing - 0.05) / 0.25))
       ;(label.current.material as THREE.SpriteMaterial).opacity = k.level * e * seen
     }
   })
