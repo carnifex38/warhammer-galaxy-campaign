@@ -237,7 +237,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       k.spot.copy(zoneSpot(k.id))
       k.since = now
       k.seekUntil = now + 4 // if the point is on the far side, turn the planet to bring it round
-      boomClock.current.burst = 6 // a quick volley as it locks on
+      boomClock.current.burst = 2 // two quick ones as it locks on
     }
 
     // a battlezone is pointed at (a different one, or the same one again after pointing away): pick its point. That point is then
@@ -291,7 +291,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         slot.flat.setFromRotationMatrix(tmp.m.makeBasis(tmp.u, tmp.v, slot.dir))
         slot.t0 = now
         slot.size = 0.022 + Math.random() * 0.035
-        slot.life = 1.4 + Math.random() * 0.9 // long enough to fade in and then out gently
+        slot.life = 2.6 + Math.random() * 1.0 // long enough to fade in and then out slowly
         slot.spin = Math.random() * Math.PI * 2
         // embers: thrown up off the surface and a little sideways, then pulled back
         const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
@@ -308,7 +308,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
           pos.setXYZ(i, slot.dir.x * RADIUS, slot.dir.y * RADIUS, slot.dir.z * RADIUS)
         }
       }
-      bc.next = now + (bc.burst > 0 ? 0.07 : 0.1 + Math.random() * 0.3)
+      bc.next = now + (bc.burst > 0 ? 0.3 : 0.7 + Math.random() * 0.9) // one every second or so (two quick ones as it locks on)
       if (bc.burst > 0) bc.burst--
     }
     let anyBoom = false
@@ -332,12 +332,13 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         m.scale.setScalar(scale)
         ;(m.material as THREE.MeshBasicMaterial).opacity = opacity
       }
-      set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.15, 0.45, u) * (1 - smooth(0.8, 1, u)), b.spin)
-      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.55 * smooth(0.18, 0.5, u) * (1 - smooth(0.62, 1, u)), b.spin + u * 0.5)
-      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.6 * smooth(0.0, 0.06, u) * (1 - smooth(0.06, 0.6, u)))
-      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.03, 0.2, u) * (1 - smooth(0.4, 0.92, u)), b.spin - u * 0.7)
-      ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.08, 0.35, u)).lerp(tmp.cool, smooth(0.35, 0.8, u))
-      set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.18, u)), Math.pow(1 - smooth(0, 0.22, u), 2))
+      const tf = now - b.t0 // seconds since it went off: the spark and the fade-in are quick, the fade-out takes the rest of its life
+      set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.5, 1.2, tf) * (1 - smooth(0.6, 1, u)), b.spin)
+      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.55 * smooth(0.4, 1.1, tf) * (1 - smooth(0.4, 1, u)), b.spin + u * 0.5)
+      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.6 * smooth(0, 0.12, tf) * (1 - smooth(0.04, 0.55, u)))
+      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.04, 0.4, tf) * (1 - smooth(0.2, 1, u)), b.spin - u * 0.7)
+      ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.1, 0.9, tf)).lerp(tmp.cool, smooth(0.25, 0.85, u))
+      set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.3, tf)), Math.pow(1 - smooth(0, 0.45, tf), 2))
     })
     // the embers
     {
