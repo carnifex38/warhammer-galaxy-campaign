@@ -13,28 +13,34 @@ export function toRos(b: Builder): string {
   const costTypes: { id: string; name: string }[] = (sys.gst.costTypes ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }))
   eng.touch()
 
-  const costsOf = (s: Sel, mult: number) =>
-    costTypes.map((t) => `<cost name="${esc(t.name)}" typeId="${t.id}" value="${num(eng.unitCost(s, t.id) * s.number * mult)}"/>`).join('')
+  // a selection lists only its own cost (number x cost); what is inside it lists its own
+  const costsOf = (s: Sel) =>
+    costTypes.map((t) => `<cost name="${esc(t.name)}" typeId="${t.id}" value="${num(eng.unitCost(s, t.id) * s.number)}"/>`).join('')
 
   const categories = (s: Sel) => {
     const c = eng.categories(s)
     const out: string[] = []
-    for (const id of c.all) out.push(`<category id="${uuid()}" name="${esc(sys.byId.get(id)?.name)}" entryId="${id}" primary="${c.primary === id}"/>`)
+    for (const id of c.all) out.push(`<category id="${id}" entryId="${id}" name="${esc(sys.byId.get(id)?.name)}" primary="${c.primary === id}"/>`)
     return out.length ? `<categories>${out.join('')}</categories>` : ''
   }
 
-  const selection = (s: Sel, mult: number): string => {
+  const selection = (s: Sel): string => {
     const node = s.slot.node
-    const kids = s.selections.map((c) => selection(c, mult * s.number)).join('')
+    const kids = s.selections.map(selection).join('')
     const type = node.type ?? 'upgrade'
     const name = eng.nameOf(s.slot, { self: s, parent: s.parent })
-    return `<selection id="${uuid()}" name="${esc(name)}" entryId="${esc(s.slot.id)}" number="${s.number}" type="${esc(type)}"><costs>${costsOf(s, mult)}</costs>${categories(s)}${kids ? `<selections>${kids}</selections>` : ''}</selection>`
+    // an option picked from a group says which group, as New Recruit's own files do
+    const g = s.slot.groups[s.slot.groups.length - 1]
+    const groupAttrs = g
+      ? ` entryGroupId="${esc([...(s.slot.link ? s.slot.links.slice(0, -1) : s.slot.links), g.id].join('::'))}" number="${s.number}" type="${esc(type)}" from="group" group="${esc(g.name)}"`
+      : ` number="${s.number}" type="${esc(type)}" from="entry"`
+    return `<selection id="${uuid()}" name="${esc(name)}" entryId="${esc(s.slot.id)}"${groupAttrs}><costs>${costsOf(s)}</costs>${categories(s)}${kids ? `<selections>${kids}</selections>` : ''}</selection>`
   }
 
   const force = (f: Force): string => {
     const cat = sys.cats.get(f.catalogueId)
     const entryId = f.link ? `${f.link.id}::${f.entry.id}` : f.entry.id
-    const sels = f.selections.map((s) => selection(s, 1)).join('')
+    const sels = f.selections.map(selection).join('')
     const kids = f.forces.map(force).join('')
     const roles = [...(f.entry.categoryLinks ?? []), ...(f.link?.categoryLinks ?? [])]
       .map((cl: { targetId: string; name: string }) => `<category id="${uuid()}" name="${esc(cl.name)}" entryId="${cl.targetId}" primary="false"/>`)

@@ -37,7 +37,8 @@ export function buildSystem(gst: Node, cats: Node[]): System {
 // ---------------------------------------------------------------------------------------------------------------
 
 export interface Slot {
-  id: string // the id used in a saved roster: link ids and then the entry id, joined with ::
+  id: string // the id used in a saved roster (the same as New Recruit's): the links passed through on the way down, then the entry id, joined with ::
+  links: string[] // every entry link on the way down from the top, including those of the units above
   node: Node // the entry or group
   link?: Node // the entry link it was reached through
   isGroup: boolean
@@ -51,8 +52,9 @@ function makeSlot(sys: System, node: Node, link: Node | undefined, chain: Slot[]
   const linkIds = link ? [...prefix, link.id] : prefix
   const id = [...linkIds, node.id].join('::')
   const groups = chain.map((g) => g.node)
-  const ids = [node.id, ...linkIds, ...chain.flatMap((g) => g.ids.slice(0, 1).concat(g.link ? [g.link.id] : []))]
-  const slot: Slot = { id, node, link, isGroup: group, groups, ids }
+  // the ids a rule may use to name THIS option: its entry, its own link, and the groups it sits in (not the units above it)
+  const ids = [node.id, ...(link ? [link.id] : []), ...chain.flatMap((g) => [g.node.id, ...(g.link ? [g.link.id] : [])])]
+  const slot: Slot = { id, links: linkIds, node, link, isGroup: group, groups, ids }
   if (group) slot.children = buildSlots(sys, node, link, [...chain, slot], linkIds)
   return slot
 }
@@ -76,7 +78,12 @@ function buildSlots(sys: System, owner: Node, link: Node | undefined, chain: Slo
 export function slotsOf(sys: System, slot: Slot): Slot[] {
   const key = slot.id
   let s = sys.slotCache.get(key)
-  if (!s) { s = buildSlots(sys, slot.node, slot.link, [], slot.link ? [slot.link.id] : []); sys.slotCache.set(key, s) }
+  if (!s) {
+    // New Recruit's ids: an entry linked from inside another entry is not part of the path of what is inside it (only the first link, at the top, is)
+    const prefix = slot.link && slot.link.type === 'selectionEntry' && slot.links.length > 1 ? slot.links.slice(0, -1) : slot.links
+    s = buildSlots(sys, slot.node, slot.link, [], prefix)
+    sys.slotCache.set(key, s)
+  }
   return s
 }
 
@@ -167,7 +174,7 @@ export interface Ctx {
   parent: Holder // where it is, or would be added
 }
 
-const VIRTUAL = (parent: Holder): Sel => ({ kind: 'sel', uid: '', slot: { id: '', node: {}, isGroup: false, groups: [], ids: [] }, number: 0, selections: [], parent: parent as Sel | Force, virtual: true })
+const VIRTUAL = (parent: Holder): Sel => ({ kind: 'sel', uid: '', slot: { id: '', links: [], node: {}, isGroup: false, groups: [], ids: [] }, number: 0, selections: [], parent: parent as Sel | Force, virtual: true })
 
 const TYPE_SCOPES = new Set(['unit', 'model', 'upgrade', 'selectionEntry'])
 
@@ -217,8 +224,8 @@ export class Engine {
 
   /** The selections inside a scope: its own, and optionally everything below (and in child forces). */
   private collect(scope: Holder, incSel: boolean, incForces: boolean, out: Picked[] = []): Picked[] {
-    // a selection inside a model counts once for every model above it (10 marines each with a bolter = 10 bolters)
-    const down = (list: Sel[], w: number) => { for (const s of list) { out.push({ s, w }); if (incSel) down(s.selections, w * s.number) } }
+    // numbers are totals, as in BattleScribe: ten marines carrying bolters is a bolter selection of 10
+    const down = (list: Sel[], w: number) => { for (const s of list) { out.push({ s, w }); if (incSel) down(s.selections, w) } }
     if (scope.kind === 'sel') down(scope.selections, 1)
     else if (scope.kind === 'force') {
       down(scope.selections, 1)
@@ -259,7 +266,38 @@ export class Engine {
     return total
   }
 
+  /** Everything above a rule's owner: parent, grandparent and so on up to the force. */
+  private ancestors(ctx: Ctx): Holder[] {
+    const out: Holder[] = []
+    let h: Holder | null = ctx.self ? ctx.self.parent : ctx.parent
+    while (h) { if (h.kind !== 'roster') out.push(h); h = holderParent(h) }
+    return out
+  }
+
+  private isInstance(h: Holder, childId: string, primaryCatalogue = false): boolean {
+    if (h.kind === 'sel') return h.virtual ? false : this.matches(h, childId)
+    if (h.kind === 'force') return primaryCatalogue ? h.catalogueId === childId : h.entry.id === childId || h.link?.id === childId || h.catalogueId === childId
+    return childId === h.systemId
+  }
+
   private conditionPasses(c: Node, ctx: Ctx): boolean {
+    if (c.scope === 'ancestor') {
+      // "any unit or force above this one" (for example: is a model above this weapon a Free Power Weapon holder?)
+      const above = this.ancestors(ctx)
+      if (c.type === 'instanceOf') return above.some((h) => this.isInstance(h, c.childId))
+      if (c.type === 'notInstanceOf') return !above.some((h) => this.isInstance(h, c.childId))
+      let have = 0
+      for (const h of above) if (h.kind === 'sel' && this.matches(h, c.childId)) have += h.number
+      switch (c.type) {
+        case 'lessThan': return have < c.value
+        case 'greaterThan': return have > c.value
+        case 'equalTo': return have === c.value
+        case 'notEqualTo': return have !== c.value
+        case 'atLeast': return have >= c.value
+        case 'atMost': return have <= c.value
+      }
+      return false
+    }
     const scope = this.scopeOf(c.scope, ctx)
     if (!scope) return false
     if (c.type === 'instanceOf' || c.type === 'notInstanceOf') {
@@ -401,9 +439,8 @@ export class Engine {
     const key = `${s.uid}:${typeId}:${withChildren ? 1 : 0}`
     const have = this.costMemo.get(key)
     if (have !== undefined) return have
-    let t = this.unitCost(s, typeId)
+    let t = this.unitCost(s, typeId) * s.number
     if (withChildren) for (const c of s.selections) t += this.cost(c, typeId, true)
-    t *= s.number // what is inside a model is paid for by every model
     this.costMemo.set(key, t)
     return t
   }
@@ -429,7 +466,14 @@ export class Engine {
     for (const o of owners) {
       for (const c of o?.constraints ?? []) {
         if (c.type !== 'min' && c.type !== 'max') continue
-        out.push({ type: c.type, value: this.modded<number>(Number(c.value), owners, c.id, ctx), node: c })
+        let value = this.modded<number>(Number(c.value), owners, c.id, ctx)
+        // limits are per model: with ten models in the selection, "at most 1" means at most ten
+        if (c.field === 'selections') {
+          const scope = this.scopeOf(c.scope, ctx)
+          if (scope && scope.kind === 'sel' && !scope.virtual && scope.number > 1) value *= scope.number
+        }
+        if (c.type === 'max' && value < 0) continue // a maximum below zero means "no limit" in BattleScribe
+        out.push({ type: c.type, value, node: c })
       }
     }
     return out

@@ -1,5 +1,6 @@
 // The roster side of the army builder: adding and removing forces and selections, keeping automatic selections correct,
 // checking the data's rules, and turning all of it into plain objects the screen can draw. Works on top of engine.ts.
+import type { ImportedForce, ImportedRoster, ImportedSel } from './importRoster.ts'
 import { Engine, flatEntries, flatGroups, newRoster, nextUid, rootSlots, slotsOf, type Ctx, type Force, type Node, type Roster, type Sel, type Slot, type System } from './engine.ts'
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -36,6 +37,14 @@ export interface SelDetail {
   loadout: string[] // what each kind of model carries
   stats: StatTable[] // the stat lines and weapon lines of what is selected
   rules: RuleView[] // special rules and wargear descriptions that apply
+}
+
+/** What came of reading another app's roster. */
+export interface ImportReport {
+  matched: number
+  skipped: string[] // entries the rules data here does not have (or that sit somewhere else now)
+  theirPoints: number // what the other app calculated
+  ourPoints: number
 }
 
 export interface SavedSel { e: string; n: number; s?: SavedSel[] }
@@ -145,8 +154,8 @@ export class Builder {
     if (!c) return null
     const slot = this.find(this.slotsFor(c), slotId)
     if (!slot || slot.isGroup) return null
-    const existing = c.selections.find((s) => s.slot.id === slot.id)
-    // adding something already there raises its number (the same model type is one selection with a count)
+    // adding a model or upgrade that is already there raises its number; every unit is its own selection
+    const existing = slot.node.type === 'unit' ? undefined : c.selections.find((s) => s.slot.id === slot.id)
     const sel = existing ?? this.makeSel(c, slot, 0)
     sel.number += number
     if (!existing) this.populate(sel)
@@ -160,7 +169,9 @@ export class Builder {
     const s = this.container(uid)
     if (!s || s.kind !== 'sel') return
     if (n <= 0) { this.remove(uid); return }
+    const old = s.number
     s.number = Math.floor(n)
+    if (old > 0) this.scale(s, s.number / old) // what is carried by the models goes up and down with them
     this.fresh = s.uid
     this.reconcile()
     this.fresh = ''
@@ -178,12 +189,20 @@ export class Builder {
     const s = this.container(uid)
     if (!s || s.kind !== 'sel') return null
     if (s.number <= count) return null
-    s.number -= count
+    const old = s.number
     const copy = this.cloneSel(s, s.parent)
+    this.scale(copy, count / old)
     copy.number = count
+    this.scale(s, (old - count) / old)
+    s.number = old - count
     s.parent.selections.push(copy)
     this.reconcile()
     return copy.uid
+  }
+
+  /** Change everything inside a selection in step with it (numbers are totals, so ten models carry ten of each thing). */
+  private scale(s: Sel, ratio: number) {
+    for (const c of s.selections) { c.number = Math.max(1, Math.round(c.number * ratio)); this.scale(c, ratio) }
   }
 
   private cloneSel(s: Sel, parent: Holder): Sel {
@@ -223,7 +242,7 @@ export class Builder {
           visit(slot.children ?? [])
           continue
         }
-        const want = Math.max(this.minHere(slot, here), Number(slot.node.defaultAmount ?? slot.link?.defaultAmount ?? 0))
+        const want = Math.max(this.minHere(slot, here), Number(slot.node.defaultAmount ?? slot.link?.defaultAmount ?? 0) * sel.number)
         if (want > 0 && !sel.selections.some((x) => x.slot.id === slot.id)) {
           const child = this.makeSel(sel, slot, want)
           this.populate(child, depth + 1)
@@ -596,6 +615,48 @@ export class Builder {
     }
     const info = top ? this.describe(s) : { loadout: [], stats: [], rules: [] }
     return { uid: s.uid, name: label(e, s), number: s.number, pts: e.cost(s, this.pts), slots: build(slotsOf(this.sys, s.slot)), issues, ...info }
+  }
+
+  // ---- importing ----
+
+  /**
+   * Fill this roster from another app's. Every selection is matched to its place by its entry id (New Recruit and this builder
+   * use the same ids), so a list built there comes out as the same units, models and wargear here.
+   */
+  importRoster(r: ImportedRoster): ImportReport {
+    const skipped: string[] = []
+    let matched = 0
+    const load = (c: Holder, list: ImportedSel[], where: string) => {
+      const slots = this.slotsFor(c)
+      for (const x of list) {
+        let slot = this.find(slots, x.entryId)
+        if (!slot) { // the same entry reached by a different route: match on the entry itself
+          const last = x.entryId.split('::').pop()
+          const all = flatEntries(slots)
+          slot = all.find((y) => y.node.id === last)
+        }
+        if (!slot || slot.isGroup) { skipped.push(`${where} › ${x.name}`); continue }
+        const s = this.makeSel(c, slot, x.number)
+        matched++
+        load(s, x.selections, `${where} › ${x.name}`)
+      }
+    }
+    const loadForce = (x: ImportedForce, parent: Force | Roster) => {
+      const parts = x.entryId.split('::')
+      const entry = this.sys.byId.get(parts[parts.length - 1])
+      if (!entry) { skipped.push(x.name); return }
+      const link = parts.length > 1 ? this.sys.byId.get(parts[0]) : undefined
+      const f: Force = { kind: 'force', uid: nextUid(), entry, link, catalogueId: x.catalogueId, selections: [], forces: [], parent }
+      parent.forces.push(f)
+      matched++
+      load(f, x.selections, x.name)
+      for (const c of x.forces) loadForce(c, f)
+    }
+    this.roster.name = r.name
+    if (r.limit >= 0) this.roster.limits[this.pts] = r.limit
+    for (const f of r.forces) loadForce(f, this.roster)
+    this.eng.touch()
+    return { matched, skipped, theirPoints: r.points, ourPoints: this.eng.total(this.pts) }
   }
 
   // ---- saving ----

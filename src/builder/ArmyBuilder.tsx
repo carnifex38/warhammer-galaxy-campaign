@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Request, Response } from './worker.ts'
+import { readRosterFile } from './importRoster.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen: pick an army, add detachments and units, edit each unit's loadout, see the points and the
@@ -48,6 +49,7 @@ export default function ArmyBuilder({ stored, name, onChange }: { stored?: Store
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const started = useRef(false)
+  const fileInput = useRef<HTMLInputElement>(null)
   const armyRef = useRef(armyId)
   armyRef.current = armyId
 
@@ -82,7 +84,30 @@ export default function ArmyBuilder({ stored, name, onChange }: { stored?: Store
 
   const act = useCallback(async (req: Request) => { apply(await call(req)) }, [call, apply])
 
-  if (error && !view) return <p className="login-error" role="alert">{error}</p>
+  /** Open a list made in New Recruit or BattleScribe (.json, .ros or .rosz). */
+  const importFile = useCallback(async (file: File) => {
+    setBusy(true)
+    setError('')
+    setNote('')
+    try {
+      const roster = await readRosterFile({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+      const cat = roster.forces[0]?.catalogueId
+      if (!cat) throw new Error('That list has no army in it.')
+      armyRef.current = cat
+      setArmyId(cat)
+      const loaded = await call({ op: 'load', base: BASE.hh3, armyId: cat })
+      if (!loaded.ok) throw new Error(loaded.error)
+      const r = await call({ op: 'import', roster })
+      if (!r.ok) throw new Error(r.error)
+      apply(r)
+      const rep = r.report
+      if (rep) setNote(`Imported ${rep.matched} entries from ${file.name}. ${rep.theirPoints ? `That app counted ${Math.round(rep.theirPoints)} pts; this builder counts ${Math.round(rep.ourPoints)}${Math.round(rep.theirPoints) === Math.round(rep.ourPoints) ? ' (the same).' : '.'}` : ''}${rep.skipped.length ? ` ${rep.skipped.length} entries were not found in the rules data: ${rep.skipped.slice(0, 3).join('; ')}${rep.skipped.length > 3 ? '…' : ''}` : ''}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not read that file.')
+    } finally {
+      setBusy(false)
+    }
+  }, [call, apply])
 
   if (!view) {
     return (
@@ -98,6 +123,11 @@ export default function ArmyBuilder({ stored, name, onChange }: { stored?: Store
             <button className="primary" disabled={!armyId || busy} onClick={() => void start(armyId).then(() => void call({ op: 'name', name }))}>{busy ? 'Loading rules…' : 'Start building'}</button>
           </div>
         )}
+        <div className="bld-import">
+          <button className="ghost" disabled={busy} onClick={() => fileInput.current?.click()}>Import a list from New Recruit or BattleScribe</button>
+          <input ref={fileInput} type="file" accept=".json,.ros,.rosz,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f) }} />
+        </div>
+        {error && <p className="login-error" role="alert">{error}</p>}
         <p className="muted bld-hint">The rules for the Horus Heresy (3rd edition) come from the community BSData files, the same data New Recruit uses. They download once, then work offline.</p>
       </div>
     )
@@ -120,6 +150,8 @@ export default function ArmyBuilder({ stored, name, onChange }: { stored?: Store
         </div>
         <div className="bld-export">
           <button className="ghost" onClick={async () => { const r = await call({ op: 'ros', zipped: true }); if (r.ok && r.file) download(r.file.name, r.file.bytes) }} title="A file New Recruit and BattleScribe can open">Export .rosz</button>
+          <button className="ghost" disabled={busy} onClick={() => fileInput.current?.click()} title="Replace this list with one from New Recruit or BattleScribe">Import</button>
+          <input ref={fileInput} type="file" accept=".json,.ros,.rosz,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f) }} />
           <button className="ghost" onClick={async () => { const r = await call({ op: 'ros', zipped: false }); if (r.ok && r.file) download(r.file.name, r.file.bytes) }}>.ros</button>
         </div>
       </header>

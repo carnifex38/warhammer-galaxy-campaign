@@ -1,7 +1,8 @@
 // The army builder runs in a worker: loading and parsing the rules data (several megabytes) and re-checking a roster after every
 // tap all happen here, so the screen never stutters. The screen sends a request and gets plain objects back.
 import { buildSystem, type Node } from './engine.ts'
-import { Builder, type RosterView, type SavedRoster, type SelDetail } from './roster.ts'
+import { Builder, type ImportReport, type RosterView, type SavedRoster, type SelDetail } from './roster.ts'
+import type { ImportedRoster } from './importRoster.ts'
 import { toRos, toRosz } from './ros.ts'
 
 export interface Manifest {
@@ -24,9 +25,10 @@ export type Request =
   | { op: 'name'; name: string }
   | { op: 'limit'; id: string; value: number }
   | { op: 'ros'; zipped: boolean }
+  | { op: 'import'; roster: ImportedRoster }
 
 export type Response =
-  | { ok: true; view?: RosterView; detail?: SelDetail | null; saved?: SavedRoster; armies?: Manifest['catalogues']; dropped?: number; file?: { name: string; bytes: Uint8Array }; ms?: number }
+  | { ok: true; view?: RosterView; detail?: SelDetail | null; saved?: SavedRoster; armies?: Manifest['catalogues']; dropped?: number; file?: { name: string; bytes: Uint8Array }; ms?: number; report?: ImportReport }
   | { ok: false; error: string }
 
 let builder: Builder | null = null
@@ -81,6 +83,12 @@ self.onmessage = async (e: MessageEvent<{ id: number; req: Request }>) => {
         case 'split': b.split(req.uid); break
         case 'name': b.roster.name = req.name; break
         case 'limit': b.roster.limits[req.id] = req.value; break
+        case 'import': {
+          const report = b.importRoster(req.roster)
+          res = { ok: true, view: b.view(), saved: b.save(), report }
+          self.postMessage({ id, res })
+          return
+        }
         case 'detail': res = { ok: true, detail: b.detail(req.uid) }; self.postMessage({ id, res }); return
         case 'ros': {
           const xml = toRos(b)
