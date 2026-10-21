@@ -3,8 +3,8 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
 // A green targeting reticle that locks onto a spot of the planet when a battlezone is pointed at. The spot is a real point on the
-// planet's surface: the reticle is drawn inside the planet's own spinning group, so it turns with the planet, and orbiting the
-// camera just shows it from another side (it goes behind the planet when the spot turns away, and is picked up again). It starts
+// planet's surface (it turns with the planet, and orbiting the camera just shows it from another side), but the reticle itself is
+// drawn flat on the screen over that point, like a HUD (it fades as the spot turns away, and a new spot is picked up). It starts
 // on the face the viewer can see, at a place worked out from the battlezone's id, so a battlezone points at roughly the same
 // part of the view each time.
 
@@ -153,14 +153,17 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
 
     // closing in: the reticle starts large and tightens onto the spot
     const e = 1 - Math.pow(1 - Math.min(1, (now - k.since) / 0.5), 3)
-    const size = 0.46 * (1 + (1 - e) * 1.7)
+    const size = 0.46 * (1 + (1 - e) * 0.9)
     const alpha = k.level * (0.55 + 0.4 * e)
-    tmp.pos.copy(k.spot).multiplyScalar(RADIUS * 1.02)
+    // the reticle is drawn on the screen, flat and facing you, at wherever the spot is on the planet right now (so it follows the
+    // spot as the planet turns or the camera orbits, is never sliced by the planet, and simply fades as the spot nears the edge)
+    tmp.pos.copy(k.spot).multiplyScalar(RADIUS * 1.012)
+    const edge = Math.min(1, Math.max(0, facing / 0.3))
     for (const sp of [cross.current, ring.current]) {
       if (!sp) continue
       sp.position.copy(tmp.pos)
       sp.scale.set(size, size, 1)
-      ;(sp.material as THREE.SpriteMaterial).opacity = alpha
+      ;(sp.material as THREE.SpriteMaterial).opacity = alpha * edge
     }
     if (ring.current) (ring.current.material as THREE.SpriteMaterial).rotation = now * 0.7
     if (label.current) {
@@ -174,12 +177,13 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     }
   })
 
-  const common = { transparent: true, depthWrite: false, depthTest: true } as const
+  // drawn over everything (no depth test), so the planet's curve can never cut it; it fades out instead when the spot turns away
+  const common = { transparent: true, depthWrite: false, depthTest: false } as const
   return (
     <group ref={root} visible={false}>
-      <sprite ref={ring} renderOrder={8}><spriteMaterial map={ringTex} color={GREEN} {...common} opacity={0} /></sprite>
-      <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} color={GREEN} {...common} opacity={0} /></sprite>
-      <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} depthTest={false} opacity={0} /></sprite>
+      <sprite ref={ring} renderOrder={8}><spriteMaterial map={ringTex} {...common} opacity={0} /></sprite>
+      <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} {...common} opacity={0} /></sprite>
+      <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} opacity={0} /></sprite>
     </group>
   )
 }
