@@ -2,20 +2,17 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// A green targeting reticle that locks onto a spot of the planet when a battlezone is pointed at. The spot is a real point on the
-// planet's surface (it turns with the planet, and orbiting the camera just shows it from another side), but the reticle itself is
-// drawn flat on the screen over that point, like a HUD (it fades as the spot turns away, and a new spot is picked up).
-// Long thin guide lines run from it to the top, bottom and both sides of the map, and follow it.
-// Explosions go off on the planet's surface all around the point (flash, fireball, shock ring and flying embers), turning with the
-// planet; the ones on the far side are hidden by the planet itself. It starts
-// on the face the viewer can see, at a place worked out from the battlezone's id, so a battlezone points at roughly the same
-// part of the view each time.
+// A green targeting reticle that locks onto a battlezone's own point on the planet when it is pointed at. Every battlezone has a
+// fixed point on the planet's surface (worked out from its id, so it is the same every time, and it turns with the planet). The
+// reticle itself is drawn flat on the screen over that point, like a HUD, with long guide lines to the top, bottom and sides of
+// the map; if the point is on the far side the planet turns to bring it into view. Explosions go off on the surface all round the
+// point (flash, fireball, shock ring and flying embers) as cards lying on the surface, so the planet hides any behind it.
 
 const GREEN = '#62ff9d'
 const RADIUS = 0.62 // the planet's radius (PLANET_RADIUS in Galaxy3D)
 const BOOMS = 14 // explosions that can be going at once
 const EMBERS = 8 // embers thrown out by each explosion
-const SPREAD = 0.3 // how far from the point they go off (radians over the surface)
+const SPREAD = 0.2 // how far from the point they go off (radians over the surface)
 
 const hash = (s: string) => {
   let h = 2166136261
@@ -24,15 +21,14 @@ const hash = (s: string) => {
 }
 
 /**
- * Where to lock on: a direction on the face the viewer sees, a stable pseudo-random distance from the middle for a given battlezone.
- * It starts on the side the planet's surface is coming from, so the spot crosses the whole visible face before it turns away.
+ * The battlezone's point on the planet: a direction from its centre, in the planet's own frame, always the same for the same id.
+ * (Kept between about 25 degrees south and 40 north, so it is never at a pole and can always be turned to face the viewer.)
  */
-export function zoneSpot(zoneId: string, toward: THREE.Vector3, right: THREE.Vector3, salt = 0): THREE.Vector3 {
-  const h = hash(`${zoneId}:${salt}`)
-  const left = 0.15 + (((h >>> 10) & 0x3ff) / 1023) * 0.5 // radians to the left of the middle (the planet turns toward the right)
-  const lift = (((h & 0x3ff) / 1023) - 0.5) * 0.9 // up or down a little
-  const dir = toward.clone().multiplyScalar(Math.cos(left)).addScaledVector(right, -Math.sin(left)).normalize()
-  return dir.applyAxisAngle(right, lift).normalize()
+export function zoneSpot(zoneId: string): THREE.Vector3 {
+  const h = hash(zoneId)
+  const lon = ((h & 0xfff) / 4095) * Math.PI * 2
+  const lat = THREE.MathUtils.degToRad(-25 + (((h >>> 12) & 0xfff) / 4095) * 65)
+  return new THREE.Vector3(Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon))
 }
 
 /** Draw a shape twice: a dark edge first, then the green line, so it stays readable over a bright planet. */
@@ -122,7 +118,7 @@ function drawShock(): THREE.CanvasTexture {
 
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
-interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number }
+interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; flat: THREE.Quaternion }
 
 export function ZoneReticle({ zone }: { zone: { id: string; name: string } | null }) {
   const root = useRef<THREE.Group>(null)
@@ -130,14 +126,14 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const ring = useRef<THREE.Sprite>(null)
   const label = useRef<THREE.Sprite>(null)
   // `spot` is a point on the planet's surface, in the planet's own frame (so it turns with the planet)
-  const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), active: false })
-  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3() }), [])
+  const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), active: false, seekUntil: 0 })
+  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3(), m: new THREE.Matrix4() }), [])
   // the explosions
   const boomGroup = useRef<THREE.Group>(null)
-  const flash = useRef<(THREE.Sprite | null)[]>([])
-  const fire = useRef<(THREE.Sprite | null)[]>([])
-  const shock = useRef<(THREE.Sprite | null)[]>([])
-  const booms = useRef<Boom[]>(Array.from({ length: BOOMS }, () => ({ t0: -1, dir: new THREE.Vector3(0, 0, 1), size: 0.1, life: 1 })))
+  const flash = useRef<(THREE.Mesh | null)[]>([])
+  const fire = useRef<(THREE.Mesh | null)[]>([])
+  const shock = useRef<(THREE.Mesh | null)[]>([])
+  const booms = useRef<Boom[]>(Array.from({ length: BOOMS }, () => ({ t0: -1, dir: new THREE.Vector3(0, 0, 1), size: 0.1, life: 1, flat: new THREE.Quaternion() })))
   const boomClock = useRef({ next: 0, burst: 0, ember: 0 })
   const glowTex = useMemo(() => drawGlow(), [])
   const shockTex = useMemo(() => drawShock(), [])
@@ -181,12 +177,11 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     parent.getWorldPosition(tmp.centre)
     tmp.toCam.copy(s.camera.position).sub(tmp.centre).normalize() // from the planet toward the viewer
 
-    /** Lock onto a new spot: pick one on the face the viewer sees, then hold it in the planet's own frame. */
+    /** Lock onto the battlezone's point (fixed in the planet's own frame). */
     const lock = () => {
-      tmp.right.set(1, 0, 0).applyQuaternion(s.camera.quaternion)
-      tmp.world.copy(zoneSpot(k.id, tmp.toCam, tmp.right))
-      k.spot.copy(tmp.world).applyQuaternion(tmp.qi)
+      k.spot.copy(zoneSpot(k.id))
       k.since = now
+      k.seekUntil = now + 4 // if the point is on the far side, turn the planet to bring it round
       boomClock.current.burst = 6 // a quick volley as it locks on
     }
 
@@ -226,15 +221,21 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       if (slot) {
         // a spot a stable-looking random distance and way round the point
         const ang = Math.random() * Math.PI * 2
-        const rho = 0.05 + Math.random() * SPREAD
+        const rho = 0.03 + Math.random() * SPREAD
         tmp.u.set(0, 1, 0).cross(k.spot)
         if (tmp.u.lengthSq() < 1e-6) tmp.u.set(1, 0, 0)
         tmp.u.normalize()
         tmp.v.crossVectors(k.spot, tmp.u)
         tmp.ax.copy(tmp.u).multiplyScalar(Math.cos(ang)).addScaledVector(tmp.v, Math.sin(ang))
         slot.dir.copy(k.spot).applyAxisAngle(tmp.ax, rho)
+        // the card lies on the surface, lined up with the planet's north
+        tmp.u.set(0, 1, 0).cross(slot.dir)
+        if (tmp.u.lengthSq() < 1e-6) tmp.u.set(1, 0, 0)
+        tmp.u.normalize()
+        tmp.v.crossVectors(slot.dir, tmp.u)
+        slot.flat.setFromRotationMatrix(tmp.m.makeBasis(tmp.u, tmp.v, slot.dir))
         slot.t0 = now
-        slot.size = 0.04 + Math.random() * 0.05
+        slot.size = 0.022 + Math.random() * 0.035
         slot.life = 0.8 + Math.random() * 0.7
         // embers: thrown up off the surface and a little sideways, then pulled back
         const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
@@ -267,17 +268,20 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       // a bright flash, a longer fireball that rises a little, and a ring of shock running out over the surface
       const base = RADIUS * 1.0
       tmp.p.copy(b.dir)
-      // an explosion on the far side of the planet is simply not shown (no depth test, so nothing is ever cut by the planet)
-      const seen = smooth(0.02, 0.3, tmp.world.copy(b.dir).applyQuaternion(tmp.q).dot(tmp.toCam))
-      fl.position.copy(tmp.p).multiplyScalar(base + 0.012)
-      fl.scale.setScalar(b.size * (0.4 + 1.6 * out))
-      ;(fl.material as THREE.SpriteMaterial).opacity = Math.pow(1 - u, 2) * seen
-      fi.position.copy(tmp.p).multiplyScalar(base + 0.012 + b.size * 0.5 * u)
+      // flat cards lying on the surface: a bright flash, a longer fireball that lifts a little, and a ring of shock running outward.
+      // They are depth-tested, so the planet hides any explosion that is behind it.
+      fl.position.copy(tmp.p).multiplyScalar(base + 0.004)
+      fl.quaternion.copy(b.flat)
+      fl.scale.setScalar(b.size * (0.5 + 1.6 * out))
+      ;(fl.material as THREE.MeshBasicMaterial).opacity = Math.pow(1 - u, 2)
+      fi.position.copy(tmp.p).multiplyScalar(base + 0.005 + b.size * 0.25 * u)
+      fi.quaternion.copy(b.flat)
       fi.scale.setScalar(b.size * (0.8 + 2.0 * out))
-      ;(fi.material as THREE.SpriteMaterial).opacity = 0.55 * Math.pow(1 - u, 1.5) * smooth(0, 0.12, u) * seen
-      sh.position.copy(tmp.p).multiplyScalar(base + 0.01)
-      sh.scale.setScalar(b.size * (0.5 + 4.5 * out))
-      ;(sh.material as THREE.SpriteMaterial).opacity = 0.5 * Math.pow(1 - u, 1.5) * seen
+      ;(fi.material as THREE.MeshBasicMaterial).opacity = 0.55 * Math.pow(1 - u, 1.5) * smooth(0, 0.12, u)
+      sh.position.copy(tmp.p).multiplyScalar(base + 0.003)
+      sh.quaternion.copy(b.flat)
+      sh.scale.setScalar(b.size * (0.5 + 4 * out))
+      ;(sh.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.pow(1 - u, 1.5)
     })
     // the embers
     {
@@ -308,7 +312,20 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
 
     // where the spot is now, in the world, and whether it faces the viewer
     tmp.world.copy(k.spot).applyQuaternion(tmp.q)
-    const facing = tmp.world.dot(tmp.toCam)
+    let facing = tmp.world.dot(tmp.toCam)
+    if (zone && now < k.seekUntil) {
+      // the point is on the far side (or off to one side): turn the planet quickly until it comes round to face the viewer
+      const gap = ((Math.atan2(tmp.toCam.x, tmp.toCam.z) - Math.atan2(tmp.world.x, tmp.world.z) + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+      if (Math.abs(gap) < 0.1) k.seekUntil = 0
+      else {
+        parent.rotation.y += Math.max(-1.8 * dt, Math.min(1.8 * dt, gap))
+        parent.updateMatrixWorld()
+        parent.getWorldQuaternion(tmp.q)
+        tmp.qi.copy(tmp.q).invert()
+        tmp.world.copy(k.spot).applyQuaternion(tmp.q)
+        facing = tmp.world.dot(tmp.toCam)
+      }
+    }
     // closing in: the reticle starts large and tightens onto the spot
     const e = 1 - Math.pow(1 - Math.min(1, (now - k.since) / 0.5), 3)
     const size = 0.46 * (1 + (1 - e) * 0.9)
@@ -360,7 +377,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
 
   // drawn over everything (no depth test), so the planet's curve can never cut it; it fades out instead when the spot turns away
   const common = { transparent: true, depthWrite: false, depthTest: false } as const
-  const add = { transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending } as const
+  const card = { transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 } as const
   return (
     <>
       <group ref={root} visible={false}>
@@ -368,17 +385,17 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} {...common} opacity={0} /></sprite>
         <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} opacity={0} /></sprite>
       </group>
-      {/* explosions: each fades out as it turns to the far side of the planet */}
+      {/* explosions: cards lying on the surface, with the depth test on so the planet hides the ones behind it */}
       <group ref={boomGroup} visible={false}>
         {Array.from({ length: BOOMS }, (_, i) => (
           <group key={i}>
-            <sprite ref={(el) => { shock.current[i] = el }} renderOrder={6} visible={false}><spriteMaterial map={shockTex} {...add} opacity={0} /></sprite>
-            <sprite ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><spriteMaterial map={glowTex} color="#ff8a35" {...add} opacity={0} /></sprite>
-            <sprite ref={(el) => { flash.current[i] = el }} renderOrder={7} visible={false}><spriteMaterial map={glowTex} color="#fff0c0" {...add} opacity={0} /></sprite>
+            <mesh ref={(el) => { shock.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={shockTex} {...card} opacity={0} /></mesh>
+            <mesh ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ff8a35" {...card} opacity={0} /></mesh>
+            <mesh ref={(el) => { flash.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#fff0c0" {...card} opacity={0} /></mesh>
           </group>
         ))}
         <points geometry={embers.geo} frustumCulled={false} renderOrder={7}>
-          <pointsMaterial size={0.02} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
+          <pointsMaterial size={0.012} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
         </points>
       </group>
     </>
