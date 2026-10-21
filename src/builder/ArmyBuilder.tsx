@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Request, Response } from './worker.ts'
 import { readRosterFile } from './importRoster.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
@@ -382,7 +382,7 @@ function StatBlock({ t }: { t: StatTable }) {
   return (
     <div className="bld-stats">
       <h5>{t.type}</h5>
-      <table>
+      <table style={{ '--cols': Math.max(1, num.length) } as CSSProperties}>
         <thead><tr>{num.map(({ c }) => <th key={c}>{c}</th>)}</tr></thead>
         <tbody>
           {t.rows.map((r, n) => {
