@@ -178,7 +178,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const label = useRef<THREE.Sprite>(null)
   // `spot` is a point on the planet's surface, in the planet's own frame (so it turns with the planet)
   const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), active: false, seekUntil: 0 })
-  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3(), m: new THREE.Matrix4(), hot: new THREE.Color('#fff1b8'), warm: new THREE.Color('#ff9a2e'), cool: new THREE.Color('#b52a14') }), [])
+  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3(), m: new THREE.Matrix4(), hot: new THREE.Color('#fff1b8'), warm: new THREE.Color('#ff9a2e'), cool: new THREE.Color('#d23a14'), dark: new THREE.Color('#5a1407') }), [])
   // the explosions
   const boomGroup = useRef<THREE.Group>(null)
   const flash = useRef<(THREE.Mesh | null)[]>([])
@@ -291,7 +291,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         slot.flat.setFromRotationMatrix(tmp.m.makeBasis(tmp.u, tmp.v, slot.dir))
         slot.t0 = now
         slot.size = 0.022 + Math.random() * 0.035
-        slot.life = 2.6 + Math.random() * 1.0 // long enough to fade in and then out slowly
+        slot.life = 4.2 + Math.random() * 1.2 // like the reference: a few seconds, mostly spent cooling and fading
         slot.spin = Math.random() * Math.PI * 2
         // embers: thrown up off the surface and a little sideways, then pulled back
         const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
@@ -308,7 +308,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
           pos.setXYZ(i, slot.dir.x * RADIUS, slot.dir.y * RADIUS, slot.dir.z * RADIUS)
         }
       }
-      bc.next = now + (bc.burst > 0 ? 0.3 : 0.7 + Math.random() * 0.9) // one every second or so (two quick ones as it locks on)
+      bc.next = now + (bc.burst > 0 ? 0.35 : 1.2 + Math.random() * 1.0) // one every second or two (two as it locks on)
       if (bc.burst > 0) bc.burst--
     }
     let anyBoom = false
@@ -332,13 +332,17 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         m.scale.setScalar(scale)
         ;(m.material as THREE.MeshBasicMaterial).opacity = opacity
       }
-      const tf = now - b.t0 // seconds since it went off: the spark and the fade-in are quick, the fade-out takes the rest of its life
-      set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.5, 1.2, tf) * (1 - smooth(0.6, 1, u)), b.spin)
-      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.55 * smooth(0.4, 1.1, tf) * (1 - smooth(0.4, 1, u)), b.spin + u * 0.5)
-      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.6 * smooth(0, 0.12, tf) * (1 - smooth(0.04, 0.55, u)))
-      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.04, 0.4, tf) * (1 - smooth(0.2, 1, u)), b.spin - u * 0.7)
-      ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.1, 0.9, tf)).lerp(tmp.cool, smooth(0.25, 0.85, u))
-      set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.3, tf)), Math.pow(1 - smooth(0, 0.45, tf), 2))
+      const tf = now - b.t0 // seconds since it went off
+      // Fading to black: how bright something LOOKS follows roughly opacity^(1/2.2), so a plain curve seems to hold on and then drop
+      // out at the end. Raising the fade to the power 2.2 makes the brightness itself ease down evenly all the way to nothing.
+      const away = (from: number, to = 1) => Math.pow(1 - Math.min(1, Math.max(0, (u - from) / (to - from))), 2.2)
+      set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.6, 1.6, tf) * away(0.4), b.spin)
+      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.6 * smooth(0.5, 1.6, tf) * away(0.3), b.spin + u * 0.5)
+      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.35 * smooth(0.0, 0.15, tf) * away(0.03, 0.6))
+      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.0, 0.5, tf) * away(0.18), b.spin - u * 0.7)
+      // the fireball cools the way the reference does: white-yellow, orange, red, then dark red as it dies
+      ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.0, 0.2, u)).lerp(tmp.cool, smooth(0.15, 0.55, u)).lerp(tmp.dark, smooth(0.5, 0.95, u))
+      set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.3, tf)), Math.pow(1 - smooth(0, 0.6, tf), 2.2))
     })
     // the embers
     {
@@ -357,7 +361,8 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
           embers.vel[i * 3 + 2] -= (tmp.p.z / len) * 0.9 * dt
           pos.setXYZ(i, tmp.p.x + embers.vel[i * 3] * dt, tmp.p.y + embers.vel[i * 3 + 1] * dt, tmp.p.z + embers.vel[i * 3 + 2] * dt)
         }
-        col.setXYZ(i, f, f * (0.45 + 0.4 * f), f * 0.12) // fades to black, which disappears when added to the planet
+        const fg = Math.pow(f, 2.2)
+        col.setXYZ(i, fg, fg * (0.45 + 0.4 * f), fg * 0.12) // eases to black, which disappears when added to the planet
       }
       pos.needsUpdate = true
       col.needsUpdate = true
