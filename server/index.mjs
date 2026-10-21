@@ -96,7 +96,7 @@ const isGm = (req) => { const t = bearer(req); return t !== null && safeEq(t, GM
 const summary = (p) => ({ id: p.id, name: p.name, created: p.created, updated: p.updated, armyCount: p.armies.length })
 const full = (p) => ({ ...summary(p), armies: p.armies })
 const cleanName = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
-const validName = (n) => n.length >= 2 && n.length <= 24 && !/[\u0000-\u001f]/.test(n)
+const validName = (n) => n.length >= 2 && n.length <= 24 && ![...n].some((ch) => ch.charCodeAt(0) < 32)
 const validPassword = (v) => typeof v === 'string' && v.length >= 4 && v.length <= 64
 const validArmies = (a) => Array.isArray(a) && a.length <= 60 && a.every((x) => isObj(x) && typeof x.id === 'string' && typeof x.name === 'string') && JSON.stringify(a).length <= MAX_ARMIES_BYTES
 
@@ -239,7 +239,6 @@ function dropSeatsOf(profileId) {
   if (any) changed()
 }
 
-const validTable = (id) => typeof id === 'string' && /^[a-z0-9-]{1,80}$/.test(id)
 const armyOf = (profile, armyId) => profile?.armies.find((a) => a.id === armyId)
 
 /** A seat as everyone may see it: who, which side, and the list's name, era and points (not its contents). */

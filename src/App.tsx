@@ -96,7 +96,7 @@ export default function App() {
               events={events}
               auth={auth}
               claims={claims}
-              initial={galaxySel.current}
+              getInitial={() => galaxySel.current}
               onSelect={(s) => { galaxySel.current = s }}
               onViewList={(v) => { setViewing(v); setTab('lists') }}
             />

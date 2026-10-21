@@ -92,7 +92,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
   const [popup, setPopup] = useState<Popup | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const armyRef = useRef(armyId)
-  armyRef.current = armyId
+  useEffect(() => { armyRef.current = armyId })
 
   // what armies the data has (a tiny file), and, if this list was built before, open it again
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
   // open a list that was built before, once, when this screen appears (it runs again if React remounts the screen, because the
   // worker it asked is stopped then; the latest `start` is read through a ref so a changing callback does not re-run it)
   const startRef = useRef(start)
-  startRef.current = start
+  useEffect(() => { startRef.current = start })
   const storedAtOpen = useRef(stored)
   useEffect(() => {
     const s = storedAtOpen.current
@@ -329,18 +329,18 @@ function UnitModal({ uid, mode, onClose }: { uid: string; mode: 'info' | 'edit';
     void call({ op: 'detail', uid }).then((r) => { if (live && r.ok) setDetail(r.detail ?? null) })
     return () => { live = false }
   }, [call, uid, view])
-  useEffect(() => { if (!editing) setTab('info') }, [editing])
+  const shownTab = editing ? tab : 'info' // without editing there is only the information
   const title = detail?.name ?? '…'
   return (
     <Modal title={title} sub={detail ? `${Math.round(detail.pts)} pts` : undefined} onClose={onClose}>
       {editing && (
         <div className="bld-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === 'info'} className={tab === 'info' ? 'on' : ''} onClick={() => setTab('info')}>Info</button>
-          <button role="tab" aria-selected={tab === 'edit'} className={tab === 'edit' ? 'on' : ''} onClick={() => setTab('edit')}>Wargear</button>
+          <button role="tab" aria-selected={shownTab === 'info'} className={shownTab === 'info' ? 'on' : ''} onClick={() => setTab('info')}>Info</button>
+          <button role="tab" aria-selected={shownTab === 'edit'} className={shownTab === 'edit' ? 'on' : ''} onClick={() => setTab('edit')}>Wargear</button>
         </div>
       )}
       {!detail && <p className="muted">Opening…</p>}
-      {detail && (tab === 'info' ? <UnitSheet d={detail} /> : (
+      {detail && (shownTab === 'info' ? <UnitSheet d={detail} /> : (
         <>
           <SlotList slots={detail.slots} container={detail.uid} act={act} />
           <div className="bld-done"><button className="primary" onClick={onClose}>Done</button></div>

@@ -36,12 +36,12 @@ function devStart(sectors: Sector[]) {
 /** Where the player was in the galaxy (kept by the app so it can come back after reading a list). */
 export interface GalaxySelection { sector: string | null; planet: string | null; table: string | null }
 
-export default function GalaxyView({ events, auth, claims, onViewList, initial, onSelect }: {
+export default function GalaxyView({ events, auth, claims, onViewList, getInitial, onSelect }: {
   events: EventApi
   auth: AuthApi
   claims: ClaimsApi
   onViewList: (v: Viewing) => void
-  initial?: GalaxySelection
+  getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
 }) {
   // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
@@ -77,6 +77,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, initial, 
     )
   }
   const shownEra = pendingEra ?? era
+  const [initial] = useState(() => getInitial?.())
   const [sectorId, setSectorId] = useState<string | null>(initial?.sector ?? start?.sector ?? null)
   const [planetId, setPlanetId] = useState<string | null>(initial?.planet ?? start?.planet ?? null)
   const [tableId, setTableId] = useState<string | null>(initial?.table ?? null)

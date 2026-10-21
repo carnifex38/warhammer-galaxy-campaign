@@ -34,7 +34,7 @@ console.log('Allegiance chosen:', alle.choices[0].name, '| rite choices:', rite?
 v = b.view()
 console.log('issues now:', uniq(v))
 
-const primUid = b.addForce(orgUid, v.forces[0].childChoices.find((c) => c.name === 'Crusade Primary Detachment').id)
+b.addForce(orgUid, v.forces[0].childChoices.find((c) => c.name === 'Crusade Primary Detachment').id)
 v = b.view()
 const pf = v.forces[0].forces[0]
 const troops = pf.roles.find((r) => r.name === 'Troops')

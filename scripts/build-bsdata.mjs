@@ -25,15 +25,15 @@ const DROP = new Set([
 // flags that mean "no" when missing: leaving them out keeps the files small
 const FALSE_WHEN_MISSING = new Set(['hidden', 'automatic', 'includeChildSelections', 'includeChildForces', 'shared', 'primary', 'negative', 'percentValue', 'roundUp', 'library'])
 
-function strip(node, key) {
-  if (Array.isArray(node)) return node.map((n) => strip(n, key))
+function strip(node) {
+  if (Array.isArray(node)) return node.map((n) => strip(n))
   if (node === null || typeof node !== 'object') return node
   const o = {}
   for (const [k, v] of Object.entries(node)) {
     if (DROP.has(k)) continue
     if (FALSE_WHEN_MISSING.has(k) && v === false) continue
     if ((k === 'modifiers' || k === 'constraints' || k === 'conditions') && Array.isArray(v) && v.length === 0) continue
-    o[k] = strip(v, k)
+    o[k] = strip(v)
   }
   return o
 }

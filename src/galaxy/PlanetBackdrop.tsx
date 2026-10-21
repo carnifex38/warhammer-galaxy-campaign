@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
@@ -79,8 +79,8 @@ export function PlanetBackdrop({ planetId, era, anchor }: { planetId: string | n
   const layersMat = useRef<THREE.PointsMaterial>(null)
   const layersPts = useRef<THREE.Points>(null)
   const lastAnchor = useRef<[number, number, number]>([0, 0, 0])
-  if (anchor) lastAnchor.current = anchor
-  const nearStars = useMemo(layerStars, [])
+  useEffect(() => { if (anchor) lastAnchor.current = anchor }, [anchor])
+  const nearStars = useMemo(() => layerStars(), [])
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null
   const group = useRef<THREE.Group>(null)
