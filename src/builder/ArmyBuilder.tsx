@@ -48,7 +48,6 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const started = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const armyRef = useRef(armyId)
   armyRef.current = armyId
@@ -76,11 +75,15 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
     apply(r)
   }, [call, apply])
 
+  // open a list that was built before, once, when this screen appears (it runs again if React remounts the screen, because the
+  // worker it asked is stopped then; the latest `start` is read through a ref so a changing callback does not re-run it)
+  const startRef = useRef(start)
+  startRef.current = start
+  const storedAtOpen = useRef(stored)
   useEffect(() => {
-    if (started.current || !stored) return
-    started.current = true
-    void start(stored.armyId, stored.saved)
-  }, [stored, start])
+    const s = storedAtOpen.current
+    if (s) void startRef.current(s.armyId, s.saved)
+  }, [])
 
   const act = useCallback(async (req: Request) => { apply(await call(req)) }, [call, apply])
 
