@@ -22,7 +22,7 @@ export async function gmLogin(password: string): Promise<string | null> {
 // ---- player profiles (a name and a password chosen by the player; they hold the army lists) ----
 
 /** One army list. The full army builder will fill this out later; for now it is a name, an era and notes. */
-export interface Army { id: string; name: string; era: '40k' | '30k'; notes: string }
+export interface Army { id: string; name: string; era: '40k' | '30k'; notes: string; /** the list built in the army builder, when there is one (see src/builder) */ roster?: unknown }
 export interface ProfileSummary { id: string; name: string; created: number; updated: number; armyCount: number }
 export interface Profile extends ProfileSummary { armies: Army[] }
 

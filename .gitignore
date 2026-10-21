@@ -29,3 +29,7 @@ dev-dist
 # live-event server: saved event state and the GM password
 data
 .env
+
+# army builder rules data (made from BSData by npm run data)
+/public/data/
+/.bsdata-cache/

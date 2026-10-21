@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Unauthorized, createDummyProfile, deleteMyProfile, deleteProfile, getMyProfile, getProfile, listProfiles, saveMyProfile, saveProfile, type Army, type Profile, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { DEV_PLAYER_ID, local } from './localProfiles' // DEV-TOOLS
+import type { StoredRoster } from './builder/ArmyBuilder'
+
+// the army builder (and the rules data it reads) only downloads when someone opens it
+const ArmyBuilder = lazy(() => import('./builder/ArmyBuilder'))
 
 // The Army Lists tab. A player sees and edits the army lists on their own profile. The gamemaster sees every profile in a
 // list, can open any of them to read or edit its lists, can delete a profile, and can also have a profile of their own.
@@ -37,6 +41,7 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
   const [saved, setSaved] = useState<Army[]>(profile.armies)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [building, setBuilding] = useState<string | null>(null) // the army whose builder is open
   const dirty = JSON.stringify(armies) !== JSON.stringify(saved)
 
   const edit = (id: string, patch: Partial<Army>) => { setArmies((a) => a.map((x) => (x.id === id ? { ...x, ...patch } : x))); setError('') }
@@ -73,6 +78,20 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
             <button className="ghost" onClick={() => setArmies((l) => l.filter((x) => x.id !== a.id))} aria-label={`Remove ${a.name || 'army'}`}>Remove</button>
           </div>
           <textarea value={a.notes} maxLength={4000} rows={4} onChange={(e) => edit(a.id, { notes: e.target.value })} placeholder="Units, notes, ideas for this army…" aria-label="Army notes" />
+          {a.era === '30k' ? (
+            <div className="army-build">
+              <button className="ghost" onClick={() => setBuilding(building === a.id ? null : a.id)} aria-expanded={building === a.id}>
+                {building === a.id ? 'Close army builder' : a.roster ? 'Open army builder' : 'Build with the army builder (beta)'}
+              </button>
+              {building === a.id && (
+                <Suspense fallback={<p className="muted">Opening the army builder…</p>}>
+                  <ArmyBuilder stored={a.roster as StoredRoster | undefined} name={a.name} onChange={(r) => edit(a.id, { roster: r })} />
+                </Suspense>
+              )}
+            </div>
+          ) : (
+            <p className="muted army-build-note">The army builder for 40K is coming. For now, use the notes.</p>
+          )}
         </div>
       ))}
 
