@@ -6,7 +6,9 @@ import * as THREE from 'three'
 // fixed point on the planet's surface (worked out from its id, so it is the same every time, and it turns with the planet). The
 // reticle itself is drawn flat on the screen over that point, like a HUD, with long guide lines to the top, bottom and sides of
 // the map; if the point is on the far side the planet turns to bring it into view. Explosions go off on the surface all round the
-// point (flash, fireball, shock ring and flying embers) as cards lying on the surface, so the planet hides any behind it.
+// point as cards lying on the surface, so the planet hides any behind it. Each one plays in order: a white-hot spark first, then the
+// fireball and blast fade in (the fireball cooling from white to yellow, orange and red), then smoke and scorching, and everything
+// fades out; embers fly out of it.
 
 const GREEN = '#62ff9d'
 const RADIUS = 0.62 // the planet's radius (PLANET_RADIUS in Galaxy3D)
@@ -116,9 +118,58 @@ function drawShock(): THREE.CanvasTexture {
   return t
 }
 
+/** A lumpy, billowing blob (many overlapping soft circles), white-hot in the middle: tinted and cooled in code. */
+function drawFire(seed: number): THREE.CanvasTexture {
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = 128
+  const c = cv.getContext('2d')!
+  let r = seed
+  const rnd = () => { r = (r * 1664525 + 1013904223) >>> 0; return r / 4294967296 }
+  c.globalCompositeOperation = 'lighter'
+  for (let i = 0; i < 22; i++) {
+    const a = rnd() * Math.PI * 2
+    const d = Math.pow(rnd(), 0.7) * 34
+    const x = 64 + Math.cos(a) * d
+    const y = 64 + Math.sin(a) * d
+    const rad = 14 + rnd() * 20
+    const g = c.createRadialGradient(x, y, 0, x, y, rad)
+    g.addColorStop(0, 'rgba(255,255,255,0.35)')
+    g.addColorStop(0.6, 'rgba(255,255,255,0.12)')
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    c.fillStyle = g
+    c.fillRect(0, 0, 128, 128)
+  }
+  // fade the very edge so nothing is cut off square
+  c.globalCompositeOperation = 'destination-in'
+  const m = c.createRadialGradient(64, 64, 20, 64, 64, 64)
+  m.addColorStop(0, 'rgba(0,0,0,1)')
+  m.addColorStop(1, 'rgba(0,0,0,0)')
+  c.fillStyle = m
+  c.fillRect(0, 0, 128, 128)
+  const t = new THREE.CanvasTexture(cv)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
+/** A soft dark blob for smoke and scorching. */
+function drawSmoke(): THREE.CanvasTexture {
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = 128
+  const c = cv.getContext('2d')!
+  const g = c.createRadialGradient(64, 64, 0, 64, 64, 64)
+  g.addColorStop(0, 'rgba(255,255,255,0.9)')
+  g.addColorStop(0.55, 'rgba(255,255,255,0.45)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  c.fillStyle = g
+  c.fillRect(0, 0, 128, 128)
+  const t = new THREE.CanvasTexture(cv)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
 const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
-interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; flat: THREE.Quaternion }
+interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; flat: THREE.Quaternion; spin: number }
 
 export function ZoneReticle({ zone }: { zone: { id: string; name: string } | null }) {
   const root = useRef<THREE.Group>(null)
@@ -127,16 +178,20 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const label = useRef<THREE.Sprite>(null)
   // `spot` is a point on the planet's surface, in the planet's own frame (so it turns with the planet)
   const st = useRef({ id: '', name: '', level: 0, since: 0, spot: new THREE.Vector3(0, 0, 1), active: false, seekUntil: 0 })
-  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3(), m: new THREE.Matrix4() }), [])
+  const tmp = useMemo(() => ({ pos: new THREE.Vector3(), toCam: new THREE.Vector3(), centre: new THREE.Vector3(), down: new THREE.Vector3(), q: new THREE.Quaternion(), qi: new THREE.Quaternion(), world: new THREE.Vector3(), right: new THREE.Vector3(), u: new THREE.Vector3(), v: new THREE.Vector3(), ax: new THREE.Vector3(), p: new THREE.Vector3(), t: new THREE.Vector3(), m: new THREE.Matrix4(), hot: new THREE.Color('#fff1b8'), warm: new THREE.Color('#ff9a2e'), cool: new THREE.Color('#b52a14') }), [])
   // the explosions
   const boomGroup = useRef<THREE.Group>(null)
   const flash = useRef<(THREE.Mesh | null)[]>([])
   const fire = useRef<(THREE.Mesh | null)[]>([])
   const shock = useRef<(THREE.Mesh | null)[]>([])
-  const booms = useRef<Boom[]>(Array.from({ length: BOOMS }, () => ({ t0: -1, dir: new THREE.Vector3(0, 0, 1), size: 0.1, life: 1, flat: new THREE.Quaternion() })))
+  const smoke = useRef<(THREE.Mesh | null)[]>([])
+  const scorch = useRef<(THREE.Mesh | null)[]>([])
+  const booms = useRef<Boom[]>(Array.from({ length: BOOMS }, () => ({ t0: -1, dir: new THREE.Vector3(0, 0, 1), size: 0.1, life: 1, flat: new THREE.Quaternion(), spin: 0 })))
   const boomClock = useRef({ next: 0, burst: 0, ember: 0 })
   const glowTex = useMemo(() => drawGlow(), [])
   const shockTex = useMemo(() => drawShock(), [])
+  const fireTex = useMemo(() => [drawFire(7), drawFire(91), drawFire(2024)], [])
+  const smokeTex = useMemo(() => drawSmoke(), [])
   const embers = useMemo(() => {
     const n = BOOMS * EMBERS
     const geo = new THREE.BufferGeometry()
@@ -144,7 +199,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3))
     return { geo, vel: new Float32Array(n * 3), born: new Float32Array(n).fill(-10), life: new Float32Array(n).fill(1) }
   }, [])
-  useEffect(() => () => { glowTex.dispose(); shockTex.dispose(); embers.geo.dispose() }, [glowTex, shockTex, embers])
+  useEffect(() => () => { glowTex.dispose(); shockTex.dispose(); smokeTex.dispose(); fireTex.forEach((t) => t.dispose()); embers.geo.dispose() }, [glowTex, shockTex, smokeTex, fireTex, embers])
   const crossTex = useMemo(() => drawCross(), [])
   const ringTex = useMemo(() => drawRing(), [])
   const labelCanvas = useMemo(() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; return cv }, [])
@@ -236,7 +291,8 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         slot.flat.setFromRotationMatrix(tmp.m.makeBasis(tmp.u, tmp.v, slot.dir))
         slot.t0 = now
         slot.size = 0.022 + Math.random() * 0.035
-        slot.life = 0.8 + Math.random() * 0.7
+        slot.life = 1.4 + Math.random() * 0.9 // long enough to fade in and then out gently
+        slot.spin = Math.random() * Math.PI * 2
         // embers: thrown up off the surface and a little sideways, then pulled back
         const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
         for (let e = 0; e < EMBERS; e++) {
@@ -257,31 +313,31 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     }
     let anyBoom = false
     booms.current.forEach((b, i) => {
-      const fl = flash.current[i], fi = fire.current[i], sh = shock.current[i]
-      if (!fl || !fi || !sh) return
+      const fl = flash.current[i], fi = fire.current[i], sh = shock.current[i], sm = smoke.current[i], sc = scorch.current[i]
+      if (!fl || !fi || !sh || !sm || !sc) return
       const u = b.t0 < 0 ? 1 : (now - b.t0) / b.life
       const on = u >= 0 && u < 1
-      fl.visible = fi.visible = sh.visible = on
+      fl.visible = fi.visible = sh.visible = sm.visible = sc.visible = on
       if (!on) return
       anyBoom = true
       const out = 1 - Math.pow(1 - u, 3) // fast at first, then settling
-      // a bright flash, a longer fireball that rises a little, and a ring of shock running out over the surface
-      const base = RADIUS * 1.0
-      tmp.p.copy(b.dir)
-      // flat cards lying on the surface: a bright flash, a longer fireball that lifts a little, and a ring of shock running outward.
-      // They are depth-tested, so the planet hides any explosion that is behind it.
-      fl.position.copy(tmp.p).multiplyScalar(base + 0.004)
-      fl.quaternion.copy(b.flat)
-      fl.scale.setScalar(b.size * (0.5 + 1.6 * out))
-      ;(fl.material as THREE.MeshBasicMaterial).opacity = Math.pow(1 - u, 2)
-      fi.position.copy(tmp.p).multiplyScalar(base + 0.005 + b.size * 0.25 * u)
-      fi.quaternion.copy(b.flat)
-      fi.scale.setScalar(b.size * (0.8 + 2.0 * out))
-      ;(fi.material as THREE.MeshBasicMaterial).opacity = 0.55 * Math.pow(1 - u, 1.5) * smooth(0, 0.12, u)
-      sh.position.copy(tmp.p).multiplyScalar(base + 0.003)
-      sh.quaternion.copy(b.flat)
-      sh.scale.setScalar(b.size * (0.5 + 4 * out))
-      ;(sh.material as THREE.MeshBasicMaterial).opacity = 0.5 * Math.pow(1 - u, 1.5)
+      // flat cards lying on the surface (depth-tested, so the planet hides any explosion behind it). In order:
+      //   the white-hot spark appears first and burns out quickly,
+      //   then the fireball fades in, swells and cools (white, yellow, orange, red) while the shock ring runs out,
+      //   then dark smoke and scorching come up, and everything fades away.
+      const set = (m: THREE.Mesh, lift: number, scale: number, opacity: number, turn = 0) => {
+        m.position.copy(b.dir).multiplyScalar(RADIUS + lift)
+        m.quaternion.copy(b.flat)
+        if (turn) m.rotateZ(turn)
+        m.scale.setScalar(scale)
+        ;(m.material as THREE.MeshBasicMaterial).opacity = opacity
+      }
+      set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.15, 0.45, u) * (1 - smooth(0.8, 1, u)), b.spin)
+      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.55 * smooth(0.18, 0.5, u) * (1 - smooth(0.62, 1, u)), b.spin + u * 0.5)
+      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.6 * smooth(0.0, 0.06, u) * (1 - smooth(0.06, 0.6, u)))
+      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.03, 0.2, u) * (1 - smooth(0.4, 0.92, u)), b.spin - u * 0.7)
+      ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.08, 0.35, u)).lerp(tmp.cool, smooth(0.35, 0.8, u))
+      set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.18, u)), Math.pow(1 - smooth(0, 0.22, u), 2))
     })
     // the embers
     {
@@ -377,6 +433,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
 
   // drawn over everything (no depth test), so the planet's curve can never cut it; it fades out instead when the spot turns away
   const common = { transparent: true, depthWrite: false, depthTest: false } as const
+  const dark = { transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 } as const // smoke and scorching darken the surface (normal blending)
   const card = { transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 } as const
   return (
     <>
@@ -389,9 +446,11 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       <group ref={boomGroup} visible={false}>
         {Array.from({ length: BOOMS }, (_, i) => (
           <group key={i}>
+            <mesh ref={(el) => { scorch.current[i] = el }} renderOrder={5} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={smokeTex} color="#0b0705" {...dark} opacity={0} /></mesh>
+            <mesh ref={(el) => { smoke.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[(i + 1) % 3]} color="#241a14" {...dark} opacity={0} /></mesh>
             <mesh ref={(el) => { shock.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={shockTex} {...card} opacity={0} /></mesh>
-            <mesh ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ff8a35" {...card} opacity={0} /></mesh>
-            <mesh ref={(el) => { flash.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#fff0c0" {...card} opacity={0} /></mesh>
+            <mesh ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[i % 3]} color="#fff1b8" {...card} opacity={0} /></mesh>
+            <mesh ref={(el) => { flash.current[i] = el }} renderOrder={8} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ffffff" {...card} opacity={0} /></mesh>
           </group>
         ))}
         <points geometry={embers.geo} frustumCulled={false} renderOrder={7}>
