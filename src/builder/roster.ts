@@ -26,7 +26,17 @@ export interface SlotView {
   children?: SlotView[]
   selected?: SelDetail // the selection, when this entry is selected: its own options
 }
-export interface SelDetail { uid: string; name: string; number: number; pts: number; slots: SlotView[]; issues: string[] }
+export interface StatTable { type: string; columns: string[]; rows: { name: string; values: string[] }[] }
+export interface RuleView { name: string; text: string }
+export interface SelDetail {
+  uid: string; name: string; number: number; pts: number
+  slots: SlotView[] // every option, for the loadout editor
+  issues: string[]
+  // the unit as it is now (filled in for the selection that was opened, not for the ones inside it)
+  loadout: string[] // what each kind of model carries
+  stats: StatTable[] // the stat lines and weapon lines of what is selected
+  rules: RuleView[] // special rules and wargear descriptions that apply
+}
 
 export interface SavedSel { e: string; n: number; s?: SavedSel[] }
 export interface SavedForce { e: string; c: string; s: SavedSel[]; f: SavedForce[] }
@@ -473,13 +483,89 @@ export class Builder {
   detail(uid: string): SelDetail | null {
     const s = this.container(uid)
     if (!s || s.kind !== 'sel') return null
-    return this.selDetail(s)
+    return this.selDetail(s, true, this.validate())
   }
 
-  private selDetail(s: Sel): SelDetail {
+  /** The stat lines, weapon lines, rules and a one-line-per-model loadout for what is selected inside a unit. */
+  private describe(root: Sel): { loadout: string[]; stats: StatTable[]; rules: RuleView[] } {
+    const e = this.eng
+    const profileTypes: Node[] = this.sys.gst.profileTypes ?? []
+    const columnsOf = (p: Node) => (profileTypes.find((t) => t.id === p.typeId || t.name === p.typeName)?.characteristicTypes ?? []).map((c: Node) => c.name as string)
+    const tables = new Map<string, StatTable>()
+    const rules: RuleView[] = []
+    const seen = new Set<string>()
+    const TABLE_TYPES = new Set(['Profile', 'Vehicle', 'Ranged Weapon', 'Melee Weapon'])
+
+    const take = (sel: Sel) => {
+      const ctx: Ctx = { self: sel, parent: sel.parent }
+      for (const owner of [sel.slot.node, sel.slot.link]) {
+        if (!owner) continue
+        const list: Node[] = [...(owner.profiles ?? [])]
+        for (const l of owner.infoLinks ?? []) {
+          const t = this.sys.byId.get(l.targetId)
+          if (!t) continue
+          if (l.type === 'rule') {
+            if (seen.has(t.id)) continue
+            seen.add(t.id)
+            if (e.modded(!!(t.hidden || l.hidden), [t, l], 'hidden', ctx)) continue
+            rules.push({ name: e.modded(String(t.name), [t, l], 'name', ctx), text: String(t.description ?? '') })
+          } else if (l.type === 'profile') list.push(t)
+        }
+        for (const r of owner.rules ?? []) {
+          if (seen.has(r.id)) continue
+          seen.add(r.id)
+          rules.push({ name: e.modded(String(r.name), [r], 'name', ctx), text: String(r.description ?? '') })
+        }
+        for (const p of list) {
+          if (seen.has(p.id)) continue
+          seen.add(p.id)
+          if (e.modded(!!p.hidden, [p], 'hidden', ctx)) continue
+          const name = e.modded(String(p.name), [p], 'name', ctx)
+          const values: Record<string, string> = {}
+          for (const c of p.characteristics ?? []) values[c.name] = String(e.modded(c.$text ?? '', [p], c.typeId, ctx))
+          if (TABLE_TYPES.has(p.typeName)) {
+            const cols = columnsOf(p)
+            const t: StatTable = tables.get(p.typeName) ?? { type: p.typeName, columns: cols, rows: [] }
+            t.rows.push({ name, values: cols.map((c: string) => values[c] ?? '') })
+            tables.set(p.typeName, t)
+          } else {
+            const text = Object.entries(values).map(([k, v]) => (k === 'Description' || k === 'Summary' ? v : `${k}: ${v}`)).filter(Boolean).join(' ')
+            rules.push({ name, text })
+          }
+        }
+      }
+    }
+    const walk = (sel: Sel) => { take(sel); for (const c of sel.selections) if (c.number > 0) walk(c) }
+    walk(root)
+
+    // one line per kind of model: how many, and everything it carries
+    // (entries the data hides, such as detachment bookkeeping, are not part of what the unit carries)
+    const shown = (c: Sel) => c.number > 0 && !e.isHidden(c.slot, { parent: c.parent })
+    const items = (sel: Sel, out: string[] = []): string[] => {
+      for (const c of sel.selections) {
+        if (!shown(c)) continue
+        out.push(c.number > 1 ? `${label(e, c)} ×${c.number}` : label(e, c))
+        items(c, out)
+      }
+      return out
+    }
+    const loadout: string[] = []
+    const models = root.selections.filter((c) => shown(c) && c.slot.node.type === 'model')
+    const others = root.selections.filter((c) => shown(c) && c.slot.node.type !== 'model')
+    for (const m of models) { const list = items(m); loadout.push(`${m.number} × ${label(e, m)}${list.length ? ': ' + list.join(', ') : ''}`) }
+    const extra: string[] = []
+    for (const o of others) { extra.push(o.number > 1 ? `${label(e, o)} ×${o.number}` : label(e, o)); items(o, extra) }
+    if (extra.length) loadout.push(models.length ? `Upgrades: ${extra.join(', ')}` : extra.join(', '))
+
+    const order = ['Profile', 'Vehicle', 'Ranged Weapon', 'Melee Weapon']
+    const stats = [...tables.values()].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
+    return { loadout, stats, rules }
+  }
+
+  private selDetail(s: Sel, top = false, all: Issue[] = []): SelDetail {
     const e = this.eng
     const ctx: Ctx = { parent: s }
-    const issues = this.validate().filter((i) => i.uid === s.uid).map((i) => i.text)
+    const issues = all.filter((i) => i.uid === s.uid).map((i) => i.text)
     const build = (slots: Slot[]): SlotView[] => {
       const out: SlotView[] = []
       for (const slot of slots) {
@@ -508,7 +594,8 @@ export class Builder {
       }
       return out
     }
-    return { uid: s.uid, name: label(e, s), number: s.number, pts: e.cost(s, this.pts), slots: build(slotsOf(this.sys, s.slot)), issues }
+    const info = top ? this.describe(s) : { loadout: [], stats: [], rules: [] }
+    return { uid: s.uid, name: label(e, s), number: s.number, pts: e.cost(s, this.pts), slots: build(slotsOf(this.sys, s.slot)), issues, ...info }
   }
 
   // ---- saving ----

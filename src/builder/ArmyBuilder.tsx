@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Request, Response } from './worker.ts'
-import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView } from './roster.ts'
+import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen: pick an army, add detachments and units, edit each unit's loadout, see the points and the
 // rules' complaints as you go. All the work happens in a worker (see worker.ts); this file only draws what it sends back.
@@ -184,6 +184,7 @@ function RoleBlock({ role, forceUid, act, call, view }: { role: RoleView; forceU
 
 function SelCard({ s, act, call, view }: { s: SelSummary; act: (r: Request) => Promise<void>; call: Call; view: RosterView }) {
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false) // the long list of options is only open while choosing wargear
   const [detail, setDetail] = useState<SelDetail | null>(null)
   useEffect(() => {
     if (!open) return
@@ -200,8 +201,55 @@ function SelCard({ s, act, call, view }: { s: SelSummary; act: (r: Request) => P
         <span className="bld-pts">{Math.round(s.pts)} pts</span>
         <button className="ghost" onClick={() => void act({ op: 'remove', uid: s.uid })} aria-label={`Remove ${s.name}`}>✕</button>
       </div>
-      {open && detail && <div className="bld-slots"><SlotList slots={detail.slots} container={detail.uid} act={act} /></div>}
+      {open && detail && (
+        <div className="bld-slots">
+          {editing ? (
+            <>
+              <div className="bld-edit-head"><b>Choose wargear</b><button className="primary" onClick={() => setEditing(false)}>Done</button></div>
+              <SlotList slots={detail.slots} container={detail.uid} act={act} />
+            </>
+          ) : (
+            <UnitSheet d={detail} onEdit={() => setEditing(true)} />
+          )}
+        </div>
+      )}
       {open && !detail && <p className="muted">Opening…</p>}
+    </div>
+  )
+}
+
+/** The unit as it stands: what it carries, its stat lines, and its rules (folded away until wanted). */
+function UnitSheet({ d, onEdit }: { d: SelDetail; onEdit: () => void }) {
+  return (
+    <div className="bld-sheet">
+      {d.issues.length > 0 && <ul className="bld-sheet-issues">{d.issues.map((t, i) => <li key={i}>{t}</li>)}</ul>}
+      <ul className="bld-loadout">{d.loadout.map((l, i) => <li key={i}>{l}</li>)}</ul>
+      {d.stats.map((t) => <StatBlock key={t.type} t={t} />)}
+      {d.rules.length > 0 && (
+        <details className="bld-rules">
+          <summary>Rules ({d.rules.length})</summary>
+          {d.rules.map((r, i) => (
+            <details key={i} className="bld-rule">
+              <summary>{r.name}</summary>
+              <p>{r.text || 'No description in the data.'}</p>
+            </details>
+          ))}
+        </details>
+      )}
+      <button className="ghost bld-edit" onClick={onEdit}>Change wargear</button>
+    </div>
+  )
+}
+
+function StatBlock({ t }: { t: StatTable }) {
+  // empty columns (a weapon with no traits, say) are left out so the table stays narrow
+  const keep = t.columns.map((_, i) => t.rows.some((r) => r.values[i]?.trim()))
+  return (
+    <div className="bld-stats">
+      <table>
+        <thead><tr><th>{t.type}</th>{t.columns.map((c, i) => keep[i] && <th key={c}>{c}</th>)}</tr></thead>
+        <tbody>{t.rows.map((r, n) => <tr key={n}><th>{r.name}</th>{r.values.map((v, i) => keep[i] && <td key={i}>{v}</td>)}</tr>)}</tbody>
+      </table>
     </div>
   )
 }

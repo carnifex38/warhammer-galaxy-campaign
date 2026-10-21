@@ -558,3 +558,22 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-step b { min-width: 1.6em; text-align: center; font-weight: 600; }
 .bld-step button { padding: 2px 9px; }
 .bld-addforce select, .bld-force > select { width: 100%; }
+
+/* the unit sheet: what a unit has now, compactly */
+.bld-sheet { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.bld-sheet-issues { margin: 0; padding-left: 18px; font-size: 0.82rem; color: #ffb4b4; }
+.bld-loadout { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 0.85rem; color: #d3d9ee; line-height: 1.35; }
+.bld-loadout li { padding-left: 10px; border-left: 2px solid #e0b650; }
+.bld-stats { overflow-x: auto; }
+.bld-stats table { border-collapse: collapse; font-size: 0.72rem; width: 100%; }
+.bld-stats th, .bld-stats td { padding: 3px 6px; text-align: center; border-bottom: 1px solid #1f2742; white-space: nowrap; }
+.bld-stats thead th { color: #e0b650; font-weight: 600; background: #141b36; }
+.bld-stats tbody th { text-align: left; font-weight: 500; color: #e6e9f5; white-space: normal; min-width: 7em; }
+.bld-stats td { color: #aab2cc; }
+.bld-rules { border: 1px solid #263055; border-radius: 8px; padding: 4px 8px; font-size: 0.85rem; }
+.bld-rules > summary { cursor: pointer; color: #aab2cc; }
+.bld-rule { margin: 4px 0 0 6px; }
+.bld-rule > summary { cursor: pointer; color: #d3d9ee; font-size: 0.82rem; }
+.bld-rule p { margin: 4px 0 6px 12px; color: #8f98b8; font-size: 0.8rem; white-space: pre-line; }
+.bld-edit { align-self: flex-start; }
+.bld-edit-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; position: sticky; top: 3.2rem; background: #0f1426; z-index: 1; }
