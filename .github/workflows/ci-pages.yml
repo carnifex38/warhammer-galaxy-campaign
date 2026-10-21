@@ -33,6 +33,10 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # the army builder's rules (community BSData files): downloaded fresh for every build and published with the site
+      - name: Rules data for the army builder
+        run: npm run data
+
       - name: Types and build
         run: npm run build
         env:
