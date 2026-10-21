@@ -8,12 +8,11 @@ import * as THREE from 'three'
 // the map; if the point is on the far side the planet turns to bring it into view. Explosions go off on the surface all round the
 // point as cards lying on the surface, so the planet hides any behind it. Each one plays in order: a white-hot spark first, then the
 // fireball and blast fade in (the fireball cooling from white to yellow, orange and red), then smoke and scorching, and everything
-// fades out; embers fly out of it.
+// fades out.
 
 const GREEN = '#62ff9d'
 const RADIUS = 0.62 // the planet's radius (PLANET_RADIUS in Galaxy3D)
 const BOOMS = 14 // explosions that can be going at once
-const EMBERS = 8 // embers thrown out by each explosion
 const SPREAD = 0.2 // how far from the point they go off (radians over the surface)
 
 const hash = (s: string) => {
@@ -191,19 +190,12 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
   const smoke = useRef<(THREE.Mesh | null)[]>([])
   const scorch = useRef<(THREE.Mesh | null)[]>([])
   const booms = useRef<Boom[]>(Array.from({ length: BOOMS }, () => ({ t0: -1, dir: new THREE.Vector3(0, 0, 1), size: 0.1, life: 1, flat: new THREE.Quaternion(), spin: 0 })))
-  const boomClock = useRef({ next: 0, burst: 0, ember: 0 })
+  const boomClock = useRef({ next: 0, burst: 0 })
   const glowTex = useMemo(() => drawGlow(), [])
   const shockTex = useMemo(() => drawShock(), [])
   const fireTex = useMemo(() => [drawFire(7), drawFire(91), drawFire(2024)], [])
   const smokeTex = useMemo(() => drawSmoke(), [])
-  const embers = useMemo(() => {
-    const n = BOOMS * EMBERS
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3))
-    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3), 3))
-    return { geo, vel: new Float32Array(n * 3), born: new Float32Array(n).fill(-10), life: new Float32Array(n).fill(1) }
-  }, [])
-  useEffect(() => () => { glowTex.dispose(); shockTex.dispose(); smokeTex.dispose(); fireTex.forEach((t) => t.dispose()); embers.geo.dispose() }, [glowTex, shockTex, smokeTex, fireTex, embers])
+  useEffect(() => () => { glowTex.dispose(); shockTex.dispose(); smokeTex.dispose(); fireTex.forEach((t) => t.dispose()) }, [glowTex, shockTex, smokeTex, fireTex])
   const crossTex = useMemo(() => drawCross(), [])
   const ringTex = useMemo(() => drawRing(), [])
   const labelCanvas = useMemo(() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; return cv }, [])
@@ -297,20 +289,6 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
         slot.size = 0.022 + Math.random() * 0.035
         slot.life = 4.2 + Math.random() * 1.2 // like the reference: a few seconds, mostly spent cooling and fading
         slot.spin = Math.random() * Math.PI * 2
-        // embers: thrown up off the surface and a little sideways, then pulled back
-        const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
-        for (let e = 0; e < EMBERS; e++) {
-          const i = bc.ember++ % (BOOMS * EMBERS)
-          tmp.t.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).cross(slot.dir).normalize()
-          const up = (0.25 + Math.random() * 0.45) * (slot.size / 0.1)
-          const side = 0.1 + Math.random() * 0.2
-          embers.vel[i * 3] = slot.dir.x * up + tmp.t.x * side
-          embers.vel[i * 3 + 1] = slot.dir.y * up + tmp.t.y * side
-          embers.vel[i * 3 + 2] = slot.dir.z * up + tmp.t.z * side
-          embers.born[i] = now
-          embers.life[i] = 0.6 + Math.random() * 0.6
-          pos.setXYZ(i, slot.dir.x * RADIUS, slot.dir.y * RADIUS, slot.dir.z * RADIUS)
-        }
       }
       bc.next = now + (bc.burst > 0 ? 0.35 : 1.2 + Math.random() * 1.0) // one every second or two (two as it locks on)
       if (bc.burst > 0) bc.burst--
@@ -348,29 +326,6 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
       ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.0, 0.2, u)).lerp(tmp.cool, smooth(0.15, 0.55, u)).lerp(tmp.dark, smooth(0.5, 0.95, u))
       set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.3, tf)), Math.pow(1 - smooth(0, 0.6, tf), 2.2))
     })
-    // the embers
-    {
-      const pos = embers.geo.getAttribute('position') as THREE.BufferAttribute
-      const col = embers.geo.getAttribute('color') as THREE.BufferAttribute
-      for (let i = 0; i < BOOMS * EMBERS; i++) {
-        const age = now - embers.born[i]
-        const f = age < 0 || age > embers.life[i] ? 0 : 1 - age / embers.life[i]
-        if (f > 0) {
-          anyBoom = true
-          tmp.p.set(pos.getX(i), pos.getY(i), pos.getZ(i))
-          const len = tmp.p.length() || 1
-          // gravity pulls toward the planet's centre
-          embers.vel[i * 3] -= (tmp.p.x / len) * 0.9 * dt
-          embers.vel[i * 3 + 1] -= (tmp.p.y / len) * 0.9 * dt
-          embers.vel[i * 3 + 2] -= (tmp.p.z / len) * 0.9 * dt
-          pos.setXYZ(i, tmp.p.x + embers.vel[i * 3] * dt, tmp.p.y + embers.vel[i * 3 + 1] * dt, tmp.p.z + embers.vel[i * 3 + 2] * dt)
-        }
-        const fg = Math.pow(f, 2.2)
-        col.setXYZ(i, fg, fg * (0.45 + 0.4 * f), fg * 0.12) // eases to black, which disappears when added to the planet
-      }
-      pos.needsUpdate = true
-      col.needsUpdate = true
-    }
     if (boomGroup.current) boomGroup.current.visible = anyBoom
 
     g.visible = k.level > 0.01
@@ -464,9 +419,6 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
             <mesh ref={(el) => { flash.current[i] = el }} renderOrder={8} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ffffff" {...card} {...keep} opacity={0} /></mesh>
           </group>
         ))}
-        <points geometry={embers.geo} frustumCulled={false} renderOrder={7}>
-          <pointsMaterial {...keep} size={0.012} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
-        </points>
       </group>
     </>
   )
