@@ -919,7 +919,7 @@ function Arrive({ position, children }: { position: [number, number, number]; ch
     fade.value = f * f * (3 - 2 * f)
     g.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.Material | undefined
-      if (!m || (m as THREE.ShaderMaterial).isShaderMaterial) return
+      if (!m || (m as THREE.ShaderMaterial).isShaderMaterial || m.userData.keepOpacity) return
       m.transparent = true
       m.opacity = fade.value
     })

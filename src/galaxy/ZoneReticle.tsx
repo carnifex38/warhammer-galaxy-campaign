@@ -133,8 +133,8 @@ function drawFire(seed: number): THREE.CanvasTexture {
     const y = 64 + Math.sin(a) * d
     const rad = 14 + rnd() * 20
     const g = c.createRadialGradient(x, y, 0, x, y, rad)
-    g.addColorStop(0, 'rgba(255,255,255,0.35)')
-    g.addColorStop(0.6, 'rgba(255,255,255,0.12)')
+    g.addColorStop(0, 'rgba(255,255,255,0.7)')
+    g.addColorStop(0.6, 'rgba(255,255,255,0.3)')
     g.addColorStop(1, 'rgba(255,255,255,0)')
     c.fillStyle = g
     c.fillRect(0, 0, 128, 128)
@@ -271,7 +271,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     const bc = boomClock.current
     tmp.world.copy(k.spot).applyQuaternion(tmp.q)
     const faceNow = tmp.world.dot(tmp.toCam)
-    if (k.level > 0.4 && faceNow > -0.25 && now >= bc.next) {
+    if (k.level > 0.4 && faceNow > -0.25 && now >= bc.next ) {
       const slot = booms.current.find((b) => b.t0 < 0 || now - b.t0 > b.life)
       if (slot) {
         // a spot a stable-looking random distance and way round the point
@@ -337,9 +337,9 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       // out at the end. Raising the fade to the power 2.2 makes the brightness itself ease down evenly all the way to nothing.
       const away = (from: number, to = 1) => Math.pow(1 - Math.min(1, Math.max(0, (u - from) / (to - from))), 2.2)
       set(sc, 0.002, b.size * 2.2, 0.5 * smooth(0.6, 1.6, tf) * away(0.4), b.spin)
-      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.6 * smooth(0.5, 1.6, tf) * away(0.3), b.spin + u * 0.5)
-      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.35 * smooth(0.0, 0.15, tf) * away(0.03, 0.6))
-      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 0.95 * smooth(0.0, 0.5, tf) * away(0.18), b.spin - u * 0.7)
+      set(sm, 0.003 + b.size * 0.4 * u, b.size * (1.2 + 2.6 * out), 0.85 * smooth(0.5, 1.6, tf) * away(0.3), b.spin + u * 0.5)
+      set(sh, 0.004, b.size * (0.5 + 4.5 * out), 0.6 * smooth(0.0, 0.15, tf) * away(0.03, 0.6))
+      set(fi, 0.005 + b.size * 0.25 * u, b.size * (0.7 + 2.3 * out), 1 * smooth(0.0, 0.5, tf) * away(0.18), b.spin - u * 0.7)
       // the fireball cools the way the reference does: white-yellow, orange, red, then dark red as it dies
       ;(fi.material as THREE.MeshBasicMaterial).color.copy(tmp.hot).lerp(tmp.warm, smooth(0.0, 0.2, u)).lerp(tmp.cool, smooth(0.15, 0.55, u)).lerp(tmp.dark, smooth(0.5, 0.95, u))
       set(fl, 0.006, b.size * (0.3 + 0.9 * smooth(0, 0.3, tf)), Math.pow(1 - smooth(0, 0.6, tf), 2.2))
@@ -438,29 +438,30 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   })
 
   // drawn over everything (no depth test), so the planet's curve can never cut it; it fades out instead when the spot turns away
+  const keep = { userData: { keepOpacity: true } } // the planet's arrive fade must not overwrite the opacities set here every frame
   const common = { transparent: true, depthWrite: false, depthTest: false } as const
   const dark = { transparent: true, depthWrite: false, depthTest: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 } as const // smoke and scorching darken the surface (normal blending)
   const card = { transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 } as const
   return (
     <>
       <group ref={root} visible={false}>
-        <sprite ref={ring} renderOrder={8}><spriteMaterial map={ringTex} {...common} opacity={0} /></sprite>
-        <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} {...common} opacity={0} /></sprite>
-        <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} opacity={0} /></sprite>
+        <sprite ref={ring} renderOrder={8}><spriteMaterial map={ringTex} {...common} {...keep} opacity={0} /></sprite>
+        <sprite ref={cross} renderOrder={9}><spriteMaterial map={crossTex} {...common} {...keep} opacity={0} /></sprite>
+        <sprite ref={label} renderOrder={10}><spriteMaterial map={labelTex} {...common} {...keep} opacity={0} /></sprite>
       </group>
       {/* explosions: cards lying on the surface, with the depth test on so the planet hides the ones behind it */}
       <group ref={boomGroup} visible={false}>
         {Array.from({ length: BOOMS }, (_, i) => (
           <group key={i}>
-            <mesh ref={(el) => { scorch.current[i] = el }} renderOrder={5} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={smokeTex} color="#0b0705" {...dark} opacity={0} /></mesh>
-            <mesh ref={(el) => { smoke.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[(i + 1) % 3]} color="#241a14" {...dark} opacity={0} /></mesh>
-            <mesh ref={(el) => { shock.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={shockTex} {...card} opacity={0} /></mesh>
-            <mesh ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[i % 3]} color="#fff1b8" {...card} opacity={0} /></mesh>
-            <mesh ref={(el) => { flash.current[i] = el }} renderOrder={8} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ffffff" {...card} opacity={0} /></mesh>
+            <mesh ref={(el) => { scorch.current[i] = el }} renderOrder={5} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={smokeTex} color="#0b0705" {...dark} {...keep} opacity={0} /></mesh>
+            <mesh ref={(el) => { smoke.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[(i + 1) % 3]} color="#241a14" {...dark} {...keep} opacity={0} /></mesh>
+            <mesh ref={(el) => { shock.current[i] = el }} renderOrder={6} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={shockTex} {...card} {...keep} opacity={0} /></mesh>
+            <mesh ref={(el) => { fire.current[i] = el }} renderOrder={7} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={fireTex[i % 3]} color="#fff1b8" {...card} {...keep} opacity={0} /></mesh>
+            <mesh ref={(el) => { flash.current[i] = el }} renderOrder={8} visible={false}><planeGeometry args={[1, 1]} /><meshBasicMaterial map={glowTex} color="#ffffff" {...card} {...keep} opacity={0} /></mesh>
           </group>
         ))}
         <points geometry={embers.geo} frustumCulled={false} renderOrder={7}>
-          <pointsMaterial size={0.012} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
+          <pointsMaterial {...keep} size={0.012} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
         </points>
       </group>
     </>
