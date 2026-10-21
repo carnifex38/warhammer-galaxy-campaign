@@ -30,6 +30,59 @@ const serverBackend = (token: string): Backend => ({
 const newId = () => Math.random().toString(36).slice(2, 10)
 const when = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
+/** One army list: folded to its name, era and points; opens to show what is in it; changed only after pressing Edit. */
+function ArmyCard({ a, open, editing, onToggle, onEdit, onChange, onRemove }: {
+  a: Army
+  open: boolean
+  editing: boolean
+  onToggle: () => void
+  onEdit: (on: boolean) => void
+  onChange: (patch: Partial<Army>) => void
+  onRemove: () => void
+}) {
+  const stored = a.roster as StoredRoster | undefined
+  const pts = stored?.pts
+  return (
+    <div className={`army-card${open ? ' open' : ''}`}>
+      <button className="army-head" onClick={onToggle} aria-expanded={open}>
+        <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>
+        <b>{a.name.trim() || 'Untitled army'}</b>
+        <span className="era-chip">{a.era.toUpperCase()}</span>
+        <span className="army-pts">{pts !== undefined ? `${pts} pts` : '—'}</span>
+      </button>
+      {open && (
+        <div className="army-body">
+          {editing && (
+            <div className="army-row">
+              <input value={a.name} maxLength={40} onChange={(e) => onChange({ name: e.target.value })} placeholder="Army name" aria-label="Army name" />
+              <select value={a.era} onChange={(e) => onChange({ era: e.target.value as Army['era'] })} aria-label="Era">
+                <option value="40k">40K</option>
+                <option value="30k">30K</option>
+              </select>
+              <button className="ghost" onClick={onRemove} aria-label={`Remove ${a.name || 'army'}`}>Remove</button>
+            </div>
+          )}
+          {editing
+            ? <textarea value={a.notes} maxLength={4000} rows={3} onChange={(e) => onChange({ notes: e.target.value })} placeholder="Notes, ideas for this army…" aria-label="Army notes" />
+            : a.notes.trim() && <p className="army-notes">{a.notes}</p>}
+          {a.era === '30k' ? (
+            <Suspense fallback={<p className="muted">Opening the list…</p>}>
+              <ArmyBuilder stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
+            </Suspense>
+          ) : (
+            <p className="muted army-build-note">The army builder for 40K is coming. For now, use the notes.</p>
+          )}
+          <div className="army-foot">
+            {editing
+              ? <button className="primary" onClick={() => onEdit(false)}>Done</button>
+              : <button className="ghost" onClick={() => onEdit(true)}>Edit</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** The lists of one profile, with save and delete. Used for the player's own profile and for any profile the gamemaster opens. */
 function ProfileEditor({ profile, who, onSave, onDelete }: {
   profile: Profile
@@ -41,7 +94,8 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
   const [saved, setSaved] = useState<Army[]>(profile.armies)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [building, setBuilding] = useState<string | null>(null) // the army whose builder is open
+  const [openIds, setOpenIds] = useState<string[]>([]) // lists are folded away until opened
+  const [editIds, setEditIds] = useState<string[]>([]) // and can only be changed after pressing Edit
   const dirty = JSON.stringify(armies) !== JSON.stringify(saved)
 
   const edit = (id: string, patch: Partial<Army>) => { setArmies((a) => a.map((x) => (x.id === id ? { ...x, ...patch } : x))); setError('') }
@@ -68,35 +122,20 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
 
       {armies.length === 0 && <p className="muted">No army lists yet.</p>}
       {armies.map((a) => (
-        <div key={a.id} className="army-card">
-          <div className="army-row">
-            <input value={a.name} maxLength={40} onChange={(e) => edit(a.id, { name: e.target.value })} placeholder="Army name" aria-label="Army name" />
-            <select value={a.era} onChange={(e) => edit(a.id, { era: e.target.value as Army['era'] })} aria-label="Era">
-              <option value="40k">40K</option>
-              <option value="30k">30K</option>
-            </select>
-            <button className="ghost" onClick={() => setArmies((l) => l.filter((x) => x.id !== a.id))} aria-label={`Remove ${a.name || 'army'}`}>Remove</button>
-          </div>
-          <textarea value={a.notes} maxLength={4000} rows={4} onChange={(e) => edit(a.id, { notes: e.target.value })} placeholder="Units, notes, ideas for this army…" aria-label="Army notes" />
-          {a.era === '30k' ? (
-            <div className="army-build">
-              <button className="ghost" onClick={() => setBuilding(building === a.id ? null : a.id)} aria-expanded={building === a.id}>
-                {building === a.id ? 'Close army builder' : a.roster ? 'Open army builder' : 'Build with the army builder (beta)'}
-              </button>
-              {building === a.id && (
-                <Suspense fallback={<p className="muted">Opening the army builder…</p>}>
-                  <ArmyBuilder stored={a.roster as StoredRoster | undefined} name={a.name} onChange={(r) => edit(a.id, { roster: r })} />
-                </Suspense>
-              )}
-            </div>
-          ) : (
-            <p className="muted army-build-note">The army builder for 40K is coming. For now, use the notes.</p>
-          )}
-        </div>
+        <ArmyCard
+          key={a.id}
+          a={a}
+          open={openIds.includes(a.id)}
+          editing={editIds.includes(a.id)}
+          onToggle={() => setOpenIds((l) => (l.includes(a.id) ? l.filter((x) => x !== a.id) : [...l, a.id]))}
+          onEdit={(on) => { setEditIds((l) => (on ? [...l, a.id] : l.filter((x) => x !== a.id))); if (on) setOpenIds((l) => (l.includes(a.id) ? l : [...l, a.id])) }}
+          onChange={(patch) => edit(a.id, patch)}
+          onRemove={() => setArmies((l) => l.filter((x) => x.id !== a.id))}
+        />
       ))}
 
       <div className="prof-actions">
-        <button className="ghost" onClick={() => setArmies((l) => [...l, { id: newId(), name: '', era: '40k', notes: '' }])} disabled={armies.length >= 60}>+ Add army</button>
+        <button className="ghost" onClick={() => { const id = newId(); setArmies((l) => [...l, { id, name: '', era: '40k', notes: '' }]); setOpenIds((l) => [...l, id]); setEditIds((l) => [...l, id]) }} disabled={armies.length >= 60}>+ Add army</button>
         <span className="spacer" />
         {dirty && <button className="ghost" onClick={() => { setArmies(saved); setError('') }} disabled={busy}>Undo changes</button>}
         <button className="primary" onClick={save} disabled={!dirty || busy}>{busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>

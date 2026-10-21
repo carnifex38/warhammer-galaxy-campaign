@@ -577,3 +577,16 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-rule p { margin: 4px 0 6px 12px; color: #8f98b8; font-size: 0.8rem; white-space: pre-line; }
 .bld-edit { align-self: flex-start; }
 .bld-edit-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; position: sticky; top: 3.2rem; background: #0f1426; z-index: 1; }
+
+/* collapsible army lists */
+.army-card { gap: 0; padding: 0; overflow: hidden; }
+.army-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 12px; background: none; border: 0; color: #e6e9f5; cursor: pointer; font: inherit; text-align: left; }
+.army-head:hover { background: #151c36; }
+.army-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.army-head .chev { color: #e0b650; width: 1em; }
+.era-chip { padding: 1px 8px; border-radius: 9px; background: #1d2545; color: #9fb0e6; font-size: 0.74rem; }
+.army-pts { font-size: 0.85rem; color: #e0b650; white-space: nowrap; min-width: 4.5em; text-align: right; }
+.army-card.open { border-color: #3a4672; }
+.army-body { display: flex; flex-direction: column; gap: 10px; padding: 4px 12px 12px; border-top: 1px solid #1f2742; }
+.army-notes { margin: 0; font-size: 0.85rem; color: #aab2cc; white-space: pre-line; }
+.army-foot { display: flex; justify-content: flex-end; }
