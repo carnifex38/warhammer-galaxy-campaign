@@ -5,8 +5,9 @@ import type { Era } from './planetLooks'
 //
 // The briefings are written in our own words from the Warhammer 40,000 Fandom wiki (read through its data interface; the
 // Lexicanum wiki blocks automated reading). Where a world's details are disputed or thin the text says so or says less.
-// Worlds with no entry (Seraphina, Taras, Opuscalus Noctis, Hellion, Abyss, Quai Jinn, Vasalius) could not be found on
-// either wiki, so they show the empty-briefing line until the host writes one.
+// Worlds with no entry (Taras, Opuscalus Noctis, Hellion, Abyss, Quai Jinn, Vasalius) have no page on either wiki under
+// those names (the wiki's Hellion is a Drukhari unit, not a planet), so they show the empty-briefing line until the host
+// writes one.
 
 /** One information window: a briefing, some intelligence, and the mission the event sets there. */
 export interface InfoContent {
@@ -76,6 +77,10 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
     summary: 'A long-neglected Imperial world that regained importance when Chaos forces seized it early in the Indomitus Crusade.',
     intel: 'It stood almost empty for thousands of years. Chaos took the planet and the warp nexus in its system, and a Crusade fleet later retook both. The events are told in the novels The Gate of Bones and Throne of Light.',
   },
+  Seraphina: {
+    summary: 'Seraphina, an Ork world cleansed by the Space Wolves in the Wheel of Fire Campaign during the Great Crusade.',
+    intel: 'Leman Russ was given the Dionysian Spear here when his Legion finished the campaign. The Lexicanum wiki places it in Segmentum Ultima, in the Wheel of Fire subsector.',
+  },
   Necromunda: {
     summary: 'Necromunda, originally Araneus Prime: a hive world of Segmentum Solar and a major arms producer.',
     intel: 'Its hive-city manufactoria turn out lasguns, autoguns and bolters, and it supplies huge numbers of Necromundan Guard troops. The Imperial Fists recruit neophytes here, often from the underhive gangs.',
@@ -121,8 +126,8 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
     intel: 'Its forges make everything from infantry weapons to Space Marine tanks and battle Titans, and it pays no tithe to the Imperium. The Legio Astorum are known as the Warp Runners.',
   },
   Goth: {
-    summary: 'Goth, a forge world in the Gothic Sector of Segmentum Obscurus.',
-    intel: 'Traitors held it during the Horus Heresy until it was liberated. Its sector later became the arena of the Gothic War, Abaddon\'s Twelfth Black Crusade, which the Imperium won.',
+    summary: 'Goth, a forge world in the Gothic Sector of Segmentum Obscurus, and probably the origin of the sector\'s name.',
+    intel: 'It was a hive world in the Coronid Deeps during the Great Crusade. Traitors occupied it in the Manachean War until the Disciples of the Flames liberated it. Its sector later became the arena of the Gothic War, Abaddon\'s Twelfth Black Crusade.',
   },
   Isstvan: {
     summary: 'The Isstvan system, an eight-planet backwater near Segmentum Obscurus where the Horus Heresy began.',
@@ -162,7 +167,7 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
   },
   'Luth Tyre': {
     summary: 'Luth Tyre, a desert fortress and industrial world once held by the Iron Warriors.',
-    intel: 'A stable warp route and large refineries made it a muster point for the Iron Warriors during the Heresy. In 011.M31 its garrison met a Death Guard fleet that had come from Barbarus. Its exact location is uncertain.',
+    intel: 'Its refineries and a stable warp route made it a prize: the traitors invaded in 008.M31, and the Iron Warriors held it by 011.M31. In 012.M31 the Dark Angels bombarded it and took it intact. Sources place it in Tempestus or southern Ultima.',
   },
   Barbarus: {
     summary: 'Barbarus, feral homeworld of Mortarion and the Death Guard in Segmentum Tempestus, destroyed by the Dark Angels near the end of the Heresy.',
@@ -177,8 +182,8 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
     intel: 'One of the best-defended worlds in the segmentum, home to some of the fiercest Skitarii legions. Hive Fleet Leviathan overran it, which made its fall all the more shocking.',
   },
   Galaspar: {
-    summary: 'Galaspar, a hive world conquered by the Death Guard in Mortarion\'s first major campaign.',
-    intel: 'Its capital hive refused Imperial rule and fired on Explorator ships and envoys. The primary hive fell in a night and a day, and Phosphex bombs were used. Its segmentum is not recorded.',
+    summary: 'Galaspar, a hive world that Mortarion and the Death Guard conquered in the Great Crusade, and that Horus later seized.',
+    intel: 'Its ruling junta, the Order, fired on Imperial Explorator ships, and the Death Guard destroyed it. In the Heresy the traitors took the world, and the Raven Guard sent a battlegroup to win it back. Its segmentum is not recorded.',
   },
 
   // ---- Segmentum Ultima ----
