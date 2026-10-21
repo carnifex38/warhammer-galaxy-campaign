@@ -128,17 +128,15 @@ export const SECTORS: Sector[] = [
   sector('solar', 'Segmentum Solar', '#ffe3a3', arc(SOLAR_R, 0, 360), [0, 0], [
     p5('Terra', 672, 797),
     p5('Mars', 740, 770),
-    p4('Chthonia', 545, 763),
+    p4('Cthonia', 545, 763),
     p4('Olmec', 487, 722),
     p4('Seraphina', 545, 605),
     p4('Necromunda', 655, 858),
-    p5('Prospero', 830, 790),
   ]),
 
   sector('ocularis', 'Ocularis Malifica', '#c24bff', ring(SOLAR_R, INNER_RING_R, 71, 150), [330, 112], [
     p5('Caliban', 593, 470),
     p5('Medusa', 475, 515),
-    p5('Colchis', 388, 633),
     p4('Cypra Mundi', 665, 428),
     p5('Cadia', 560, 625),
   ]),
@@ -163,7 +161,8 @@ export const SECTORS: Sector[] = [
 
   sector('pacificus', 'Segmentum Pacificus', '#d6a94a', ring(SOLAR_R, 408, 150, 221), [300, 185], [
     p4('Khur', 258, 583),
-    p4('Styggies', 330, 653),
+    p4('Stygies VIII', 330, 653),
+    p5('Colchis', 438, 813), // the wiki puts Colchis in Segmentum Pacificus
     p4('Vasalius', 292, 770),
     p4('Gehenna', 418, 873),
   ]),
@@ -192,6 +191,7 @@ export const SECTORS: Sector[] = [
     p5('Nuceria', 1575, 1000),
     p5('Macragge', 1481, 1217),
     p4('Ryza', 878, 752),
+    p5('Prospero', 1089, 741), // the wiki puts Prospero in Segmentum Ultima
   ]),
 ]
 

@@ -68,7 +68,7 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
     summary: 'Mars, the first and greatest Forge World, homeworld of the Adeptus Mechanicus and birthplace of the Cult Mechanicus.',
     intel: 'It makes vast numbers of weapons, vehicles and other technology for the Imperium, and travel there is restricted to those who share the Mechanicus\'s faith. Its Ring of Iron is the Segmentum Solar\'s fortress and fleet base.',
   },
-  Chthonia: {
+  Cthonia: {
     summary: 'Cthonia, a barren mining world where Horus was raised and the homeworld of the Luna Wolves.',
     intel: 'Horus\'s pod crashed here after he was stolen from the Emperor\'s laboratory on Terra. The Dark Angels destroyed Cthonia in 014.M31 during the Horus Heresy, so little or nothing of it remains.',
   },
@@ -138,9 +138,9 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
     summary: 'Khur, a civilised world brought into the Imperium by the Word Bearers in 903.M30, famed for its capital Monarchia.',
     intel: 'Monarchia, the Perfect City, was built at the Word Bearers\' urging to show the people\'s faith. The Ultramarines later razed it on the Emperor\'s orders. The wiki places Khur in Segmentum Pacificus.',
   },
-  Styggies: {
+  'Stygies VIII': {
     summary: 'Stygies VIII, the Ever-Staring Cyclops: a forge moon of a gas giant in the Vulcanis system of Segmentum Pacificus.',
-    intel: 'Home to the loyalist Titan Legion Legio Honorum, the Death Bolts. Its earlier Titan Legions, Vulcanum I and II, turned traitor during the Horus Heresy. The map spells it Styggies.',
+    intel: 'Home to the loyalist Titan Legion Legio Honorum, the Death Bolts. Its earlier Titan Legions, Vulcanum I and II, turned traitor during the Horus Heresy.',
   },
   Gehenna: {
     summary: 'Gehenna, where in 955.M41 the Blood Angels fought a Necron force until Tyranids arrived.',
@@ -235,7 +235,7 @@ const PLANET_INFO_ERA: Record<Era, Record<string, Partial<InfoContent>>> = {
       summary: 'Mars in the Heresy: a forge world split by the Schism of Mars.',
       intel: 'The Mechanicum tore itself apart, loyalists against traitors who sided with Horus, and the forges were left scarred.',
     },
-    Chthonia: {
+    Cthonia: {
       summary: 'Cthonia in the Great Crusade: the homeworld of the Luna Wolves, who later became the Sons of Horus.',
       intel: 'A barren feral and mining world where Horus was raised. It will be destroyed by the Dark Angels in 014.M31.',
     },

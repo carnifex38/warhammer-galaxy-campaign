@@ -99,13 +99,13 @@ export const LOOKS: Record<LookName, LookSpec> = {
 
 const LOOK_BY_PLANET: Record<string, LookName> = {
   // Solar
-  Terra: 'terra', Mars: 'mars', Necromunda: 'necromunda', Chthonia: 'dead',
+  Terra: 'terra', Mars: 'mars', Necromunda: 'necromunda', Cthonia: 'dead',
   // Ocularis Malifica
   Medusa: 'volcanic',
   // Obscurus
   Lucius: 'forge', Isstvan: 'dead', Fenris: 'fenris', Abyss: 'dark',
   // Pacificus
-  Styggies: 'forge', Gehenna: 'volcanic',
+  'Stygies VIII': 'forge', Gehenna: 'volcanic',
   // Tempestus
   Graia: 'forge', Tallarn: 'desert', Barbarus: 'dead',
   // Ultima
