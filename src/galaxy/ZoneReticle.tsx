@@ -27,9 +27,12 @@ const hash = (s: string) => {
  * (Kept between about 25 degrees south and 40 north, so it is never at a pole and can always be turned to face the viewer.)
  */
 export function zoneSpot(zoneId: string): THREE.Vector3 {
+  // battlezones are named <planet>-t1, -t2 ...: spread them round the planet by the golden angle so they never crowd each other
+  const n = /-t(\d+)$/.exec(zoneId)?.[1]
   const h = hash(zoneId)
-  const lon = ((h & 0xfff) / 4095) * Math.PI * 2
-  const lat = THREE.MathUtils.degToRad(-25 + (((h >>> 12) & 0xfff) / 4095) * 65)
+  const k = n ? Number(n) - 1 : -1
+  const lon = k >= 0 ? THREE.MathUtils.degToRad(k * 137.508) : ((h & 0xfff) / 4095) * Math.PI * 2
+  const lat = THREE.MathUtils.degToRad(-25 + (k >= 0 ? (k * 0.618034) % 1 : ((h >>> 12) & 0xfff) / 4095) * 65)
   return new THREE.Vector3(Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon))
 }
 
@@ -171,7 +174,8 @@ const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math
 
 interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; flat: THREE.Quaternion; spin: number }
 
-export function ZoneReticle({ zone }: { zone: { id: string; name: string } | null }) {
+/** `held`: a battlezone that is in play. It keeps its reticle and explosions up all the time, without the guide lines or turning the planet. */
+export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: string } | null; held?: boolean }) {
   const root = useRef<THREE.Group>(null)
   const cross = useRef<THREE.Sprite>(null)
   const ring = useRef<THREE.Sprite>(null)
@@ -211,14 +215,14 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const lines = useRef<{ box: HTMLDivElement; up: HTMLDivElement; down: HTMLDivElement; left: HTMLDivElement; right: HTMLDivElement } | null>(null)
   useEffect(() => {
     const host = gl.domElement.parentElement
-    if (!host) return
+    if (!host || held) return
     const box = document.createElement('div')
     box.className = 'zone-lines'
     const mk = (cls: string) => { const d = document.createElement('div'); d.className = `zone-line ${cls}`; box.appendChild(d); return d }
     lines.current = { box, up: mk('up'), down: mk('down'), left: mk('left'), right: mk('right') }
     host.appendChild(box)
     return () => { box.remove(); lines.current = null }
-  }, [gl])
+  }, [gl, held])
 
   useFrame((s, dt) => {
     const g = root.current
@@ -258,8 +262,8 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
         c.strokeText(zone.name.toUpperCase(), 256, 38)
         c.fillText(zone.name.toUpperCase(), 256, 38)
         c.font = '22px ui-monospace, Consolas, monospace'
-        c.strokeText('TARGET ACQUIRED', 256, 74)
-        c.fillText('TARGET ACQUIRED', 256, 74)
+        c.strokeText(held ? 'BATTLE IN PROGRESS' : 'TARGET ACQUIRED', 256, 74)
+        c.fillText(held ? 'BATTLE IN PROGRESS' : 'TARGET ACQUIRED', 256, 74)
         labelTex.needsUpdate = true
       }
     }
@@ -375,7 +379,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     // where the spot is now, in the world, and whether it faces the viewer
     tmp.world.copy(k.spot).applyQuaternion(tmp.q)
     let facing = tmp.world.dot(tmp.toCam)
-    if (zone && now < k.seekUntil) {
+    if (zone && !held && now < k.seekUntil) {
       // the point is on the far side (or off to one side): turn the planet quickly until it comes round to face the viewer
       const gap = ((Math.atan2(tmp.toCam.x, tmp.toCam.z) - Math.atan2(tmp.world.x, tmp.world.z) + Math.PI * 3) % (Math.PI * 2)) - Math.PI
       if (Math.abs(gap) < 0.1) k.seekUntil = 0

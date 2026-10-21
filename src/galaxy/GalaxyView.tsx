@@ -224,6 +224,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         hoverSectorId={hover?.kind === 'sector' ? hover.id : null}
         hoverPlanetId={hover?.kind === 'planet' ? hover.id : null}
         hoverZone={zoneFx}
+        playZones={planetTables.filter((t) => t.status !== 'open').map((t) => ({ id: t.id, name: t.name }))}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
