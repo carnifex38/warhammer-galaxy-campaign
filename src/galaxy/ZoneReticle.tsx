@@ -174,7 +174,7 @@ const smooth = (a: number, b: number, x: number) => { const t = Math.min(1, Math
 interface Boom { t0: number; dir: THREE.Vector3; size: number; life: number; flat: THREE.Quaternion; spin: number }
 
 /** `held`: a battlezone that is in play. It keeps its reticle and explosions up all the time, without the guide lines or turning the planet. */
-export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: string } | null; held?: boolean }) {
+export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: string; live?: boolean } | null; held?: boolean }) {
   const root = useRef<THREE.Group>(null)
   const cross = useRef<THREE.Sprite>(null)
   const ring = useRef<THREE.Sprite>(null)
@@ -267,7 +267,7 @@ export function ZoneReticle({ zone, held = false }: { zone: { id: string; name: 
     const bc = boomClock.current
     tmp.world.copy(k.spot).applyQuaternion(tmp.q)
     const faceNow = tmp.world.dot(tmp.toCam)
-    if (k.level > 0.4 && faceNow > -0.25 && now >= bc.next ) {
+    if ((held || zone?.live) && k.level > 0.4 && faceNow > -0.25 && now >= bc.next ) {
       const slot = booms.current.find((b) => b.t0 < 0 || now - b.t0 > b.life)
       if (slot) {
         // a spot a stable-looking random distance and way round the point

@@ -49,6 +49,8 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
     const v = events.planetView(p)
     return { ...v, tables: v.tables.map((t) => ({ ...t, status: claims.statusOf(t.id) })) }
   }
+  // a battlezone is live (explosions on its spot) once it is in play or anyone has taken a seat there
+  const isLive = (t: { id: string; status: string }) => t.status !== 'open' || claims.seatsOf(t.id).length > 0
   // players see only what the host shows: hidden planets are gone, locked sectors stay shut
   const SECTORS = events.visibleSectors
   const lockedIds = events.lockedForPlayers
@@ -117,7 +119,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
   // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
-  const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name } : null })()
+  const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name, live: isLive(z) } : null })()
 
   /** Battlezones counted for a sector: only planets in play whose battlezones the host has revealed. */
   const sectorCounts = (s: Sector) => {
@@ -224,7 +226,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         hoverSectorId={hover?.kind === 'sector' ? hover.id : null}
         hoverPlanetId={hover?.kind === 'planet' ? hover.id : null}
         hoverZone={zoneFx}
-        playZones={planetTables.filter((t) => t.status !== 'open').map((t) => ({ id: t.id, name: t.name }))}
+        playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}

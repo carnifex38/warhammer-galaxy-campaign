@@ -26,7 +26,7 @@ interface Props {
   hoverSectorId: string | null
   hoverPlanetId: string | null
   /** The battlezone being pointed at (or open) on the selected planet: a targeting reticle settles on its spot. */
-  hoverZone?: { id: string; name: string } | null
+  hoverZone?: { id: string; name: string; live?: boolean } | null
   /** The battlezones of the selected planet that are in play: each keeps a reticle and explosions on its spot. */
   playZones?: { id: string; name: string }[]
   /** 40K (Dark Imperium) or 30K (Horus Heresy). */
@@ -958,7 +958,7 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
 const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
 
 function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, zone, held, onSelect }: {
-  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string } | null; held: { id: string; name: string }[]; onSelect: () => void
+  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
   const look = lookNameFor(p.name, era)
