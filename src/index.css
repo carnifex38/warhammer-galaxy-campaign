@@ -705,7 +705,3 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 /* one thin accent line down the left of a list, not one per nesting level */
 .bld-force, .bld-force.depth1, .bld-force.depth2 { border-left: 2px solid #6f86e6; }
 .bld-force > .bld-force, .bld-force > .bld-force.depth1, .bld-force > .bld-force.depth2 { border-left: 0; }
-
-/* every other column a touch lighter, so a row of numbers is easy to follow */
-.bld-stats thead th:nth-child(even) { background: #232834; }
-.bld-stats tr.stat-vals td:nth-child(even) { background: rgba(255, 255, 255, 0.045); }
