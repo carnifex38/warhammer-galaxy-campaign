@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { sliced } from '../idle'
 import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, createWarmupMaterial } from './PlanetBody'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
@@ -100,25 +101,63 @@ const STORMS = [
   { name: 'Hadex Anomaly', px: 1730, py: 1075, size: 2.8, eras: ['40k'] },
 ] satisfies { name: string; px: number; py: number; size: number; eras: Era[] }[]
 
-/** Brightness multiplier for a star at (x, z): nearly dark inside a tear or storm, back to full just outside it. */
+/**
+ * Brightness multiplier for a star at (x, z): nearly dark inside a tear or storm, back to full just outside it.
+ * It compares squared distances and takes one square root at the end, which gives the same answer as before at a
+ * fraction of the cost (tens of thousands of stars ask this question).
+ */
 function makeTearFactor(era: Era) {
   const curve = riftCurve()
+  const xs: number[] = []
+  const zs: number[] = []
+  const inv2: number[] = [] // 1 / (size of the tear there)^2
   // the Great Rift only exists in the 41st millennium
-  const riftPts = Array.from({ length: era === '40k' ? 161 : 0 }, (_, i) => {
-    const u = i / 160
-    const p = curve.getPoint(u)
-    return { x: p.x, z: p.z, w: riftHalfWidth(u) }
-  })
-  const storms = STORMS.filter((s) => (s.eras as Era[]).includes(era)).map((s) => ({ ...toWorld(s.px, s.py), r: s.size * 0.4 }))
+  if (era === '40k') {
+    for (let i = 0; i <= 160; i++) {
+      const u = i / 160
+      const p = curve.getPoint(u)
+      const w = riftHalfWidth(u)
+      xs.push(p.x)
+      zs.push(p.z)
+      inv2.push(1 / (w * w))
+    }
+  }
+  for (const st of STORMS) {
+    if (!(st.eras as Era[]).includes(era)) continue
+    const w = toWorld(st.px, st.py)
+    const r = st.size * 0.4
+    xs.push(w.x)
+    zs.push(w.z)
+    inv2.push(1 / (r * r))
+  }
+  const n = xs.length
   return (x: number, z: number) => {
-    let nearest = Infinity
-    for (const p of riftPts) nearest = Math.min(nearest, Math.hypot(x - p.x, z - p.z) / p.w)
-    for (const s of storms) nearest = Math.min(nearest, Math.hypot(x - s.x, z - s.z) / s.r)
-    return 0.12 + 0.88 * smooth(0.3, 0.95, nearest)
+    let best = Infinity
+    for (let k = 0; k < n; k++) {
+      const dx = x - xs[k]
+      const dz = z - zs[k]
+      const d = (dx * dx + dz * dz) * inv2[k]
+      if (d < best) best = d
+    }
+    return 0.12 + 0.88 * smooth(0.3, 0.95, Math.sqrt(best))
   }
 }
 
-function buildStars(era: Era) {
+interface StarData { positions: Float32Array; colors: Float32Array }
+
+const starCache = new Map<Era, Promise<StarData>>()
+
+/** The star field for an era. Built once, in small slices that never block a frame, and remembered. */
+export function prepareStars(era: Era): Promise<StarData> {
+  let p = starCache.get(era)
+  if (!p) {
+    p = buildStars(era)
+    starCache.set(era, p)
+  }
+  return p
+}
+
+async function buildStars(era: Era): Promise<StarData> {
   const rand = rng(40000)
   const gauss = () => (rand() + rand() + rand() + rand() - 2) / 2
   const HAZE_N = 14000, ARM_N = 16000, BULGE_N = 5500, HALO_N = 2500
@@ -132,15 +171,20 @@ function buildStars(era: Era) {
 
   const put = (x: number, y: number, z: number, col: THREE.Color, b: number) => {
     const k = b * tearFactor(x, z)
-    positions.set([x, y, z], n * 3)
-    colors.set([col.r * k, col.g * k, col.b * k], n * 3)
+    const i = n * 3
+    positions[i] = x
+    positions[i + 1] = y
+    positions[i + 2] = z
+    colors[i] = col.r * k
+    colors[i + 1] = col.g * k
+    colors[i + 2] = col.b * k
     n++
   }
 
   // 1. wide hazy disc covering the whole map, brightest toward the core
   const haze = new THREE.Color('#6f7bb8')
   const core = new THREE.Color('#ffd98a')
-  for (let i = 0; i < HAZE_N; i++) {
+  await sliced(HAZE_N, () => {
     const r = Math.pow(rand(), 0.8)
     const a = rand() * Math.PI * 2
     const x = HAZE.cx + HAZE.radius * r * Math.cos(a)
@@ -149,12 +193,12 @@ function buildStars(era: Era) {
     // brightness eases to nothing at the rim, and the disc thins out there too
     const thick = 0.22 + 1.1 * Math.exp(-Math.hypot(x, z) / 3.5) // the disc is much thicker near the core
     put(x, gauss() * thick, z, c, (0.4 + rand() * 0.55) * (1 - smooth(0.6, 1.02, r)))
-  }
+  })
 
   // 2. two bright spiral arms wound around the core
   const armA = new THREE.Color('#ffe9b8')
   const armB = new THREE.Color('#c58cff')
-  for (let i = 0; i < ARM_N; i++) {
+  await sliced(ARM_N, (i) => {
     const t = Math.pow(rand(), 0.8)
     const r = 0.5 + 11.5 * t
     const a = (i % 2) * Math.PI + t * 4.8
@@ -163,33 +207,51 @@ function buildStars(era: Era) {
     const z = r * Math.sin(a) + gauss() * spread
     c.copy(armA).lerp(armB, t)
     put(x, gauss() * (0.2 + 0.9 * Math.exp(-r / 3.5)), z, c, (0.22 + rand() * 0.3) * (1 - smooth(0.7, 1.02, t)))
-  }
+  })
+
   // 3. the central bulge: a dense, warm, roughly spherical swarm around the core
   const bulgeA = new THREE.Color('#ffe2a8')
   const bulgeB = new THREE.Color('#ffb070')
-  for (let i = 0; i < BULGE_N; i++) {
+  await sliced(BULGE_N, () => {
     const x = gauss() * 2.6
     const y = gauss() * 1.7
     const z = gauss() * 2.6
     c.copy(bulgeA).lerp(bulgeB, Math.min(1, Math.hypot(x, y, z) / 4))
     put(x, y, z, c, 0.16 + rand() * 0.28)
-  }
+  })
 
   // 4. a faint halo of old stars above and below the disc
   const halo = new THREE.Color('#9aa6d8')
-  for (let i = 0; i < HALO_N; i++) {
+  await sliced(HALO_N, () => {
     const r = 13 * Math.pow(rand(), 0.6)
     const a = rand() * Math.PI * 2
     const up = (rand() * 2 - 1) * 0.4
     const x = HAZE.cx * 0.3 + r * Math.cos(a)
     const z = r * Math.sin(a)
     put(x, r * up, z, halo, (0.12 + rand() * 0.2) * (1 - smooth(0.5, 1, r / 13)))
-  }
+  })
   return { positions, colors }
 }
 
+/** Stars for an era, as soon as they are ready (the old ones stay on screen until the new ones are). */
+function useStarData(era: Era) {
+  const [data, setData] = useState<StarData | null>(null)
+  useEffect(() => {
+    let live = true
+    void prepareStars(era).then((d) => { if (live) setData(d) })
+    return () => { live = false }
+  }, [era])
+  return data
+}
+
 function Stars({ era }: { era: Era }) {
-  const { positions, colors } = useMemo(() => buildStars(era), [era])
+  const data = useStarData(era)
+  const mat = useRef<THREE.PointsMaterial>(null)
+  // the field fades in the first time it appears (the finished look is exactly the same)
+  useFrame((_, dt) => {
+    const m = mat.current
+    if (m && m.opacity < 1) m.opacity = Math.min(1, m.opacity + dt * 1.1)
+  })
   // a soft round dot, so stars stay round when you zoom right in
   const dot = useMemo(() => {
     const cv = document.createElement('canvas')
@@ -203,13 +265,14 @@ function Stars({ era }: { era: Era }) {
     ctx.fillRect(0, 0, 32, 32)
     return new THREE.CanvasTexture(cv)
   }, [])
+  if (!data) return null
   return (
     <points frustumCulled={false}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        <bufferAttribute attach="attributes-position" args={[data.positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[data.colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.07} map={dot} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
+      <pointsMaterial ref={mat} size={0.07} opacity={0} map={dot} vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} sizeAttenuation />
     </points>
   )
 }
@@ -1028,6 +1091,17 @@ function LoadingBar() {
   )
 }
 
+/** Mounts its children after a short delay, so a heavy layer's start-up cost lands between frames, not all on one. */
+function Later({ ms, children }: { ms: number; children: ReactNode }) {
+  const [on, setOn] = useState(ms <= 0)
+  useEffect(() => {
+    if (on) return
+    const t = window.setTimeout(() => setOn(true), ms)
+    return () => window.clearTimeout(t)
+  }, [on, ms])
+  return on ? <>{children}</> : null
+}
+
 // ---------- scene ----------
 
 function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
@@ -1066,15 +1140,16 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
     <>
       <color attach="background" args={['#05060d']} />
       <Warmup />
-      <Clouds />
-      <Dust />
-      <TealVolume />
       <DimOverlay dimmed={!!sector} />
       <Stars era={era} />
-      <GlowStars era={era} />
       <CoreGlow />
-      <Rift on={era === '40k'} />
-      <WarpStorms era={era} />
+      {/* the sector map is on screen straight away; the atmosphere layers join it one at a time */}
+      <Later ms={120}><Clouds /></Later>
+      <Later ms={260}><TealVolume /></Later>
+      <Later ms={400}><Dust /></Later>
+      <Later ms={540}><GlowStars era={era} /></Later>
+      <Later ms={680}><Rift on={era === '40k'} /></Later>
+      <Later ms={820}><WarpStorms era={era} /></Later>
       <Labels specs={specs} layer={layer} />
 
       {SECTORS.map((s) => {

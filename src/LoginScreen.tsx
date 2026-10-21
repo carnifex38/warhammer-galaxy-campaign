@@ -1,11 +1,35 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { AuthApi, Role } from './auth'
+import { usePreload } from './preloadGalaxy'
 
 const CHOICES: { role: Role; title: string; blurb: string; icon: string }[] = [
   { role: 'guest', title: 'Guest', blurb: 'Look around the galaxy. No name needed.', icon: '◇' },
   { role: 'player', title: 'Player', blurb: 'Pick a callsign, claim battlezones, build armies.', icon: '⚔' },
   { role: 'gm', title: 'Gamemaster', blurb: 'Run the event. Password required.', icon: '♛' },
 ]
+
+/** A slim bar along the bottom showing the galaxy being prepared in the background. It fades away when ready. */
+function PreloadBar() {
+  const { done, total, label } = usePreload()
+  const finished = done >= total
+  const [gone, setGone] = useState(false)
+  useEffect(() => {
+    if (!finished) return
+    const t = window.setTimeout(() => setGone(true), 1800)
+    return () => window.clearTimeout(t)
+  }, [finished])
+  if (gone) return null
+  const pct = Math.round((done / total) * 100)
+  return (
+    <div className={`preload${finished ? ' done' : ''}`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Preparing the galaxy">
+      <div className="preload-text">
+        <span>{label}{finished ? '' : '…'}</span>
+        <strong>{pct}%</strong>
+      </div>
+      <div className="preload-bar"><i style={{ width: `${pct}%` }} /></div>
+    </div>
+  )
+}
 
 /** The first screen: choose to enter as a guest, a player or the gamemaster. */
 export default function LoginScreen({ auth }: { auth: AuthApi }) {
@@ -68,6 +92,7 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
           </form>
         )}
       </div>
+      <PreloadBar />
     </div>
   )
 }

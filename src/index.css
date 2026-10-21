@@ -440,3 +440,14 @@ button { font: inherit; color: inherit; }
 }
 .era-fade.on { opacity: 1; transition: opacity 0.32s ease-out; }
 @media (prefers-reduced-motion: reduce) { .era-fade { display: none; } }
+
+/* shown for a moment while the galaxy code is still arriving (usually it is already there) */
+.galaxy-wait { height: 100%; display: grid; place-items: center; color: var(--muted); letter-spacing: 0.08em; background: #05060d; }
+
+/* ---------- Menu screen: the galaxy preparing in the background ---------- */
+.preload { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(360px, calc(100% - 32px)); transition: opacity 0.8s ease; }
+.preload.done { opacity: 0.6; }
+.preload-text { display: flex; justify-content: space-between; gap: 12px; font-size: 0.78rem; letter-spacing: 0.06em; color: var(--muted); }
+.preload-text strong { color: var(--gold); font-variant-numeric: tabular-nums; }
+.preload-bar { height: 4px; margin-top: 6px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.preload-bar i { display: block; height: 100%; background: var(--gold); transition: width 0.5s ease-out; }

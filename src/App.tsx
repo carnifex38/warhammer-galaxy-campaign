@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
-import GalaxyView from './galaxy/GalaxyView'
-import HostView from './galaxy/HostView'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import LoginScreen from './LoginScreen'
+import { preloadGalaxy } from './preloadGalaxy'
 import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
+
+// the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
+const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
+const HostView = lazy(() => import('./galaxy/HostView'))
 
 type TabId = 'galaxy' | 'lists' | 'event' | 'host'
 
@@ -35,6 +38,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('galaxy')
   const events = useEventConfig(role === 'gm', auth.session?.token)
   const online = useOnline()
+  useEffect(() => { preloadGalaxy() }, [])
   const serverUp = events.sync !== 'offline'
   const denied = events.sync === 'denied'
 
@@ -78,11 +82,15 @@ export default function App() {
 
       {activeId === 'galaxy' ? (
         <main className="content full">
-          <GalaxyView events={events} canClaim={auth.session.role !== 'guest'} />
+          <Suspense fallback={<div className="galaxy-wait">Opening the galaxy…</div>}>
+            <GalaxyView events={events} canClaim={auth.session.role !== 'guest'} />
+          </Suspense>
         </main>
       ) : activeId === 'host' ? (
         <main className="content">
-          <HostView events={events} />
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <HostView events={events} />
+          </Suspense>
         </main>
       ) : (
         <main className="content">

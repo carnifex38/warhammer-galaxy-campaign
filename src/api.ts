@@ -33,9 +33,31 @@ export async function putState(token: string, state: ServerState): Promise<void>
   if (!r.ok) throw new Error(`save failed (${r.status})`)
 }
 
-/** Calls onChange when the server connects and whenever the gamemaster saves. Returns a function that stops listening. */
+/**
+ * Calls onChange when the server connects and whenever the gamemaster saves. Returns a function that stops listening.
+ * If the server cannot be reached it backs off (2s, 4s, 8s ... up to a minute) instead of retrying every few seconds
+ * for ever, so a copy of the site with no server behind it stays quiet.
+ */
 export function watchState(onChange: () => void): () => void {
-  const es = new EventSource('/api/stream')
-  es.onmessage = onChange // the first message arrives on every (re)connect, so this also covers catching up after a drop
-  return () => es.close()
+  let es: EventSource | null = null
+  let timer: number | undefined
+  let failures = 0
+  let stopped = false
+  const connect = () => {
+    if (stopped) return
+    es = new EventSource('/api/stream')
+    es.onmessage = () => { failures = 0; onChange() } // the first message arrives on every (re)connect, so this also covers catching up after a drop
+    es.onerror = () => {
+      es?.close()
+      es = null
+      failures++
+      timer = window.setTimeout(connect, Math.min(60000, 1000 * 2 ** failures))
+    }
+  }
+  connect()
+  return () => {
+    stopped = true
+    es?.close()
+    window.clearTimeout(timer)
+  }
 }
