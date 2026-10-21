@@ -8,7 +8,7 @@ import { idle } from './idle'
 
 export interface PreloadState { done: number; total: number; label: string }
 
-const TOTAL = 4
+const TOTAL = 5
 let state: PreloadState = { done: 0, total: TOTAL, label: 'Preparing the galaxy' }
 const listeners = new Set<() => void>()
 const set = (patch: Partial<PreloadState>) => {
@@ -43,7 +43,10 @@ export function preloadGalaxy() {
       try { saved = localStorage.getItem('galaxy-era') } catch { /* no saved era */ }
       const first = saved === '30k' ? '30k' : '40k'
       await g.prepareStars(first)
-      set({ done: 3, label: 'Almost there' })
+      set({ done: 3, label: 'Painting the nebulae' })
+      await idle()
+      await (await import('./galaxy/Nebula')).prepareSky() // the faint background dust
+      set({ done: 4, label: 'Almost there' })
       await idle()
       await g.prepareStars(first === '40k' ? '30k' : '40k') // the other era, ready for when the switch is used
       set({ done: TOTAL, label: 'Galaxy ready' })

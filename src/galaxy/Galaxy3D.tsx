@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { sliced } from '../idle'
-import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, createWarmupMaterial } from './PlanetBody'
+import { SkyNebula } from './Nebula'
+import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
+import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial } from './PlanetBody'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import type { Era } from './planetLooks'
@@ -747,7 +749,7 @@ function SectorZone({ s, state, hot, onSelect }: { s: Sector; state: 'idle' | 'a
   useEffect(() => () => geometry.dispose(), [geometry])
 
   return (
-    <group>
+    <FadeWithBackdrop left={0.02}>
       <mesh
         geometry={geometry}
         rotation={[-Math.PI / 2, 0, 0]}
@@ -759,7 +761,7 @@ function SectorZone({ s, state, hot, onSelect }: { s: Sector; state: 'idle' | 'a
         <meshBasicMaterial color={s.color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <Line points={outline} color={s.color} lineWidth={state === 'active' ? 2.5 : lit ? 4 : 1.2} transparent opacity={lit ? 1 : state === 'dim' ? 0.25 : 0.85} renderOrder={4} />
-    </group>
+    </FadeWithBackdrop>
   )
 }
 
@@ -889,6 +891,67 @@ function LockedDust({ s, dim }: { s: Sector; dim: boolean }) {
 
 // ---------- planets ----------
 
+/** How small the picked planet starts, as a share of its full size, so the camera seems to travel a long way to reach it. */
+const ARRIVE_FROM = 0.06
+
+/** The picked planet starts as a distant speck and grows to full size as the view flies in. Only the arrival does this: once
+ *  it is there it stays full size, however far you zoom out afterwards. */
+function Arrive({ position, children }: { position: [number, number, number]; children: ReactNode }) {
+  const group = useRef<THREE.Group>(null)
+  const grown = useRef(ARRIVE_FROM)
+  const fade = arriveFade // the planet's shaders read this directly
+  // start invisible, and leave it solid for whatever is picked next
+  useLayoutEffect(() => {
+    fade.value = 0
+    return () => { fade.value = 1 }
+  }, [fade])
+  useFrame((_, dt) => {
+    const g = group.current
+    if (!g) return
+    grown.current += (1 - grown.current) * (1 - Math.exp(-dt * 2.2))
+    if (grown.current > 0.9995) grown.current = 1
+    g.scale.setScalar(grown.current)
+    // it also fades in, fully solid by the time it is half grown
+    const f = Math.min(1, (grown.current - ARRIVE_FROM) / (0.5 - ARRIVE_FROM))
+    fade.value = f * f * (3 - 2 * f)
+    g.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined
+      if (!m || (m as THREE.ShaderMaterial).isShaderMaterial) return
+      m.transparent = true
+      m.opacity = fade.value
+    })
+  })
+  return <group ref={group} position={position} scale={ARRIVE_FROM}>{children}</group>
+}
+
+/** How much of their normal strength the other planets keep while the black backdrop is up (extreme first: nearly gone). */
+const OTHERS_LEFT = 0.04
+
+/** Fades everything inside it along with the black backdrop, so the other planets all but vanish next to the picked one. */
+function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNode; left?: number }) {
+  const group = useRef<THREE.Group>(null)
+  useFrame(() => {
+    const g = group.current
+    if (!g) return
+    const k = 1 - (1 - left) * backdropLevel.v
+    g.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined
+      if (!m) return
+      for (const mat of Array.isArray(m) ? m : [m]) {
+        // if something else changed the opacity (a hover, say), that is the new normal
+        if (mat.userData.written !== mat.opacity) mat.userData.baseOpacity = mat.opacity
+        mat.transparent = true
+        mat.opacity = mat.userData.baseOpacity * k
+        mat.userData.written = mat.opacity
+      }
+    })
+  })
+  return <group ref={group}>{children}</group>
+}
+
+/** One unit sphere shared by every planet dot (sized by scale), so picking a planet does not rebuild a hundred little spheres. */
+const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
+
 function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, onSelect }: {
   p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; onSelect: () => void
 }) {
@@ -904,14 +967,15 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {selected ? (
-        <PlanetBody name={p.name} era={era} position={[0, PLANET_FOCUS_Y - 0.12, 0]} />
+        <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
+          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} />
+        </Arrive>
       ) : (
-        <>
+        <FadeWithBackdrop>
           {isHulkId(p.id) ? (
             <HulkMarker hot={hot} enabled={enabled} compact={compact} />
           ) : (
-            <mesh renderOrder={focus ? 5 : 1} scale={(hot ? 2.2 : 1) * (enabled ? 1 : 0.7)}>
-              <sphereGeometry args={[compact ? 0.06 : showLabel ? 0.2 : 0.11, 20, 20]} />
+            <mesh geometry={PIN_GEOMETRY} renderOrder={focus ? 5 : 1} scale={(compact ? 0.06 : showLabel ? 0.2 : 0.11) * (hot ? 2.2 : 1) * (enabled ? 1 : 0.7)}>
               <meshBasicMaterial color={!enabled ? '#4b5064' : hot ? '#ffffff' : color} transparent />
             </mesh>
           )}
@@ -921,7 +985,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
               <meshBasicMaterial color="#ffffff" transparent opacity={0.9} side={THREE.DoubleSide} depthWrite={false} />
             </mesh>
           )}
-        </>
+        </FadeWithBackdrop>
       )}
     </group>
   )
@@ -1141,6 +1205,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       <color attach="background" args={['#05060d']} />
       <Warmup />
       <DimOverlay dimmed={!!sector} />
+      <SkyNebula era={era} />
       <Stars era={era} />
       <CoreGlow />
       {/* the sector map is on screen straight away; the atmosphere layers join it one at a time */}
@@ -1150,6 +1215,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       <Later ms={540}><GlowStars era={era} /></Later>
       <Later ms={680}><Rift on={era === '40k'} /></Later>
       <Later ms={820}><WarpStorms era={era} /></Later>
+      <PlanetBackdrop planetId={planetId} era={era} anchor={planet ? [planet.x, PLANET_FOCUS_Y, planet.z] : null} />
       <Labels specs={specs} layer={layer} />
 
       {SECTORS.map((s) => {

@@ -643,7 +643,18 @@ function heroFragment(hero: number): string {
 
 /** Which fragment shader draws a planet with this hero id. */
 function fragmentFor(hero: number): string {
-  return hero > 0 && HERO_BODIES[hero] ? heroFragment(hero) : REAL_FRAG
+  return withArriveFade(hero > 0 && HERO_BODIES[hero] ? heroFragment(hero) : REAL_FRAG)
+}
+
+/**
+ * How solid the picked planet is while it arrives (0 to 1). It lives in the shaders themselves, so the planets compiled in
+ * the background at start-up are exactly the ones drawn later, and opening a planet never waits on a compile.
+ */
+export const arriveFade = { value: 1 }
+
+function withArriveFade(src: string): string {
+  return `uniform float uArrive;
+${src.replace(/gl_FragColor\s*=\s*([^;]+);/g, 'gl_FragColor = $1; gl_FragColor.a *= uArrive;')}`
 }
 
 const ATMO_VERT = /* glsl */ `
@@ -654,7 +665,7 @@ const ATMO_VERT = /* glsl */ `
   }
 `
 
-const ATMO_FRAG = /* glsl */ `
+const ATMO_FRAG = withArriveFade(/* glsl */ `
   uniform vec3 uAtmo;
   uniform float uStrength;
   varying vec3 vN;
@@ -662,7 +673,7 @@ const ATMO_FRAG = /* glsl */ `
     float i = pow(max(0.0, 0.62 - dot(vN, vec3(0.0, 0.0, 1.0))), 3.0) * uStrength;
     gl_FragColor = vec4(uAtmo * i * 1.4, i);
   }
-`
+`)
 
 function makePlanetUniforms(name: string, era: Era) {
   const look = lookFor(name, era)
@@ -688,6 +699,7 @@ function makePlanetUniforms(name: string, era: Era) {
     uCraters: { value: look.craters },
     uAmbient: { value: look.ambient },
     uGrid: { value: look.grid },
+    uArrive: arriveFade,
     uCells: { value: 27 }, // the 3x3x3 neighbourhood searched by the cell patterns (kept as a uniform so the loop is a real loop)
   }
 }
@@ -716,6 +728,9 @@ export function createWarmupMaterial(name: string, era: Era) {
   })
 }
 
+/** Built once and reused by every planet that is picked, so choosing one does not rebuild the sphere. */
+const PLANET_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 96, 64)
+
 function SpherePlanet({ name, era, position }: { name: string; era: Era; position: [number, number, number] }) {
   const spin = useRef<THREE.Group>(null)
 
@@ -724,7 +739,7 @@ function SpherePlanet({ name, era, position }: { name: string; era: Era; positio
   const atmoUniforms = useMemo(() => {
     const look = lookFor(name, era)
     // the realistic look keeps the edge glow much fainter so the atmosphere reads as haze, not a neon ring
-    return { uAtmo: { value: new THREE.Color(look.atmo) }, uStrength: { value: look.atmoStrength * (look.hero > 0 ? 0.5 : 0.3) } }
+    return { uAtmo: { value: new THREE.Color(look.atmo) }, uStrength: { value: look.atmoStrength * (look.hero > 0 ? 0.5 : 0.3) }, uArrive: arriveFade }
   }, [name, era])
 
   useFrame((s, dt) => {
@@ -736,8 +751,7 @@ function SpherePlanet({ name, era, position }: { name: string; era: Era; positio
     }
   })
 
-  const geometry = useMemo(() => new THREE.SphereGeometry(PLANET_RADIUS, 96, 64), [])
-  useEffect(() => () => geometry.dispose(), [geometry])
+  const geometry = PLANET_GEOMETRY
 
   const hero = lookFor(name, era).hero
   // dev only: `?rot=2` starts the planet turned by that many radians
