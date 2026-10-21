@@ -3,10 +3,10 @@ import type { Era } from './planetLooks'
 // The text shown in each sector's and planet's information window. These are only starting points:
 // the event host can rewrite any of it (and add objectives and rewards) from the Host tab.
 //
-// The briefings below are written in our own words from what the Warhammer 40,000 wikis say. Where a world's details
-// are disputed or thin, the text says so or says less. Worlds with no entry (Seraphina, Taras, Opuscalus Noctis, Hellion,
-// Abyss, Quai Jinn, Styggies, Vasalius) could not be found on the wikis, so they show the empty-briefing line until the
-// host writes one.
+// The briefings are written in our own words from the Warhammer 40,000 Fandom wiki (read through its data interface; the
+// Lexicanum wiki blocks automated reading). Where a world's details are disputed or thin the text says so or says less.
+// Worlds with no entry (Seraphina, Taras, Opuscalus Noctis, Hellion, Abyss, Quai Jinn, Vasalius) could not be found on
+// either wiki, so they show the empty-briefing line until the host writes one.
 
 /** One information window: a briefing, some intelligence, and the mission the event sets there. */
 export interface InfoContent {
@@ -32,28 +32,28 @@ const NONE = 'No briefing has been filed for this location yet.'
 
 const SECTOR_INFO: Record<string, Partial<InfoContent>> = {
   solar: {
-    summary: 'The central region of the Imperium, centred on Terra and the Sol system. Mars, seat of the Mechanicus, lies here.',
-    intel: 'The oldest, most crowded and best defended part of human space. Its fleet is commanded from Mars, and its worlds answer first to Terra and the Adeptus Mechanicus.',
+    summary: 'The central region of the Imperium, centred on Terra and the Sol system: the oldest and most densely settled part of human space.',
+    intel: 'Its fleet is based in the Ring of Iron above Mars, which serves as the segmentum fortress, and its orbital shipyards sit above Luna. The other four segmentae guard it on every side.',
   },
   ocularis: {
-    summary: 'The Ocularis Malifica: the stormy space around the Eye of Terror, where the warp bleeds into reality.',
-    intel: 'The Eye is the main stronghold of the Chaos Space Marines and the launch point of the Black Crusades. Warp storms make travel here unreliable, and the worlds on its rim are fortresses, ruins or daemon worlds.',
+    summary: 'The Ocularis Malifica: the stormy space around the Eye of Terror, the great warp rift where Chaos gathers.',
+    intel: 'The Eye is a permanent warp storm some twenty thousand light years across, and the main base of Chaos in the galaxy. Worlds on its rim are fortresses, ruins and the homeworlds of fallen Legions.',
   },
   obscurus: {
-    summary: 'Segmentum Obscurus, the great northern reach of the Imperium, home to the Gothic Sector and the approaches to the Eye of Terror.',
-    intel: 'Its fleet is commanded from Cypra Mundi. Forge worlds such as Lucius and Goth stand beside hive worlds and the homeworlds of several Legions. It is the usual target of the Black Crusades.',
+    summary: 'Segmentum Obscurus, the Imperium\'s northern reach and the home of the Eye of Terror.',
+    intel: 'Its fleet headquarters is the Cypra Mundi system. It is the region most often attacked from the Eye and the site of every one of Abaddon\'s Black Crusades, so it holds most of the Imperium\'s armed forces.',
   },
   pacificus: {
-    summary: 'Segmentum Pacificus, the western reach of the Imperium, run from its fleet base at Hydraphur.',
-    intel: 'A distant region, slow to receive help from Terra. Records on it are thin, and many of its worlds must fend for themselves.',
+    summary: 'Segmentum Pacificus, the Imperium\'s western reach, with its fleet fortress at Hydraphur.',
+    intel: 'Famous for Lord Commander Macharius\'s conquest of a thousand worlds at the galaxy\'s edge. It also saw the Plague of Unbelief and the Sabbat Worlds Crusade.',
   },
   tempestus: {
-    summary: 'Segmentum Tempestus, the southern reach of the Imperium, with its fleet fortress at Bakka.',
-    intel: 'It holds the Belt of Iron, a line of Mechanicus forge worlds along the border with Pacificus. Several of the early campaigns of the Horus Heresy were fought across its worlds.',
+    summary: 'Segmentum Tempestus, the Imperium\'s southern reach, with its fleet headquarters and fortress at Bakka.',
+    intel: 'It lies south of Segmentum Solar. Its far borders form the Dark Marches, some of the oldest star systems in the galaxy, absorbed late into the Imperium. Forge worlds such as Graia stand here.',
   },
   ultima: {
-    summary: 'Segmentum Ultima, the eastern reach of the Imperium and its largest segmentum. Ultramar and the blood-red world of Baal lie here.',
-    intel: 'A frontier of many wars, with worlds such as Macragge, Baal, Nocturne and Ryza. Threats from the east, and from the Great Rift, fall on it first.',
+    summary: 'Segmentum Ultima, the Imperium\'s eastern reach and its largest, home to the Ultramarines\' realm of Ultramar.',
+    intel: 'It holds more worlds than any other segmentum and the galaxy\'s core, marked by a supermassive black hole. Tyranid hive fleets Behemoth and Kraken have both struck it.',
   },
 }
 
@@ -61,50 +61,50 @@ const SECTOR_INFO: Record<string, Partial<InfoContent>> = {
 const PLANET_INFO: Record<string, Partial<InfoContent>> = {
   // ---- Segmentum Solar ----
   Terra: {
-    summary: 'Holy Terra, cradle of humanity and seat of the Emperor. The most sacred and most guarded world in the galaxy.',
-    intel: 'Continent-sized hive cities and palace complexes cover its surface, and the Imperial Palace holds the Golden Throne. Every pilgrim route and every tithe ends here, and it is the final prize of any invader.',
+    summary: 'Holy Terra, the Throneworld of the Imperium, original homeworld of humanity and seat of the Emperor.',
+    intel: 'Billions of pilgrims come to its sacred, poisoned soil, and the planet is in effect a globe-spanning temple to the Emperor. The headquarters of the Imperium\'s main governing bodies are here.',
   },
   Mars: {
-    summary: 'The Red Planet: the greatest forge world, seat of the Adeptus Mechanicus and its mighty shipyards.',
-    intel: 'A cold desert dotted with manufactorums and tech-archives. Olympus Mons and the canyons of Noctis Labyrinthus hold some of the Mechanicus\'s deepest secrets. It is loyal to Terra, but fiercely self-governing.',
+    summary: 'Mars, the first and greatest Forge World, homeworld of the Adeptus Mechanicus and birthplace of the Cult Mechanicus.',
+    intel: 'It makes vast numbers of weapons, vehicles and other technology for the Imperium, and travel there is restricted to those who share the Mechanicus\'s faith. Its Ring of Iron is the Segmentum Solar\'s fortress and fleet base.',
   },
   Chthonia: {
-    summary: 'Cthonia, the harsh homeworld of Horus and his Legion.',
-    intel: 'A hard world once ruled by warring gangs, where the Emperor found the infant Horus. Sources differ on what became of it, so check before relying on details here.',
+    summary: 'Cthonia, a barren mining world where Horus was raised and the homeworld of the Luna Wolves.',
+    intel: 'Horus\'s pod crashed here after he was stolen from the Emperor\'s laboratory on Terra. The Dark Angels destroyed Cthonia in 014.M31 during the Horus Heresy, so little or nothing of it remains.',
   },
   Olmec: {
     summary: 'A long-neglected Imperial world that regained importance when Chaos forces seized it early in the Indomitus Crusade.',
     intel: 'It stood almost empty for thousands of years. Chaos took the planet and the warp nexus in its system, and a Crusade fleet later retook both. The events are told in the novels The Gate of Bones and Throne of Light.',
   },
   Necromunda: {
-    summary: 'A vast hive world of towering spires, famous for heavy industry and brutal underhive gang wars.',
-    intel: 'Its hive cities stack from gleaming noble spires down to the lawless underhive. Rival houses and gangs fight over scarce resources. It exports manufactured goods and Imperial Guard regiments.',
+    summary: 'Necromunda, originally Araneus Prime: a hive world of Segmentum Solar and a major arms producer.',
+    intel: 'Its hive-city manufactoria turn out lasguns, autoguns and bolters, and it supplies huge numbers of Necromundan Guard troops. The Imperial Fists recruit neophytes here, often from the underhive gangs.',
   },
   Prospero: {
-    summary: 'Prospero, the burnt ruin that is now the Planet of the Sorcerers.',
-    intel: 'The pyramids of Tizca lie in ashes under a violet haze. The Thousand Sons who survived its burning fled to the Eye of Terror, and Chaos holds what is left.',
+    summary: 'Prospero, the original homeworld of the Thousand Sons and Magnus the Red, scoured by the Space Wolves in 004.M31.',
+    intel: 'A centre of learning, above all about sorcery and the warp, until the Burning of Prospero. Horus engineered the attack, helped by Magnus\'s own arrogance. The ruin is now the Planet of the Sorcerers.',
   },
 
   // ---- Ocularis Malifica ----
   Caliban: {
-    summary: 'Caliban, broken apart at the end of the Horus Heresy. Its largest remains became the Rock, the Dark Angels\' fortress-monastery.',
-    intel: 'Luther\'s despair and the Dark Angels\' bombardment tore the world apart. The Fallen were scattered across space and time, and the loyal survivors were left with a ruined homeworld.',
+    summary: 'Caliban, a death world and feudal world north of the Eye of Terror, homeworld of the Dark Angels, destroyed after the Heresy.',
+    intel: 'Luther\'s Fallen and the Lion\'s loyalists fought a conflagration that destroyed it. What remained was the land around Aldurakh, the Dark Angels\' fortress-monastery, which became the mobile star fortress called the Rock.',
   },
   Medusa: {
-    summary: 'Medusa, a harsh volcanic waste world and homeworld of the Iron Hands.',
-    intel: 'Its skies are polluted and its ground unstable. Nomad clans haul their goods on giant mining machines and fight over safe ground. The Gorgon\'s Forge, Ferrus Manus\'s vault, holds many of the Chapter\'s Dreadnoughts.',
+    summary: 'Medusa IV, a feral waste world of perpetual gloom close to the Eye of Terror, homeworld of the Iron Hands and Ferrus Manus.',
+    intel: 'The sun rarely pierces its polluted sky. Tectonic shifts keep raising and drowning mountains and seas, among frozen ranges, volcanoes and boiling geysers.',
   },
   Colchis: {
-    summary: 'Colchis, the desert homeworld of Lorgar and the Word Bearers, destroyed in the aftermath of the Heresy.',
-    intel: 'A decaying society of rival religions before Lorgar was found. After the Heresy it was bombarded and broke apart. Its former location is said to be an Inquisition secret.',
+    summary: 'Colchis, a feudal world of Segmentum Pacificus, homeworld of Lorgar and the Word Bearers, destroyed by Exterminatus in 032.M31.',
+    intel: 'Its theocracy, the Covenant, worshipped the Chaos Gods in the Old Faith until Lorgar sparked a civil war to found a new faith around the Emperor.',
   },
   'Cypra Mundi': {
-    summary: 'A forge world, the administrative and fleet capital of Segmentum Obscurus.',
-    intel: 'A segmentum fortress orbits it, and its Collegium Analytica studies the Imperium\'s enemies. It was brought into the Imperium during the Great Crusade.',
+    summary: 'Cypra Mundi, a Mechanicus forge world and the segmentum fortress of Segmentum Obscurus.',
+    intel: 'On the northern fringe of the galaxy, it is the segmentum\'s naval and military headquarters and the home of the Collegium Analytica. Many of the Navy\'s officers come from its aristocracy.',
   },
   Cadia: {
-    summary: 'Cadia, the fortress world that held the Cadian Gate, fell to Abaddon\'s Thirteenth Black Crusade in 999.M41.',
-    intel: 'Ancient pylons, which the Mechanicus never understood, held the Eye of Terror\'s stable gate shut. Abaddon\'s strike destabilised them, and the chain reaction ruined the planet. Nearby worlds such as Belis Corona and Agripinaa held out.',
+    summary: 'Cadia, the fortress world that guarded the Cadian Gate, consumed by the warp in 999.M41.',
+    intel: 'Its land ranged from frozen tundra to temperate plains and axel-tree forests. It guarded the only known navigable route out of the Eye of Terror, until Abaddon\'s Thirteenth Black Crusade destroyed it.',
   },
   Rangda: {
     summary: 'Rangda, a forbidden world and once the home of the xenos fought in the Rangdan Xenocides.',
@@ -117,106 +117,110 @@ const PLANET_INFO: Record<string, Partial<InfoContent>> = {
 
   // ---- Segmentum Obscurus ----
   Lucius: {
-    summary: 'Lucius, a forge world of Segmentum Obscurus and home of the Titan Legion Legio Astorum.',
-    intel: 'Named for luciun, a tough alloy used in its war-plate. Its forges turn out Warhound Titans, drop pods and Macharius super-heavy tanks. It came through the Inculcata Schism.',
+    summary: 'Lucius, the Hollow Forge: a forge world of Segmentum Obscurus and home of the Titan Legion Legio Astorum.',
+    intel: 'Its forges make everything from infantry weapons to Space Marine tanks and battle Titans, and it pays no tithe to the Imperium. The Legio Astorum are known as the Warp Runners.',
   },
   Goth: {
-    summary: 'Goth, a forge world in the Gothic Sector.',
+    summary: 'Goth, a forge world in the Gothic Sector of Segmentum Obscurus.',
     intel: 'Traitors held it during the Horus Heresy until it was liberated. Its sector later became the arena of the Gothic War, Abaddon\'s Twelfth Black Crusade, which the Imperium won.',
   },
   Isstvan: {
-    summary: 'The Isstvan system, an eight-planet backwater where the Horus Heresy began.',
-    intel: 'Isstvan III, a hive world, was purged with virus bombs after it rebelled. At Isstvan V, a desert world, Horus ambushed loyalist Legions in the Dropsite Massacre, crippling the Iron Hands, Raven Guard and Salamanders. Also spelled Istvaan.',
+    summary: 'The Isstvan system, an eight-planet backwater near Segmentum Obscurus where the Horus Heresy began.',
+    intel: 'Isstvan III, a civilised world, was destroyed by virus bombs in 005.M31 when Horus turned on his own forces. At Isstvan V, a desert world, he ambushed loyalist Legions in the Dropsite Massacre. Also spelled Istvaan.',
   },
   Fenris: {
-    summary: 'Fenris, a frozen death world and homeworld of the Space Wolves.',
-    intel: 'Its sun is called the Wolf\'s Eye, and its moon is Valdrmani. The Fang, the Chapter\'s fortress, stands on the peak of Asaheim. The Great Wolf rules as High King of Fenris.',
+    summary: 'Fenris, a death world of Segmentum Obscurus and homeworld of Leman Russ and the Space Wolves.',
+    intel: 'Its sun is called the Wolf\'s Eye, and its moon is Valdrmani. The Fang, the Chapter\'s fortress-monastery, is thought by many scholars the greatest bastion of the Imperium outside the Imperial Palace.',
   },
 
   // ---- Segmentum Pacificus ----
   Khur: {
-    summary: 'Khur, where Lorgar\'s Word Bearers were punished for worshipping the Emperor as a god.',
-    intel: 'The city of Monarchia was razed by the Ultramarines at the Emperor\'s command. Details are murky and sources disagree, and its segmentum is not confirmed.',
+    summary: 'Khur, a civilised world brought into the Imperium by the Word Bearers in 903.M30, famed for its capital Monarchia.',
+    intel: 'Monarchia, the Perfect City, was built at the Word Bearers\' urging to show the people\'s faith. The Ultramarines later razed it on the Emperor\'s orders. The wiki places Khur in Segmentum Pacificus.',
+  },
+  Styggies: {
+    summary: 'Stygies VIII, the Ever-Staring Cyclops: a forge moon of a gas giant in the Vulcanis system of Segmentum Pacificus.',
+    intel: 'Home to the loyalist Titan Legion Legio Honorum, the Death Bolts. Its earlier Titan Legions, Vulcanum I and II, turned traitor during the Horus Heresy. The map spells it Styggies.',
   },
   Gehenna: {
     summary: 'Gehenna, where in 955.M41 the Blood Angels fought a Necron force until Tyranids arrived.',
-    intel: 'The Gehenna Campaign saw the Blood Angels\' Third Company clash with Necrons in the dusty wastes. A Tyranid splinter fleet arrived and forced both sides to fight it.',
+    intel: 'The Gehenna Campaign saw the Blood Angels\' Third Company clash with Necrons in the dusty wastes. A Tyranid splinter fleet arrived and forced both sides to fight it. Its segmentum is not recorded.',
   },
 
   // ---- Segmentum Tempestus ----
   Graia: {
-    summary: 'Graia, a Mechanicus forge world in the Belt of Iron and home of the Titan Legion Legio Astraman.',
-    intel: 'Its manufactorums can build Titans. In the 41st millennium the Ork Warboss Grimskull invaded, and Ultramarines under Captain Titus defended it, as told in the game Space Marine.',
+    summary: 'Graia, the Crown of Miracles: a forge world of Segmentum Tempestus and home of Legio Astraman.',
+    intel: 'A ring of void stations, the Graian Crown, circles the planet like a diadem and is said to cross interstellar distances. The Ork Warboss Grimskull invaded in the 41st millennium, and Ultramarines under Captain Titus defended it, as told in the game Space Marine.',
   },
   Inwit: {
-    summary: 'Inwit, an ice world and homeworld of Rogal Dorn and the Imperial Fists.',
-    intel: 'The traitors besieged the Inwit Cluster for four hard years before the loyalists won. Its place in Tempestus is not confirmed.',
+    summary: 'Inwit, an ice world and capital of the Inwit Cluster in Segmentum Tempestus, homeworld of Rogal Dorn.',
+    intel: 'A fleet base for the Imperial Navy and an assembly ground for local Imperial Guard regiments. Dorn grew up among its ice tribes until the Emperor found him in 835.M31, and Horus\'s traitors later besieged the cluster.',
   },
   Tallarn: {
-    summary: 'Tallarn, once a green agri-world, was turned into a poisoned desert in the Horus Heresy.',
-    intel: 'Iron Warriors virus bombs ruined it. The Battle of Tallarn is remembered as one of the Heresy\'s biggest tank battles, and the Tallarn Desert Raiders regiments take their name from the survivors.',
+    summary: 'Tallarn, a desert world in a binary system of Segmentum Tempestus, home of the Tallarn Desert Raiders.',
+    intel: 'Settlers found a green agri-world here in the 29th millennium. The Iron Warriors virus-bombed it during the Horus Heresy, destroying its biosphere, and only then landed. The few survivors adapted to the desert.',
   },
   'Luth Tyre': {
     summary: 'Luth Tyre, a desert fortress and industrial world once held by the Iron Warriors.',
-    intel: 'A stable warp route and large refineries made it a muster point for the Iron Warriors during the Heresy. In 011.M31 its garrison met a Death Guard fleet that had come from Barbarus.',
+    intel: 'A stable warp route and large refineries made it a muster point for the Iron Warriors during the Heresy. In 011.M31 its garrison met a Death Guard fleet that had come from Barbarus. Its exact location is uncertain.',
   },
   Barbarus: {
-    summary: 'Barbarus, homeworld of Mortarion and the Death Guard, wrapped in toxic fog.',
-    intel: 'Its people lived in the valleys under poisonous clouds, which made the Death Guard famously resistant to poison and disease. What became of the planet after the Heresy is uncertain.',
+    summary: 'Barbarus, feral homeworld of Mortarion and the Death Guard in Segmentum Tempestus, destroyed by the Dark Angels near the end of the Heresy.',
+    intel: 'A dim yellow sun and a thick toxic fog made it one of the most terrible of the primarchs\' worlds. The Dark Angels destroyed it with cyclonic torpedoes because of the Chaos corruption on its surface.',
   },
   Deliverance: {
-    summary: 'Deliverance, a moon of the forge world Kiavahr and site of the Raven Guard\'s fortress-monastery.',
-    intel: 'It orbits Kiavahr in the Forsarr Sector. Kiavahr itself is home to a Titan Legion, Legio Vindictus. Little else is recorded, so treat further detail as unverified.',
+    summary: 'Deliverance, once Lycaeus, a barren moon of the hive world Kiavahr and homeworld of Corvus Corax and the Raven Guard.',
+    intel: 'An airless moon in Segmentum Tempestus, home to the Raven Guard\'s fortress-monastery, the Ravenspire. The Emperor found Corax here during the Great Crusade.',
   },
   Gryphonne: {
-    summary: 'Gryphonne IV, forge world of the Titan Legion Legio Gryphonicus, overrun by Hive Fleet Leviathan in 997.M41.',
-    intel: 'The Legio stayed loyal in the Heresy, but Horus had scattered it across the galaxy beforehand. The world\'s fall to the Tyranids cost the Imperium many Titans.',
+    summary: 'Gryphonne IV, the Lost Forge: a dead world that was the forge world of Legio Gryphonicus in the Alduin Sector of Segmentum Tempestus.',
+    intel: 'One of the best-defended worlds in the segmentum, home to some of the fiercest Skitarii legions. Hive Fleet Leviathan overran it, which made its fall all the more shocking.',
   },
   Galaspar: {
     summary: 'Galaspar, a hive world conquered by the Death Guard in Mortarion\'s first major campaign.',
-    intel: 'Its capital hive refused Imperial rule and fired on Explorator ships and envoys. The primary hive fell in a night and a day, and Phosphex bombs were used.',
+    intel: 'Its capital hive refused Imperial rule and fired on Explorator ships and envoys. The primary hive fell in a night and a day, and Phosphex bombs were used. Its segmentum is not recorded.',
   },
 
   // ---- Segmentum Ultima ----
   Baal: {
-    summary: 'Baal, the red desert homeworld of the Blood Angels, with two moons, Baal Primus and Baal Secundus.',
-    intel: 'Nuclear civil war ravaged the system at the end of the Age of Strife, and Baal Secundus is still radiation-scarred. Sanguinius was found at Angel\'s Fall, where aspirants now face their trials. Hive Fleet Leviathan later infested Baal Secundus.',
+    summary: 'Baal, a desert world and nominal homeworld of the Blood Angels in Segmentum Ultima, with two moons, Baal Prime and Baal Secundus.',
+    intel: 'The planet holds few but mutants and feral beasts, while its moons hold notable human settlements and are now feral worlds. Sanguinius was found on Baal Secundus, and Hive Fleet Leviathan later infested it.',
   },
   Nostramo: {
-    summary: 'Nostramo, the Night Lords\' homeworld, destroyed by Konrad Curze.',
-    intel: 'Its core was unstable and its crust had a single weak point. Curze\'s fleet bombarded it and the world exploded. The Nostraman Damnatii were later raised on other worlds.',
+    summary: 'Nostramo, a hive world wrapped in perpetual darkness and homeworld of the Night Lords, destroyed by Konrad Curze.',
+    intel: 'A polluted atmosphere and a slowly dying star kept it dark. When its people betrayed his ideals of strict order, Curze\'s fleet bombarded the world and destabilised its core in the early 31st millennium.',
   },
   Desperation: {
     summary: 'Desperation, a world known for a Heresy-era battle between the Night Lords and an Ultramarines-led force.',
-    intel: 'In 997.M31 an Ultramarines force under Arceas Odinathus fought the Night Lords, with the Ashen Claws joining as a third party. The Night Lords fleet was wiped out and the planet suffered Exterminatus.',
+    intel: 'In 997.M31 an Ultramarines force under Arceas Odinathus fought the Night Lords in the Thramas Sector, with the Ashen Claws joining as a third party. The Night Lords fleet was wiped out and the planet suffered Exterminatus.',
   },
   Olympia: {
-    summary: 'Olympia, homeworld of the Iron Warriors and Perturabo, laid waste at the end of the Heresy.',
-    intel: 'It held out for about two years against the Imperial Fists and Ultramarines, and the Iron Warriors set off their own missile stockpiles near the end. The wasteland that remained is called Perdita.',
+    summary: 'Olympia, a civilised world of city-states and original homeworld of Perturabo and the Iron Warriors, left a dead world after the Heresy.',
+    intel: 'The Iron Warriors made it uninhabitable themselves before fleeing the Imperial assault in the Great Scouring. The Imperium judged it irreversibly tainted and left it barren.',
   },
   Chogoris: {
-    summary: 'Chogoris, the steppe homeworld of the White Scars, once called Mundus Planus.',
-    intel: 'Jaghatai Khan united its nomad tribes into one nation, and its language, Chogoran, lives on in the Chapter. Its current state and segmentum are not confirmed.',
+    summary: 'Chogoris, called Mundus Planus by the Imperium: the feral steppe homeworld of the White Scars, in the Yasan Sector of Segmentum Ultima.',
+    intel: 'The White Scars raise their neophytes from its horse-nomad tribes, whose language is Khorchin. Jaghatai Khan united the tribes before the Imperium found the world.',
   },
   Chemos: {
-    summary: 'Chemos, former homeworld of the Emperor\'s Children, destroyed by the Dark Angels in 012.M31.',
-    intel: 'The Dark Angels fleet swept aside its defenders, and their Dreadwing landed and detonated seismic charges at key sites across the surface.',
+    summary: 'Chemos, once a mining world and later a civilised world, homeworld of the Emperor\'s Children, now a dead world.',
+    intel: 'Fulgrim was found here. After the Heresy loyalist forces scoured the world of all life; one account credits the Dark Angels with destroying it in 012.M31.',
   },
   Nocturne: {
-    summary: 'Nocturne, the hot volcanic homeworld of the Salamanders, dominated by Mount Deathfire.',
-    intel: 'Fire-breathing drakes live on Mount Deathfire, where Vulkan and the Emperor hunted them in the Chapter\'s legend. The Salamanders\' fortress-monastery is on its moon, Prometheus. In 975.M41 Chaos Dragon Warriors invaded to reach a vault beneath the volcano.',
+    summary: 'Nocturne, the volcanic homeworld of the Salamanders in Segmentum Ultima, a feudal world and death world.',
+    intel: 'Tidal stress from its overlarge moon Prometheus raises vast chains of volcanoes and frequent quakes, so people build their holds underground, beneath a constant cloak of dust. Fire-breathing drakes live on Mount Deathfire.',
   },
   Nuceria: {
-    summary: 'Nuceria, where Angron led a slave revolt before he became the World Eaters\' primarch, later purged of life.',
-    intel: 'After Angron was taken from the world, his comrades were massacred. During the Heresy he returned with Lorgar of the Word Bearers and ordered all life purged.',
+    summary: 'Nuceria, the brutal homeworld of Angron, found by the Emperor in 899.M30; once a technologically advanced civilised world.',
+    intel: 'Angron led a slave revolt here before the Emperor found him. Imperial records after the Heresy generally leave out its name, probably because of an Edict of Obliteration, and the world was later purged of life.',
   },
   Macragge: {
-    summary: 'Macragge, capital of Ultramar and homeworld of the Ultramarines.',
-    intel: 'Temperate seas and green land, guarded by the star-shaped Fortress of Hera. Marneus Calgar fortified it, and Hive Fleet Behemoth was beaten off around 745 to 746.M41 after the defenders were nearly broken.',
+    summary: 'Macragge, capital of Ultramar and homeworld of the Ultramarines, in the southern Eastern Fringe side of Segmentum Ultima.',
+    intel: 'Mostly bleak and rocky, with three quarters of its land mountainous and almost lifeless. The Fortress of Hera stands on a peak among impenetrable mountains. Hive Fleet Behemoth was beaten off after the space defences were nearly destroyed.',
   },
   Ryza: {
-    summary: 'Ryza, a Mechanicus forge world known for plasma weaponry.',
-    intel: 'Its Titan Legion is Legio Crucius, and it has an artificial moon, Ryza Secundus. It is the home of the Stormblade tank and the Ryza-pattern plasma turret. The Defence of Ryza was a Heresy-era battle.',
+    summary: 'Ryza, the Furnace of Shackled Stars: a forge world of Segmentum Ultima and home of the Titan Legion Legio Crucius.',
+    intel: 'In the Defence of Ryza during the Horus Heresy, loyalist Titans and servants of the Omnissiah drove back traitor Titan Legions and their Chaos Knight allies, at the cost of countless Titans and Knights.',
   },
 }
 
@@ -233,51 +237,51 @@ const PLANET_INFO_ERA: Record<Era, Record<string, Partial<InfoContent>>> = {
     },
     Chthonia: {
       summary: 'Cthonia in the Great Crusade: the homeworld of the Luna Wolves, who later became the Sons of Horus.',
-      intel: 'A hard world once ruled by warring gangs, where the Emperor found the infant Horus. Sources differ on its later fate.',
+      intel: 'A barren feral and mining world where Horus was raised. It will be destroyed by the Dark Angels in 014.M31.',
     },
     Prospero: {
       summary: 'A world of golden cities, homeworld of the Thousand Sons.',
-      intel: 'Its capital, Tizca, is a ringed city of libraries and learning. The Space Wolves, on the Emperor\'s orders, will burn it.',
+      intel: 'Its capital, Tizca, is a centre of learning and the warp arts. The Space Wolves, on the Emperor\'s orders, will burn it in 004.M31.',
     },
     Caliban: {
-      summary: 'A dark, forested world, homeworld of the Dark Angels.',
-      intel: 'Great forests hide fortress-monasteries and the monstrous beasts the knightly orders hunt. Civil strife between loyalties is coming.',
+      summary: 'A dark, forested death world and feudal world, homeworld of the Dark Angels.',
+      intel: 'Great forests hide fortress-monasteries and the monstrous beasts the knightly orders hunt. Aldurakh, the Dark Angels\' fortress-monastery, stands here. Civil strife is coming.',
     },
     Colchis: {
-      summary: 'A living desert world of rival faiths, where Lorgar grew up.',
-      intel: 'The road that leads to the Heresy began here.',
+      summary: 'A feudal world ruled by the Covenant, where Lorgar grew up.',
+      intel: 'The Covenant worships the Chaos Gods in the Old Faith. Lorgar will turn the world to a new faith around the Emperor, and the road to the Heresy begins here.',
     },
     Cadia: {
       summary: 'A frontier world in the shadow of the Eye of Terror, not yet a fortress.',
-      intel: 'Kasr forts cover its temperate land, and the great pylons already stand on the surface.',
+      intel: 'Its land ranges from frozen tundra to temperate plains and axel-tree forests, and the great pylons already stand on the surface.',
     },
     Fenris: {
       summary: 'Fenris, the homeland of Leman Russ and the Space Wolves.',
-      intel: 'The Space Wolves are one of the twenty Legions, used by the Emperor as punishers. Their fortress is the Fang on Asaheim.',
+      intel: 'The Space Wolves are one of the twenty Legions, used by the Emperor as punishers. Their fortress is the Fang.',
     },
     Barbarus: {
       summary: 'The living homeworld of Mortarion and the Death Guard, wrapped in toxic fog.',
-      intel: 'The Legion swore for Horus here and sent fleets out from this world, including one toward Luth Tyre.',
+      intel: 'The Legion swore for Horus here and sent fleets out from this world, including one toward Luth Tyre. It will be destroyed by the Dark Angels near the end of the Heresy.',
     },
     Tallarn: {
       summary: 'A prosperous green agri-world, fiercely defended by Imperial armour.',
-      intel: 'The Iron Warriors will poison it, and the Battle of Tallarn will be remembered as one of the Heresy\'s biggest tank battles.',
+      intel: 'The Iron Warriors will virus-bomb it into a desert, and the Battle of Tallarn will be remembered as one of the Heresy\'s biggest tank battles.',
     },
     'Luth Tyre': {
       summary: 'An Iron Warriors fortress and industrial world supplying the traitors with war materiel.',
       intel: 'In 011.M31 its garrison met a Death Guard fleet that came from Barbarus.',
     },
     Graia: {
-      summary: 'A loyalist forge world in the Belt of Iron, base of Legio Astraman.',
+      summary: 'A loyalist forge world and base of Legio Astraman.',
       intel: 'It fights traitor Mechanicum forge worlds in the Cataclysm of Iron.',
     },
     Nostramo: {
-      summary: 'Nostramo, the crime-ridden homeworld of the Night Lords.',
+      summary: 'Nostramo, the dark hive world and homeworld of the Night Lords.',
       intel: 'Konrad Curze rules it until its destruction in the early 31st millennium.',
     },
     Olympia: {
-      summary: 'A living city-world and the Iron Warriors\' seat of power under Perturabo.',
-      intel: 'Perturabo was given rule of Olympia and the Legion\'s base moved there. It is laid waste before the Heresy ends.',
+      summary: 'A living world of city-states and the Iron Warriors\' seat of power under Perturabo.',
+      intel: 'Perturabo ruled here and the Legion\'s base moved to Olympia. It is laid waste after the Heresy.',
     },
     Chogoris: {
       summary: 'Chogoris, the steppe world where Jaghatai Khan united the tribes.',
@@ -285,7 +289,7 @@ const PLANET_INFO_ERA: Record<Era, Record<string, Partial<InfoContent>>> = {
     },
     Chemos: {
       summary: 'Chemos, the Emperor\'s Children\'s home base.',
-      intel: 'The Dark Angels will destroy it in 012.M31.',
+      intel: 'Fulgrim was found here. One account has the Dark Angels destroying it in 012.M31.',
     },
     Macragge: {
       summary: 'Macragge, capital of Ultramar and homeworld of the Ultramarines.',
