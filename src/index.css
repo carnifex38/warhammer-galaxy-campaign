@@ -660,3 +660,44 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
   .bld-unit { margin: 0 3px 5px; }
   .bld-force-head { padding: 8px 8px; }
 }
+
+/* ---- the list viewer in greys, with one light blue accent (no yellow) ---- */
+.chip { background: #2b3142; color: #aebcf0; }
+.chip.bad { background: #5a2a2e; color: #ffcdcd; }
+.chip.good { background: #24402f; color: #bdeacb; }
+.bld-start { background: #171a21; border-color: #30353f; }
+.bld-start select, .bld select { background: #14171d; border-color: #343a46; }
+.bld-bar { background: #1c2028; border-color: #2e333f; }
+.bld-limit input, .bld-search { background: #14171d; border-color: #343a46; }
+.bld-issues { background: #1f1a1c; border-color: #4e3034; }
+.bld-force, .bld-force.depth1, .bld-force.depth2 { background: #181b22; border-color: #2e333f; border-left: 4px solid #6f86e6; }
+.bld-force-head { background: #20242d; }
+.bld-role { border-top-color: #2a2f3a; }
+.bld-role-name { color: #e8ebf3; }
+.bld-count { color: #9aa1b4; }
+.bld-icon { color: #aab0c0; }
+.bld-icon:hover { background: #2a303c; }
+.bld-unit { background: #262b37; }
+.bld-unit-main { color: #eceff7; }
+.bld-unit-main small { color: #a3abbf; }
+.bld-add { border-color: #3d4452; color: #9fb0e6; }
+
+.bld-modal { background: rgba(8, 9, 12, 0.85); }
+.bld-modal-card { background: #14171d; border-color: #2e333f; }
+.bld-modal-card > header { background: #1c2028; border-bottom-color: #2e333f; }
+.bld-modal-card header p { color: #9fb0e6; }
+.bld-pick button { background: #1c2028; border-color: #2e333f; }
+.bld-pick button:hover { border-color: #6f86e6; }
+.bld-tabs button { background: #1c2028; border-color: #2e333f; color: #aab0c0; }
+.bld-tabs button.on { background: #2a303c; border-color: #6f86e6; color: #fff; }
+.bld-done { background: linear-gradient(transparent, #14171d 40%); }
+.bld-loadout li { border-left-color: #6f86e6; }
+.bld-stats h5 { color: #9fb0e6; }
+.bld-stats thead th { color: #9fb0e6; background: #1c2028; border-color: #2e333f; }
+.bld-stats td { color: #d6dae6; border-color: #272c37; }
+.bld-stats tr.stat-name td { background: #1c2028; }
+.bld-stats tr.stat-notes td { color: #9fb0e6; }
+.bld-rules { border-color: #2e333f; }
+.bld-slotlist .bld-slotlist { border-left-color: #2e333f; }
+.bld-group-name { color: #98a0b3; }
+.bld-entry-name { color: #b0b6c6; }
