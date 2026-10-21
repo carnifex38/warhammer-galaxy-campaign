@@ -701,3 +701,7 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-slotlist .bld-slotlist { border-left-color: #2e333f; }
 .bld-group-name { color: #98a0b3; }
 .bld-entry-name { color: #b0b6c6; }
+
+/* one thin accent line down the left of a list, not one per nesting level */
+.bld-force, .bld-force.depth1, .bld-force.depth2 { border-left: 2px solid #6f86e6; }
+.bld-force > .bld-force, .bld-force > .bld-force.depth1, .bld-force > .bld-force.depth2 { border-left: 0; }
