@@ -1,0 +1,339 @@
+import { useEffect, useRef, useState } from 'react'
+import Galaxy3D, { type PlanetInfo } from './Galaxy3D'
+import type { Era } from './planetLooks'
+import type { EventApi } from './eventConfig'
+import type { Sector } from './data'
+import { isHulkId, openCount } from './data'
+import InfoPanel from './InfoPanel'
+import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
+
+const ERA_KEY = 'galaxy-era'
+const ERA_LABEL: Record<Era, string> = { '40k': 'The Dark Imperium', '30k': 'The Horus Heresy' }
+
+function savedEra(): Era {
+  try {
+    return localStorage.getItem(ERA_KEY) === '30k' ? '30k' : '40k'
+  } catch {
+    return '40k'
+  }
+}
+
+/** Dev only: open straight onto a planet with `?planet=Terra` (handy for tuning planet looks). */
+function devStart(sectors: Sector[]) {
+  if (!import.meta.env.DEV) return null
+  const name = new URLSearchParams(location.search).get('planet')?.toLowerCase()
+  if (!name) return null
+  for (const s of sectors) {
+    const p = s.planets.find((q) => q.name.toLowerCase() === name)
+    if (p) return { sector: s.id, planet: p.id }
+  }
+  return null
+}
+
+export default function GalaxyView({ events, canClaim }: { events: EventApi; canClaim: boolean }) {
+  // players see only what the host shows: hidden planets are gone, locked sectors stay shut
+  const SECTORS = events.visibleSectors
+  const lockedIds = events.lockedForPlayers
+  const isLocked = (id: string) => lockedIds.includes(id)
+  const start = devStart(SECTORS)
+  const [era, setEraState] = useState<Era>(savedEra)
+  // switching era dips the map into darkness, changes underneath, then brings it back, instead of a hard cut
+  const [pendingEra, setPendingEra] = useState<Era | null>(null)
+  const [fading, setFading] = useState(false)
+  const eraTimers = useRef<number[]>([])
+  useEffect(() => () => eraTimers.current.forEach((t) => window.clearTimeout(t)), [])
+  const applyEra = (e: Era) => {
+    setEraState(e)
+    try { localStorage.setItem(ERA_KEY, e) } catch { /* private mode: just don't remember it */ }
+  }
+  const setEra = (e: Era) => {
+    if (e === (pendingEra ?? era)) return
+    eraTimers.current.forEach((t) => window.clearTimeout(t))
+    eraTimers.current = []
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { applyEra(e); return }
+    setPendingEra(e)
+    setFading(true)
+    eraTimers.current.push(
+      window.setTimeout(() => { applyEra(e); setPendingEra(null) }, 340), // the change happens while the map is dark
+      window.setTimeout(() => setFading(false), 480),
+    )
+  }
+  const shownEra = pendingEra ?? era
+  const [sectorId, setSectorId] = useState<string | null>(start?.sector ?? null)
+  const [planetId, setPlanetId] = useState<string | null>(start?.planet ?? null)
+  const [tableId, setTableId] = useState<string | null>(null)
+  // the list row the pointer is over; the matching sector / planet lights up in 3D
+  const [hover, setHover] = useState<{ kind: 'sector' | 'planet'; id: string } | null>(null)
+
+  // on wide screens the information window sits over the left of the map and the view glides to make room
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1000px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1000px)')
+    const on = () => setWide(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+
+  // the information window that is open: a sector or a planet (null = closed)
+  const [info, setInfo] = useState<{ kind: 'sector' | 'planet' | 'zone'; id: string } | null>(null)
+
+  const sector = SECTORS.find((s) => s.id === sectorId)
+  const planet = sector?.planets.find((p) => p.id === planetId)
+
+  // what the host has set for every planet: in play or restricted, battlezone counts, and whether those are revealed
+  const planetInfo: Record<string, PlanetInfo> = {}
+  for (const s of SECTORS) {
+    for (const p of s.planets) {
+      const v = events.planetView(p)
+      planetInfo[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden: events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden }
+    }
+  }
+
+  const planetClosed = !!planet && !planetInfo[planet.id].enabled
+  const planetZonesHidden = !!planet && planetInfo[planet.id].zonesHidden
+  // a restricted planet, or one whose battlezones are not revealed, shows no battlezones
+  const planetTables = planet && !planetClosed && !planetZonesHidden ? events.planetView(planet).tables : []
+  const table = planetTables.find((t) => t.id === tableId)
+
+  /** Battlezones counted for a sector: only planets in play whose battlezones the host has revealed. */
+  const sectorCounts = (s: Sector) => {
+    const live = s.planets.filter((p) => planetInfo[p.id].enabled)
+    const open = live.reduce((n, p) => n + (planetInfo[p.id].zonesHidden ? 0 : planetInfo[p.id].open), 0)
+    return { live: live.length, open }
+  }
+
+  // while the window is open it follows whatever the player navigates to
+  const selectTable = (id: string) => { setTableId(id); setInfo((i) => (i ? { kind: 'zone', id } : i)) }
+  const clearTable = () => { setTableId(null); setInfo((i) => (i && i.kind === 'zone' ? { kind: 'planet', id: planetId ?? '' } : i)) }
+  const goGalaxy = () => { setSectorId(null); setPlanetId(null); setTableId(null); setHover(null); setInfo(null) }
+  const goSector = (id: string) => {
+    setHover(null)
+    // a locked sector cannot be entered: its information window opens and that is all
+    if (isLocked(id)) { setInfo({ kind: 'sector', id }); return }
+    setSectorId(id); setPlanetId(null); setTableId(null); setInfo((i) => (i ? { kind: 'sector', id } : i))
+  }
+  const goPlanet = (sid: string, pid: string) => {
+    const closed = !planetInfo[pid]?.enabled
+    setSectorId(sid); setPlanetId(pid); setTableId(null); setHover(null)
+    // a restricted planet can only be read about, so its information opens by itself
+    setInfo((i) => (closed || i ? { kind: 'planet', id: pid } : i))
+  }
+
+  const hoverProps = (kind: 'sector' | 'planet', id: string) => ({
+    onMouseEnter: () => setHover({ kind, id }),
+    onMouseLeave: () => setHover(null),
+    onFocus: () => setHover({ kind, id }),
+    onBlur: () => setHover(null),
+  })
+
+  const infoSector = info?.kind === 'sector' ? SECTORS.find((s) => s.id === info.id) : undefined
+  const infoPlanetSector = info?.kind === 'planet' ? SECTORS.find((s) => s.planets.some((p) => p.id === info.id)) : undefined
+  const infoPlanet = infoPlanetSector?.planets.find((p) => p.id === info?.id)
+  // a battlezone's window: find the planet that owns it
+  let zoneOwner: { sector: typeof SECTORS[number]; planet: typeof SECTORS[number]['planets'][number]; zone: ReturnType<typeof events.planetView>['tables'][number] } | undefined
+  if (info?.kind === 'zone') {
+    for (const s of SECTORS) for (const p of s.planets) {
+      const z = events.planetView(p).tables.find((t) => t.id === info.id)
+      if (z) zoneOwner = { sector: s, planet: p, zone: z }
+    }
+  }
+  let infoPanel: React.ReactNode = null
+  if (zoneOwner) {
+    const { sector: zs, planet: zp, zone: zz } = zoneOwner
+    infoPanel = (
+      <InfoPanel
+        kind="Battlezone"
+        title={zz.name}
+        subtitle={`${zp.name} · ${zs.name}`}
+        color={zs.color}
+        content={events.infoForPlayer(zz.id, defaultZoneInfo(zz.note))}
+        status={zz.status === 'open' ? 'Open for battle' : 'Battle in progress'}
+        onClose={() => setInfo(null)}
+      />
+    )
+  } else if (infoSector) {
+    const { live, open } = sectorCounts(infoSector)
+    const locked = isLocked(infoSector.id)
+    infoPanel = (
+      <InfoPanel
+        kind="Sector"
+        title={infoSector.name}
+        subtitle={locked ? 'Locked' : `${live} planets in play`}
+        color={infoSector.color}
+        content={events.infoForPlayer(infoSector.id, defaultSectorInfo(infoSector.id))}
+        status={locked ? 'Sector locked' : `${open} battlezones open`}
+        onClose={() => setInfo(null)}
+      />
+    )
+  } else if (infoPlanet && infoPlanetSector) {
+    const pi = planetInfo[infoPlanet.id]
+    const isHulk = isHulkId(infoPlanet.id)
+    infoPanel = (
+      <InfoPanel
+        kind={isHulk ? 'Space Hulk' : 'Planet'}
+        title={infoPlanet.name}
+        subtitle={infoPlanetSector.name}
+        color={infoPlanetSector.color}
+        content={events.infoForPlayer(infoPlanet.id, defaultPlanetInfo(infoPlanet.name, era, isHulk))}
+        status={!pi.enabled ? 'Access restricted' : pi.zonesHidden ? 'Battlezones classified' : `${pi.open} of ${pi.total} battlezones open`}
+        onClose={() => setInfo(null)}
+      />
+    )
+  }
+  // the ⓘ button on the map shows the deepest thing selected
+  const mapInfoTarget = table ? { kind: 'zone' as const, id: table.id } : planet && sector ? { kind: 'planet' as const, id: planet.id } : sector ? { kind: 'sector' as const, id: sector.id } : null
+  const mapInfoOn = !!info && !!mapInfoTarget && info.kind === mapInfoTarget.kind && info.id === mapInfoTarget.id
+  const toggleInfo = (t: { kind: 'sector' | 'planet' | 'zone'; id: string }) =>
+    setInfo((i) => (i && i.kind === t.kind && i.id === t.id ? null : t))
+
+  const back = table ? clearTable : planet ? () => goSector(sector!.id) : goGalaxy
+
+  return (
+    <div className={`galaxy${infoPanel ? ' info-open' : ''}`}>
+      {infoPanel}
+      <Galaxy3D
+        sectorId={sectorId}
+        planetId={planetId}
+        onSelectSector={goSector}
+        onSelectPlanet={goPlanet}
+        onClear={goGalaxy}
+        hoverSectorId={hover?.kind === 'sector' ? hover.id : null}
+        hoverPlanetId={hover?.kind === 'planet' ? hover.id : null}
+        era={era}
+        sectors={SECTORS}
+        viewInset={infoPanel && wide ? 380 : 0}
+        lockedSectors={lockedIds}
+        planetInfo={planetInfo}
+      >
+        <div className="era-switch" role="group" aria-label="Era">
+          <button className={shownEra === '40k' ? 'on' : ''} aria-pressed={shownEra === '40k'} onClick={() => setEra('40k')}>40K</button>
+          <button className={shownEra === '30k' ? 'on' : ''} aria-pressed={shownEra === '30k'} onClick={() => setEra('30k')}>30K</button>
+          <span className="era-caption">{ERA_LABEL[shownEra]}</span>
+        </div>
+        <div className={`era-fade${fading ? ' on' : ''}`} aria-hidden="true" />
+        {events.hostPreview && (
+          <div className="preview-banner" role="status">
+            <span>Host preview: you can see everything</span>
+            <button onClick={() => events.setHostPreview(false)}>Exit</button>
+          </div>
+        )}
+        {mapInfoTarget && (
+          <button
+            className={`info-btn map-info-btn${mapInfoOn ? ' on' : ''}`}
+            onClick={() => toggleInfo(mapInfoTarget)}
+            aria-label={mapInfoOn ? 'Close information' : 'Show information'}
+            aria-pressed={mapInfoOn}
+          >i</button>
+        )}
+      </Galaxy3D>
+
+      <aside className="sheet">
+        <div className="crumbs">
+          {sector && (
+            <button className="back" onClick={back} aria-label="Back">‹</button>
+          )}
+          <button onClick={goGalaxy} className={!sector ? 'here' : ''}>Galaxy</button>
+          {sector && <><span>›</span><button onClick={() => goSector(sector.id)} className={!planet ? 'here' : ''}>{sector.name.replace('Segmentum ', '')}</button></>}
+          {planet && <><span>›</span><button onClick={clearTable} className={!table ? 'here' : ''}>{planet.name}</button></>}
+          {table && <><span>›</span><span className="here">{table.name}</span></>}
+        </div>
+
+        <div className="sheet-body">
+          {!sector && (
+            <>
+              <p className="hint">Tap a sector on the map, or pick one here.</p>
+              <ul className="list">
+                {SECTORS.map((s) => {
+                  const { live, open } = sectorCounts(s)
+                  const locked = isLocked(s.id)
+                  return (
+                    <li key={s.id} className="with-info">
+                      <button onClick={() => goSector(s.id)} {...hoverProps('sector', s.id)}>
+                        <span>{s.name}</span>
+                        <small>{locked ? 'Locked · access restricted' : `${live} planets in play · ${open} battlezones open`}</small>
+                      </button>
+                      <button
+                        className={`info-btn${info?.kind === 'sector' && info.id === s.id ? ' on' : ''}`}
+                        onClick={() => toggleInfo({ kind: 'sector', id: s.id })}
+                        aria-label={`${s.name} information`}
+                      >i</button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+
+          {sector && !planet && (
+            <>
+              <p className="hint">Choose a planet.</p>
+              <ul className="list">
+                {sector.planets.map((p) => {
+                  const pinfo = planetInfo[p.id]
+                  return (
+                    <li key={p.id} className="with-info">
+                      <button
+                        onClick={() => goPlanet(sector.id, p.id)}
+                        className={pinfo.enabled ? '' : 'closed'}
+                        {...hoverProps('planet', p.id)}
+                      >
+                        <span>{isHulkId(p.id) ? 'Space Hulk · ' : ''}{p.name}</span>
+                        <small>{!pinfo.enabled ? 'Access restricted' : pinfo.zonesHidden ? 'Battlezones classified' : `${pinfo.open} of ${pinfo.total} battlezones open`}</small>
+                      </button>
+                      <button
+                        className={`info-btn${info?.kind === 'planet' && info.id === p.id ? ' on' : ''}`}
+                        onClick={() => toggleInfo({ kind: 'planet', id: p.id })}
+                        aria-label={`${p.name} information`}
+                      >i</button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
+
+          {planet && planetClosed && (
+            <p className="hint">Access to {planet.name} is restricted. Please scout or obtain intel records.</p>
+          )}
+
+          {planet && !planetClosed && planetZonesHidden && (
+            <p className="hint">The event host has not yet revealed the battlezones on {planet.name}.</p>
+          )}
+
+          {planet && !planetClosed && !planetZonesHidden && !table && (
+            <>
+              <p className="hint">Choose a battlezone on {planet.name}.</p>
+              <ul className="list">
+                {planetTables.map((t) => (
+                  <li key={t.id} className="with-info">
+                    <button onClick={() => selectTable(t.id)}>
+                      <span>{t.name} <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em></span>
+                      <small>{t.note}</small>
+                    </button>
+                    <button
+                      className={`info-btn${info?.kind === 'zone' && info.id === t.id ? ' on' : ''}`}
+                      onClick={() => toggleInfo({ kind: 'zone', id: t.id })}
+                      aria-label={`${t.name} information`}
+                    >i</button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {table && planet && (
+            <div className="table-detail">
+              <h3>{planet.name} · {table.name}</h3>
+              <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>
+              <div className="layout-placeholder">Battlezone layout image goes here</div>
+              <p className="muted">{table.note}</p>
+              <button className="primary" disabled={!canClaim || table.status !== 'open'}>
+                {!canClaim ? 'Log in as a player to claim' : table.status === 'open' ? 'Claim this battlezone' : 'Battlezone in use'}
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
