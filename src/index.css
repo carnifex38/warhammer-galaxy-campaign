@@ -640,3 +640,23 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-step { display: inline-flex; align-items: center; gap: 6px; }
 .bld-step b { min-width: 1.6em; text-align: center; font-weight: 600; }
 .bld-step button { padding: 5px 13px; font-size: 1.05rem; }
+
+/* ---- use the width: the list runs nearly edge to edge, and nothing is squeezed to make room for decoration ---- */
+.bld-force > .bld-force { margin: 6px 0 0; border-radius: 0; border-right: 0; border-bottom: 0; }
+.bld-force-head { flex-wrap: wrap; }
+.bld-force-head h4 { flex: 1 1 9rem; }
+.bld-role-name { flex-wrap: wrap; row-gap: 2px; }
+.bld-unit { margin: 0 4px 6px; }
+@media (max-width: 700px) {
+  .content { padding: 12px 8px; }
+  .content.full { padding: 0; }
+  .army-card { margin-inline: -8px; border-radius: 0; border-left: 0; border-right: 0; }
+  .army-body { padding: 4px 4px 12px; }
+  .bld-start { padding: 10px 8px; }
+  .bld-force { border-radius: 0; border-right: 0; margin-inline: 0; }
+  .bld-bar { border-radius: 0; border-left: 0; border-right: 0; margin-inline: -4px; padding-inline: 12px; }
+  .bld-issues { border-radius: 0; border-left: 0; border-right: 0; margin-inline: -4px; }
+  .bld-role-head { padding: 2px 4px 2px 2px; }
+  .bld-unit { margin: 0 3px 5px; }
+  .bld-force-head { padding: 8px 8px; }
+}

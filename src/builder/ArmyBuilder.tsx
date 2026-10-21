@@ -267,7 +267,7 @@ function RoleBlock({ role, forceUid }: { role: RoleView; forceUid: string }) {
     <div className="bld-role">
       <div className="bld-role-head">
         <button className="bld-role-name" onClick={() => setFolded((x) => !x)} aria-expanded={!folded}>
-          <span aria-hidden="true">{folded ? '▸' : '▾'}</span> {role.name}
+          <span aria-hidden="true">{folded ? '▸' : '▾'}</span> {role.name || 'Other'}
           {pts > 0 && <span className="chip pts">{Math.round(pts)} pts</span>}
           {limit && <span className={`bld-count${bad ? ' bad' : ''}`}>({limit})</span>}
         </button>
