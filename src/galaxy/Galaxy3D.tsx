@@ -1125,6 +1125,18 @@ function Warmup() {
       try { await gl.compileAsync(scene, camera) } catch { /* the first real draw will compile it instead */ }
       setLoad({ done: 1, label: 'Galaxy ready' })
 
+      // A slow graphics card (or a browser that cannot compile in parallel) would sit here for a long time on every refresh. So the
+      // planets are only warmed up while compiling stays quick: the first one that takes too long ends it, and the machine is
+      // remembered, so the next visit skips it. Those planets then compile on their own when first opened.
+      const slowKey = 'galaxy-slow-gpu'
+      let slow = !gl.extensions.has('KHR_parallel_shader_compile')
+      try { if (localStorage.getItem(slowKey)) slow = true } catch { /* not remembered */ }
+      if (slow) {
+        setLoad({ done: total, label: 'Ready' })
+        console.info('[galaxy] skipped the planet warm-up (slow graphics or no parallel compile)')
+        return
+      }
+
       const holder = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 4))
       holder.frustumCulled = false
       holder.renderOrder = -10
@@ -1135,8 +1147,14 @@ function Warmup() {
         keep.push(mat)
         holder.material = mat
         scene.add(holder)
+        const c0 = performance.now()
         try { await gl.compileAsync(scene, camera) } catch { /* compiled on demand instead */ }
         scene.remove(holder)
+        if (performance.now() - c0 > 2500) {
+          try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
+          console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
+          break
+        }
         setLoad({ done: 2 + i })
       }
       setLoad({ done: total, label: 'Ready' })
