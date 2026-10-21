@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
 // A green targeting reticle that locks onto a spot of the planet when a battlezone is pointed at. The spot is a real point on the
 // planet's surface (it turns with the planet, and orbiting the camera just shows it from another side), but the reticle itself is
-// drawn flat on the screen over that point, like a HUD (it fades as the spot turns away, and a new spot is picked up). It starts
+// drawn flat on the screen over that point, like a HUD (it fades as the spot turns away, and a new spot is picked up).
+// Long thin guide lines run from it to the top and both sides of the map, and follow it. It starts
 // on the face the viewer can see, at a place worked out from the battlezone's id, so a battlezone points at roughly the same
 // part of the view each time.
 
@@ -96,6 +97,20 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
   const labelTex = useMemo(() => { const t = new THREE.CanvasTexture(labelCanvas); t.colorSpace = THREE.SRGBColorSpace; return t }, [labelCanvas])
   useEffect(() => () => { crossTex.dispose(); ringTex.dispose(); labelTex.dispose() }, [crossTex, ringTex, labelTex])
 
+  // the guide lines are plain page elements laid over the map (made here, moved every frame, removed when the reticle goes)
+  const gl = useThree((t) => t.gl)
+  const lines = useRef<{ box: HTMLDivElement; up: HTMLDivElement; left: HTMLDivElement; right: HTMLDivElement } | null>(null)
+  useEffect(() => {
+    const host = gl.domElement.parentElement
+    if (!host) return
+    const box = document.createElement('div')
+    box.className = 'zone-lines'
+    const mk = (cls: string) => { const d = document.createElement('div'); d.className = `zone-line ${cls}`; box.appendChild(d); return d }
+    lines.current = { box, up: mk('up'), left: mk('left'), right: mk('right') }
+    host.appendChild(box)
+    return () => { box.remove(); lines.current = null }
+  }, [gl])
+
   useFrame((s, dt) => {
     const g = root.current
     if (!g) return
@@ -141,7 +156,7 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
     }
     k.level += ((zone ? 1 : 0) - k.level) * Math.min(1, dt * 7)
     g.visible = k.level > 0.01
-    if (!g.visible) return
+    if (!g.visible) { if (lines.current) lines.current.box.style.opacity = '0'; return }
 
     // where the spot is now, in the world, and whether it faces the viewer
     tmp.world.copy(k.spot).applyQuaternion(tmp.q)
@@ -166,6 +181,25 @@ export function ZoneReticle({ zone }: { zone: { id: string; name: string } | nul
       ;(sp.material as THREE.SpriteMaterial).opacity = alpha * edge
     }
     if (ring.current) (ring.current.material as THREE.SpriteMaterial).rotation = now * 0.7
+
+    // the guide lines: from just outside the reticle to the top and the left and right edges of the map
+    const L = lines.current
+    if (L) {
+      const w = gl.domElement.clientWidth
+      const h = gl.domElement.clientHeight
+      tmp.world.copy(tmp.pos)
+      parent.localToWorld(tmp.world)
+      tmp.right.set(1, 0, 0).applyQuaternion(s.camera.quaternion).multiplyScalar(size * 0.5).add(tmp.world)
+      tmp.world.project(s.camera)
+      tmp.right.project(s.camera)
+      const x = (tmp.world.x * 0.5 + 0.5) * w
+      const y = (-tmp.world.y * 0.5 + 0.5) * h
+      const gap = Math.abs(tmp.right.x - tmp.world.x) * 0.5 * w + 6 // just outside the reticle's corner brackets
+      L.box.style.opacity = String(alpha * edge)
+      L.up.style.cssText = `left:${x}px;top:0;height:${Math.max(0, y - gap)}px`
+      L.left.style.cssText = `top:${y}px;left:0;width:${Math.max(0, x - gap)}px`
+      L.right.style.cssText = `top:${y}px;left:${x + gap}px;width:${Math.max(0, w - x - gap)}px`
+    }
     if (label.current) {
       // the name sits just under the reticle on the screen (not on the planet), drawn over the planet so the curve of the
       // surface never cuts it, and fades as the spot turns away

@@ -705,3 +705,10 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 /* one thin accent line down the left of a list, not one per nesting level */
 .bld-force, .bld-force.depth1, .bld-force.depth2 { border-left: 2px solid #6f86e6; }
 .bld-force > .bld-force, .bld-force > .bld-force.depth1, .bld-force > .bld-force.depth2 { border-left: 0; }
+
+/* the long guide lines that follow the battlezone reticle */
+.zone-lines { position: absolute; inset: 0; pointer-events: none; z-index: 1; opacity: 0; }
+.zone-line { position: absolute; background: #62ff9d; box-shadow: 0 0 6px rgba(98, 255, 157, 0.55); }
+.zone-line.up { width: 1px; transform: translateX(-0.5px); background: linear-gradient(to top, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
+.zone-line.left { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to left, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
+.zone-line.right { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to right, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
