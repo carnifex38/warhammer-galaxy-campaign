@@ -33,8 +33,13 @@ export default function App() {
   const auth = useAuth()
   const role = auth.session?.role
   const [tab, setTab] = useState<TabId>('galaxy')
-  const events = useEventConfig(role === 'gm')
+  const events = useEventConfig(role === 'gm', auth.session?.token)
   const online = useOnline()
+  const serverUp = events.sync !== 'offline'
+  const denied = events.sync === 'denied'
+
+  // the server no longer accepts this gamemaster login (the password was changed): back to the login screen
+  useEffect(() => { if (denied) auth.logout() }, [denied])
 
   if (!auth.session) return <LoginScreen auth={auth} />
 
@@ -53,7 +58,7 @@ export default function App() {
             <i>{ROLE_LABEL[auth.session.role]}</i>
           </span>
           <button className="ghost logout" onClick={() => { setTab('galaxy'); auth.logout() }}>Log out</button>
-          <span className={`status ${online ? 'on' : 'off'}`}>{online ? 'Online' : 'Offline'}</span>
+          <span className={`status ${online && serverUp ? 'on' : 'off'}`}>{!online ? 'Offline' : serverUp ? 'Online' : 'No server'}</span>
         </div>
       </header>
 

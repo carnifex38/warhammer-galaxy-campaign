@@ -25,3 +25,7 @@ dist-ssr
 
 # PWA dev build output
 dev-dist
+
+# live-event server: saved event state and the GM password
+data
+.env
