@@ -3,10 +3,11 @@
 //   GM_PASSWORD  required. The gamemaster password (checked here, never sent to browsers).
 //   PORT         default 3000
 //   HOST         default 0.0.0.0
-//   DATA_DIR     default ./data   (state.json lives here)
+//   DATA_DIR     default ./data   (state.json and profiles.json live here)
 //   DIST_DIR     default ./dist
 import { createServer } from 'node:http'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { promisify } from 'node:util'
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
@@ -22,6 +23,7 @@ const HOST = process.env.HOST ?? '0.0.0.0'
 const DATA_DIR = resolve(process.env.DATA_DIR ?? 'data')
 const DIST_DIR = resolve(process.env.DIST_DIR ?? 'dist')
 const STATE_FILE = join(DATA_DIR, 'state.json')
+const PROFILES_FILE = join(DATA_DIR, 'profiles.json')
 const MAX_BODY = 1_000_000
 
 mkdirSync(DATA_DIR, { recursive: true })
@@ -64,6 +66,147 @@ const safeEq = (a, b) => {
   return x.length === y.length && timingSafeEqual(x, y)
 }
 const bearer = (req) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? null
+
+
+// ---- player profiles -------------------------------------------------------------------------------------------
+// A profile is a name and a password chosen by the player (no email). It holds that player's army lists. Passwords are never
+// stored: only a salted scrypt hash. A signed-in profile gets a token; the gamemaster token can also read, edit and delete any
+// profile. Changing a profile's password would invalidate its token (the token is derived from the hash).
+const scryptAsync = promisify(scrypt)
+const MAX_PROFILES = 300
+const MAX_ARMIES_BYTES = 200_000
+/** id -> { id, name, key (lower-case name), salt, hash, created, updated, armies } */
+let profiles = {}
+try { if (existsSync(PROFILES_FILE)) profiles = JSON.parse(readFileSync(PROFILES_FILE, 'utf8')) } catch (e) { console.error('Could not read profiles.json, starting empty:', e.message) }
+
+function persistProfiles() {
+  const tmp = PROFILES_FILE + '.tmp'
+  writeFileSync(tmp, JSON.stringify(profiles))
+  renameSync(tmp, PROFILES_FILE)
+}
+
+const hashPassword = async (password, salt) => (await scryptAsync(password, salt, 32)).toString('hex')
+const profileToken = (p) => `${p.id}.${createHmac('sha256', GM_PASSWORD).update(`profile-v1:${p.id}:${p.hash}`).digest('hex')}`
+function profileFromToken(t) {
+  if (!t || !t.includes('.')) return null
+  const p = profiles[t.split('.')[0]]
+  return p && safeEq(t, profileToken(p)) ? p : null
+}
+const isGm = (req) => { const t = bearer(req); return t !== null && safeEq(t, GM_TOKEN) }
+const summary = (p) => ({ id: p.id, name: p.name, created: p.created, updated: p.updated, armyCount: p.armies.length })
+const full = (p) => ({ ...summary(p), armies: p.armies })
+const cleanName = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
+const validName = (n) => n.length >= 2 && n.length <= 24 && !/[\u0000-\u001f]/.test(n)
+const validPassword = (v) => typeof v === 'string' && v.length >= 4 && v.length <= 64
+const validArmies = (a) => Array.isArray(a) && a.length <= 60 && a.every((x) => isObj(x) && typeof x.id === 'string' && typeof x.name === 'string') && JSON.stringify(a).length <= MAX_ARMIES_BYTES
+
+// slow down guessing: at most 10 failed attempts a minute from one address
+const profileFails = new Map()
+setInterval(() => profileFails.clear(), 60_000).unref()
+const who = (req) => req.socket.remoteAddress ?? '?'
+const tooMany = (req) => (profileFails.get(who(req)) ?? 0) >= 10
+const failed = (req) => profileFails.set(who(req), (profileFails.get(who(req)) ?? 0) + 1)
+
+/** Handles the profile routes. Returns null when the method does not fit the route. */
+async function profilesApi(req, res, path) {
+  const m = req.method
+
+  if (path === '/api/profiles' && m === 'POST') {
+    if (tooMany(req)) return json(res, 429, { error: 'Too many attempts, wait a minute.' })
+    const body = await readBody(req).catch(() => null)
+    const name = cleanName(body?.name)
+    if (!validName(name)) return json(res, 400, { error: 'The name must be 2 to 24 characters.' })
+    if (!validPassword(body?.password)) return json(res, 400, { error: 'The password must be 4 to 64 characters.' })
+    if (Object.values(profiles).some((p) => p.key === name.toLowerCase())) return json(res, 409, { error: 'That name is taken. Choose another.' })
+    if (Object.keys(profiles).length >= MAX_PROFILES) return json(res, 507, { error: 'There are too many profiles.' })
+    const salt = randomBytes(16).toString('hex')
+    const id = randomBytes(8).toString('hex')
+    const now = Date.now()
+    const p = { id, name, key: name.toLowerCase(), salt, hash: await hashPassword(body.password, salt), created: now, updated: now, armies: [] }
+    profiles[id] = p
+    persistProfiles()
+    return json(res, 201, { token: profileToken(p), profile: full(p) })
+  }
+
+  if (path === '/api/profile-login' && m === 'POST') {
+    if (tooMany(req)) return json(res, 429, { error: 'Too many attempts, wait a minute.' })
+    const body = await readBody(req).catch(() => null)
+    const key = cleanName(body?.name).toLowerCase()
+    const p = Object.values(profiles).find((x) => x.key === key)
+    // hash even when the name is unknown, so the time taken does not reveal which names exist
+    const attempt = await hashPassword(typeof body?.password === 'string' ? body.password.slice(0, 64) : '', p?.salt ?? '0'.repeat(32))
+    if (p && safeEq(attempt, p.hash)) return json(res, 200, { token: profileToken(p), profile: full(p) })
+    failed(req)
+    return json(res, 401, { error: 'Wrong name or password.' })
+  }
+
+  // the signed-in player's own profile
+  if (path === '/api/profile') {
+    const p = profileFromToken(bearer(req))
+    if (!p) return json(res, 401, { error: 'Not signed in.' })
+    if (m === 'GET') return json(res, 200, { profile: full(p) })
+    if (m === 'PUT') {
+      const body = await readBody(req).catch(() => null)
+      if (!validArmies(body?.armies)) return json(res, 400, { error: 'Bad army lists.' })
+      p.armies = body.armies
+      p.updated = Date.now()
+      persistProfiles()
+      return json(res, 200, { profile: full(p) })
+    }
+    if (m === 'DELETE') {
+      delete profiles[p.id]
+      persistProfiles()
+      return json(res, 200, { ok: true })
+    }
+    return null
+  }
+
+  // gamemaster: add a practice player with a couple of sample army lists (password "dummy"), to try the screens or delete
+  if (path === '/api/profiles/dummy' && m === 'POST') {
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    if (Object.keys(profiles).length >= MAX_PROFILES) return json(res, 507, { error: 'There are too many profiles.' })
+    let name = 'Dummy Player'
+    for (let n = 2; Object.values(profiles).some((p) => p.key === name.toLowerCase()); n++) name = `Dummy Player ${n}`
+    const salt = randomBytes(16).toString('hex')
+    const id = randomBytes(8).toString('hex')
+    const now = Date.now()
+    const armies = [
+      { id: 'd1', name: 'Dummy Ultramarines', era: '40k', notes: ['Practice list.', 'Captain with relic blade', '10 Intercessors', '5 Hellblasters'].join('\n') },
+      { id: 'd2', name: 'Dummy Legion Detachment', era: '30k', notes: ['Practice list.', 'Praetor', '20 Tactical Marines', 'Contemptor Dreadnought'].join('\n') },
+    ]
+    const p = { id, name, key: name.toLowerCase(), salt, hash: await hashPassword('dummy', salt), created: now, updated: now, armies }
+    profiles[id] = p
+    persistProfiles()
+    return json(res, 201, { profile: full(p) })
+  }
+
+  // gamemaster: every profile
+  if (path === '/api/profiles' && m === 'GET') {
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    return json(res, 200, { profiles: Object.values(profiles).map(summary).sort((a, b) => a.name.localeCompare(b.name)) })
+  }
+  const one = /^\/api\/profiles\/([0-9a-f]{16})$/.exec(path)
+  if (one) {
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    const p = profiles[one[1]]
+    if (!p) return json(res, 404, { error: 'No such profile.' })
+    if (m === 'GET') return json(res, 200, { profile: full(p) })
+    if (m === 'PUT') {
+      const body = await readBody(req).catch(() => null)
+      if (!validArmies(body?.armies)) return json(res, 400, { error: 'Bad army lists.' })
+      p.armies = body.armies
+      p.updated = Date.now()
+      persistProfiles()
+      return json(res, 200, { profile: full(p) })
+    }
+    if (m === 'DELETE') {
+      delete profiles[p.id]
+      persistProfiles()
+      return json(res, 200, { ok: true })
+    }
+  }
+  return null
+}
 
 // ---- live updates (server-sent events) ---------------------------------------------------------------------------
 const streams = new Set()
@@ -125,6 +268,12 @@ async function api(req, res, path) {
     streams.add(res)
     req.on('close', () => streams.delete(res))
     return
+  }
+
+  if (path === '/api/profiles' || path === '/api/profile' || path === '/api/profile-login' || path.startsWith('/api/profiles/')) {
+    const r = await profilesApi(req, res, path)
+    if (r !== null) return r
+    return json(res, 405, { error: 'Method not allowed.' })
   }
 
   json(res, 404, { error: 'Not found.' })

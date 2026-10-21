@@ -8,6 +8,7 @@ import { useEventConfig } from './galaxy/eventConfig'
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
 const HostView = lazy(() => import('./galaxy/HostView'))
+const ArmyLists = lazy(() => import('./ArmyLists'))
 
 type TabId = 'galaxy' | 'lists' | 'event' | 'host'
 
@@ -92,6 +93,13 @@ export default function App() {
         <main className="content">
           <Suspense fallback={<p className="muted">Loading…</p>}>
             <HostView events={events} />
+          </Suspense>
+        </main>
+      ) : activeId === 'lists' ? (
+        <main className="content">
+          <h2>{current.label}</h2>
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <ArmyLists auth={auth} />
           </Suspense>
         </main>
       ) : (

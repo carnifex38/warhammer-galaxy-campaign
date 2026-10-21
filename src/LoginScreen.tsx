@@ -5,7 +5,7 @@ import { DevPanel } from './devTools' // DEV-TOOLS
 
 const CHOICES: { role: Role; title: string; blurb: string; icon: string }[] = [
   { role: 'guest', title: 'Guest', blurb: 'Look around the galaxy. No name needed.', icon: '◇' },
-  { role: 'player', title: 'Player', blurb: 'Pick a callsign, claim battlezones, build armies.', icon: '⚔' },
+  { role: 'player', title: 'Player', blurb: 'Make a profile, claim battlezones, build armies.', icon: '⚔' },
   { role: 'gm', title: 'Gamemaster', blurb: 'Run the event. Password required.', icon: '♛' },
 ]
 
@@ -38,6 +38,8 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [signUp, setSignUp] = useState(false) // players: make a new profile instead of signing in
+  const [busy, setBusy] = useState(false)
 
   const choose = (r: Role) => {
     setError('')
@@ -48,8 +50,17 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (role === 'player') {
-      if (!name.trim()) { setError('Choose a callsign to enter.'); return }
-      auth.loginPlayer(name)
+      if (!name.trim()) { setError('Enter your profile name.'); return }
+      if (!password) { setError('Enter your password.'); return }
+      setBusy(true)
+      try {
+        await (signUp ? auth.signUpPlayer(name, password) : auth.loginPlayer(name, password))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Something went wrong.')
+        setPassword('')
+      } finally {
+        setBusy(false)
+      }
     } else if (role === 'gm') {
       try {
         if (!(await auth.loginGm(password))) { setError('Wrong password.'); setPassword('') }
@@ -78,10 +89,21 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
         {role && (
           <form className="login-form" onSubmit={submit}>
             {role === 'player' ? (
-              <label>
-                <span>Callsign</span>
-                <input autoFocus value={name} maxLength={24} onChange={(e) => { setName(e.target.value); setError('') }} placeholder="e.g. Captain Varro" autoComplete="nickname" />
-              </label>
+              <>
+                <div className="login-mode" role="group" aria-label="Profile">
+                  <button type="button" className={!signUp ? 'on' : ''} aria-pressed={!signUp} onClick={() => { setSignUp(false); setError('') }}>Sign in</button>
+                  <button type="button" className={signUp ? 'on' : ''} aria-pressed={signUp} onClick={() => { setSignUp(true); setError('') }}>New profile</button>
+                </div>
+                <label>
+                  <span>Profile name</span>
+                  <input autoFocus value={name} maxLength={24} onChange={(e) => { setName(e.target.value); setError('') }} placeholder="e.g. Captain Varro" autoComplete="username" />
+                </label>
+                <label>
+                  <span>{signUp ? 'Choose a password' : 'Password'}</span>
+                  <input type="password" value={password} maxLength={64} onChange={(e) => { setPassword(e.target.value); setError('') }} autoComplete={signUp ? 'new-password' : 'current-password'} />
+                </label>
+                {signUp && <p className="login-hint">No email needed. Remember this name and password: they are the only way back into your profile and your armies.</p>}
+              </>
             ) : (
               <label>
                 <span>Gamemaster password</span>
@@ -89,7 +111,7 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
               </label>
             )}
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="primary" type="submit">{role === 'player' ? 'Enter as player' : 'Enter as gamemaster'}</button>
+            <button className="primary" type="submit" disabled={busy}>{role === 'player' ? (signUp ? 'Create profile' : 'Sign in') : 'Enter as gamemaster'}</button>
           </form>
         )}
       </div>

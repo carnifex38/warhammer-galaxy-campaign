@@ -465,3 +465,51 @@ button { font: inherit; color: inherit; }
 .dev-switch button { min-height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 0.78rem; cursor: pointer; }
 .dev-switch button.on { background: #ffb347; color: #1a1203; font-weight: 700; }
 @media (max-width: 480px) { .dev-switch span { display: none; } }
+
+/* ---- player profiles and army lists ---- */
+.login-mode { display: flex; gap: 6px; margin-bottom: 4px; }
+.login-mode button { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #141a2e; color: #aab2cc; cursor: pointer; font: inherit; }
+.login-mode button.on { background: #2a3358; color: #fff; border-color: #e0b650; }
+.login-hint { margin: 4px 0 0; font-size: 0.82rem; color: #8f98b8; line-height: 1.4; }
+.army-layout { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 20px; align-items: start; }
+@media (max-width: 760px) { .army-layout { grid-template-columns: 1fr; } }
+.army-side { display: flex; flex-direction: column; gap: 10px; }
+.army-side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.army-side-head h3, .prof-head h3 { margin: 0; }
+.army-side input, .own-form input, .army-row input, .army-row select, .army-card textarea { padding: 9px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #0f1426; color: #e6e9f5; font: inherit; }
+.profile-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; }
+.profile-list button { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 9px; border: 1px solid #2c3552; background: #141a2e; color: #e6e9f5; cursor: pointer; font: inherit; }
+.profile-list button.on { border-color: #e0b650; background: #1d2545; }
+.profile-list button span { font-size: 0.8rem; color: #8f98b8; }
+.profile-list em { font-style: normal; color: #e0b650; font-weight: 400; }
+.own-form { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2c3552; border-radius: 10px; background: #10162b; }
+.own-form h4 { margin: 0; }
+.own-note { font-size: 0.85rem; }
+button.link { background: none; border: 0; padding: 0; color: #e0b650; cursor: pointer; font: inherit; text-decoration: underline; }
+.prof { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+.prof-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.prof-head p { margin: 2px 0 0; }
+.army-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2c3552; border-radius: 10px; background: #10162b; }
+.army-row { display: flex; gap: 8px; }
+.army-row input { flex: 1; min-width: 0; }
+.army-card textarea { resize: vertical; }
+.prof-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.prof-actions .spacer { flex: 1; }
+button.danger { padding: 8px 12px; border-radius: 8px; border: 1px solid #8a3a3a; background: #2a1316; color: #ffb4b4; cursor: pointer; font: inherit; }
+button.danger:hover:not(:disabled) { background: #3a191d; }
+
+/* the gamemaster's expandable profile rows */
+.army-all { display: flex; flex-direction: column; gap: 12px; max-width: 900px; }
+.army-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.army-bar h3 { margin: 0; margin-right: auto; }
+.army-bar input { padding: 8px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #0f1426; color: #e6e9f5; font: inherit; min-width: 160px; }
+.profile-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.profile-row { border: 1px solid #2c3552; border-radius: 10px; background: #10162b; overflow: hidden; }
+.profile-row.open { border-color: #e0b650; }
+.profile-row-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: none; border: 0; color: #e6e9f5; cursor: pointer; font: inherit; text-align: left; }
+.profile-row-head:hover { background: #151c36; }
+.profile-row-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-row-head em { font-style: normal; color: #e0b650; font-weight: 400; }
+.profile-row-head .chev { color: #e0b650; width: 1em; }
+.profile-row-meta { font-size: 0.8rem; color: #8f98b8; white-space: nowrap; }
+.profile-row-body { padding: 4px 14px 14px; border-top: 1px solid #1f2742; }
