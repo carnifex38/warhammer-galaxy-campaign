@@ -130,7 +130,6 @@ export const SECTORS: Sector[] = [
     p5('Mars', 740, 770),
     p4('Cthonia', 545, 763),
     p4('Olmec', 487, 722),
-    p4('Seraphina', 545, 605),
     p4('Necromunda', 655, 858),
   ]),
 
@@ -192,6 +191,7 @@ export const SECTORS: Sector[] = [
     p5('Macragge', 1481, 1217),
     p4('Ryza', 878, 752),
     p5('Prospero', 1089, 741), // the wiki puts Prospero in Segmentum Ultima
+    p5('Seraphina', 1592, 732), // the wiki puts Seraphina in Segmentum Ultima (Wheel of Fire subsector)
   ]),
 ]
 
