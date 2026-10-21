@@ -1,9 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import LoginScreen from './LoginScreen'
 import { preloadGalaxy } from './preloadGalaxy'
 import { DevSwitch } from './devTools' // DEV-TOOLS
 import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
+import { useClaims, type Viewing } from './claims'
+import type { GalaxySelection } from './galaxy/GalaxyView'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
@@ -39,6 +41,10 @@ export default function App() {
   const role = auth.session?.role
   const [tab, setTab] = useState<TabId>('galaxy')
   const events = useEventConfig(role === 'gm', auth.session?.token)
+  const claims = useClaims(auth)
+  // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
+  const [viewing, setViewing] = useState<Viewing | null>(null)
+  const galaxySel = useRef<GalaxySelection | undefined>(undefined)
   const online = useOnline()
   useEffect(() => { preloadGalaxy() }, [])
   const serverUp = events.sync !== 'offline'
@@ -64,7 +70,7 @@ export default function App() {
             <b>{auth.session.name}</b>
             <i>{ROLE_LABEL[auth.session.role]}</i>
           </span>
-          <button className="ghost logout" onClick={() => { setTab('galaxy'); auth.logout() }}>Log out</button>
+          <button className="ghost logout" onClick={() => { setTab('galaxy'); setViewing(null); galaxySel.current = undefined; auth.logout() }}>Log out</button>
           <span className={`status ${online && serverUp ? 'on' : 'off'}`}>{!online ? 'Offline' : serverUp ? 'Online' : 'No server'}</span>
         </div>
       </header>
@@ -86,7 +92,14 @@ export default function App() {
       {activeId === 'galaxy' ? (
         <main className="content full">
           <Suspense fallback={<div className="galaxy-wait">Opening the galaxy…</div>}>
-            <GalaxyView events={events} canClaim={auth.session.role !== 'guest'} />
+            <GalaxyView
+              events={events}
+              auth={auth}
+              claims={claims}
+              initial={galaxySel.current}
+              onSelect={(s) => { galaxySel.current = s }}
+              onViewList={(v) => { setViewing(v); setTab('lists') }}
+            />
           </Suspense>
         </main>
       ) : activeId === 'host' ? (
@@ -99,7 +112,13 @@ export default function App() {
         <main className="content">
           <h2>{current.label}</h2>
           <Suspense fallback={<p className="muted">Loading…</p>}>
-            <ArmyLists auth={auth} />
+            <ArmyLists
+              auth={auth}
+              claims={claims}
+              viewing={viewing}
+              onCloseViewing={() => setViewing(null)}
+              onBackToZone={() => { setViewing(null); setTab('galaxy') }}
+            />
           </Suspense>
         </main>
       ) : (

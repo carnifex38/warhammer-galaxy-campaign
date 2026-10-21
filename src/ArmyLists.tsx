@@ -3,6 +3,7 @@ import { Unauthorized, createDummyProfile, deleteMyProfile, deleteProfile, getMy
 import type { AuthApi } from './auth'
 import { DEV_PLAYER_ID, local } from './localProfiles' // DEV-TOOLS
 import type { StoredRoster } from './builder/ArmyBuilder'
+import type { ClaimsApi, SeatList, Viewing } from './claims'
 
 // the army builder (and the rules data it reads) only downloads when someone opens it
 const ArmyBuilder = lazy(() => import('./builder/ArmyBuilder'))
@@ -304,20 +305,69 @@ function AllProfiles({ auth, token }: { auth: AuthApi; token: string | null }) {
   )
 }
 
-export default function ArmyLists({ auth }: { auth: AuthApi }) {
+/** A list opened from a battlezone: read-only, with a way back to where the player was. */
+function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: ClaimsApi; onClose: () => void; onBack: () => void }) {
+  const [list, setList] = useState<SeatList | null>(null)
+  const [error, setError] = useState('')
+  // load again whenever the seat changes (the player edits a live list, or the gamemaster locks or reopens the battlezone)
+  const seat = claims.seatsOf(v.tableId).find((x) => x.profileId === v.profileId)
+  const key = `${claims.statusOf(v.tableId)}|${seat?.armyId}|${seat?.armyName}|${seat?.pts}|${seat?.team}|${seat ? 1 : 0}`
+  useEffect(() => {
+    let live = true
+    claims.loadList(v.tableId, v.profileId).then((l) => { if (live) { setList(l); setError('') } }).catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not open that list.') })
+    return () => { live = false }
+  }, [v.tableId, v.profileId, key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const stored = list?.roster as StoredRoster | null | undefined
+  return (
+    <section className="viewed">
+      <header className="viewed-head">
+        <div>
+          <h3>{list?.name?.trim() || 'Army list'}</h3>
+          <p className="muted">{v.player} · Team {list?.team ?? v.team} · {v.where}{list ? (list.locked ? ' · locked: the battlezone is in play' : ' · live: updates until the battlezone is in play') : ''}</p>
+        </div>
+        <div className="viewed-actions">
+          <button className="primary" onClick={onBack}>Back to the battlezone</button>
+          <button className="ghost" onClick={onClose}>Close</button>
+        </div>
+      </header>
+      {error && <p className="login-error" role="alert">{error}</p>}
+      {!list && !error && <p className="muted">Opening the list…</p>}
+      {list && (
+        <>
+          {list.notes.trim() && <p className="army-notes">{list.notes}</p>}
+          {list.era === '30k' && stored
+            ? <Suspense fallback={<p className="muted">Opening the list…</p>}><ArmyBuilder stored={stored} name={list.name} editing={false} onChange={() => undefined} /></Suspense>
+            : !list.notes.trim() && <p className="muted">This list has no units written down.</p>}
+        </>
+      )}
+    </section>
+  )
+}
+
+export default function ArmyLists({ auth, claims, viewing, onCloseViewing, onBackToZone }: {
+  auth: AuthApi
+  claims: ClaimsApi
+  viewing: Viewing | null
+  onCloseViewing: () => void
+  onBackToZone: () => void
+}) {
   const s = auth.session
   if (!s) return null
+  const viewed = viewing && <ViewedList key={`${viewing.tableId}/${viewing.profileId}`} v={viewing} claims={claims} onClose={onCloseViewing} onBack={onBackToZone} />
   if (s.role === 'gm') {
-    if (s.dev) return <AllProfiles auth={auth} token={null} /> // DEV-TOOLS: practice profiles in this browser
+    if (s.dev) return <>{viewed}<AllProfiles auth={auth} token={null} /></> // DEV-TOOLS: practice profiles in this browser
     if (!s.token) return <p className="muted">Sign in as gamemaster to see the profiles.</p>
-    return <AllProfiles auth={auth} token={s.token} />
+    return <>{viewed}<AllProfiles auth={auth} token={s.token} /></>
   }
-  if (s.dev) return <MyProfile auth={auth} token="" /> // DEV-TOOLS
-  if (s.profileToken) return <MyProfile auth={auth} token={s.profileToken} />
+  if (s.dev) return <>{viewed}<MyProfile auth={auth} token="" /></> // DEV-TOOLS
+  if (s.profileToken) return <>{viewed}<MyProfile auth={auth} token={s.profileToken} /></>
   return (
-    <section className="prof">
-      <h3>No profile yet</h3>
-      <p className="muted">Army lists live on a profile. Log out, choose Player, and make a new profile with a name and a password. No email is needed.</p>
-    </section>
+    <>
+      {viewed}
+      <section className="prof">
+        <h3>No profile yet</h3>
+        <p className="muted">Army lists live on a profile. Log out, choose Player, and make a new profile with a name and a password. No email is needed.</p>
+      </section>
+    </>
   )
 }

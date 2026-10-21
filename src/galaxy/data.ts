@@ -83,12 +83,11 @@ export const DEFAULT_TABLES = 4
 const NATO = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo', 'Lima']
 
 /** Placeholder tables for a planet; the host can change how many there are. */
-export function makeTables(planetId: string, planetName: string, count: number): GameTable[] {
+export function makeTables(planetId: string, _planetName: string, count: number): GameTable[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `${planetId}-t${i + 1}`,
     name: `Battlezone ${NATO[i] ?? i + 1}`,
-    // deterministic placeholder: roughly a third of tables are in play
-    status: (planetName.length + i) % 3 === 0 ? ('in_play' as const) : ('open' as const),
+    status: 'open' as const, // the real status comes from the battlezone claims (an open battlezone until the host marks it in play)
     note: NOTES[i % NOTES.length],
   }))
 }

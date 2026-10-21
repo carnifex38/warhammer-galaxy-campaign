@@ -5,6 +5,9 @@ import type { EventApi } from './eventConfig'
 import type { Sector } from './data'
 import { isHulkId, openCount } from './data'
 import InfoPanel from './InfoPanel'
+import Seats from './Seats'
+import type { AuthApi } from '../auth'
+import type { ClaimsApi, Viewing } from '../claims'
 import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 
 const ERA_KEY = 'galaxy-era'
@@ -30,7 +33,22 @@ function devStart(sectors: Sector[]) {
   return null
 }
 
-export default function GalaxyView({ events, canClaim }: { events: EventApi; canClaim: boolean }) {
+/** Where the player was in the galaxy (kept by the app so it can come back after reading a list). */
+export interface GalaxySelection { sector: string | null; planet: string | null; table: string | null }
+
+export default function GalaxyView({ events, auth, claims, onViewList, initial, onSelect }: {
+  events: EventApi
+  auth: AuthApi
+  claims: ClaimsApi
+  onViewList: (v: Viewing) => void
+  initial?: GalaxySelection
+  onSelect?: (s: GalaxySelection) => void
+}) {
+  // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
+  const viewOf = (p: Sector['planets'][number]) => {
+    const v = events.planetView(p)
+    return { ...v, tables: v.tables.map((t) => ({ ...t, status: claims.statusOf(t.id) })) }
+  }
   // players see only what the host shows: hidden planets are gone, locked sectors stay shut
   const SECTORS = events.visibleSectors
   const lockedIds = events.lockedForPlayers
@@ -59,9 +77,10 @@ export default function GalaxyView({ events, canClaim }: { events: EventApi; can
     )
   }
   const shownEra = pendingEra ?? era
-  const [sectorId, setSectorId] = useState<string | null>(start?.sector ?? null)
-  const [planetId, setPlanetId] = useState<string | null>(start?.planet ?? null)
-  const [tableId, setTableId] = useState<string | null>(null)
+  const [sectorId, setSectorId] = useState<string | null>(initial?.sector ?? start?.sector ?? null)
+  const [planetId, setPlanetId] = useState<string | null>(initial?.planet ?? start?.planet ?? null)
+  const [tableId, setTableId] = useState<string | null>(initial?.table ?? null)
+  useEffect(() => { onSelect?.({ sector: sectorId, planet: planetId, table: tableId }) }, [sectorId, planetId, tableId]) // eslint-disable-line react-hooks/exhaustive-deps
   // the list row the pointer is over; the matching sector / planet lights up in 3D
   const [hover, setHover] = useState<{ kind: 'sector' | 'planet'; id: string } | null>(null)
 
@@ -84,7 +103,7 @@ export default function GalaxyView({ events, canClaim }: { events: EventApi; can
   const planetInfo: Record<string, PlanetInfo> = {}
   for (const s of SECTORS) {
     for (const p of s.planets) {
-      const v = events.planetView(p)
+      const v = viewOf(p)
       planetInfo[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden: events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden }
     }
   }
@@ -92,7 +111,7 @@ export default function GalaxyView({ events, canClaim }: { events: EventApi; can
   const planetClosed = !!planet && !planetInfo[planet.id].enabled
   const planetZonesHidden = !!planet && planetInfo[planet.id].zonesHidden
   // a restricted planet, or one whose battlezones are not revealed, shows no battlezones
-  const planetTables = planet && !planetClosed && !planetZonesHidden ? events.planetView(planet).tables : []
+  const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
 
   /** Battlezones counted for a sector: only planets in play whose battlezones the host has revealed. */
@@ -130,10 +149,10 @@ export default function GalaxyView({ events, canClaim }: { events: EventApi; can
   const infoPlanetSector = info?.kind === 'planet' ? SECTORS.find((s) => s.planets.some((p) => p.id === info.id)) : undefined
   const infoPlanet = infoPlanetSector?.planets.find((p) => p.id === info?.id)
   // a battlezone's window: find the planet that owns it
-  let zoneOwner: { sector: typeof SECTORS[number]; planet: typeof SECTORS[number]['planets'][number]; zone: ReturnType<typeof events.planetView>['tables'][number] } | undefined
+  let zoneOwner: { sector: typeof SECTORS[number]; planet: typeof SECTORS[number]['planets'][number]; zone: ReturnType<typeof viewOf>['tables'][number] } | undefined
   if (info?.kind === 'zone') {
     for (const s of SECTORS) for (const p of s.planets) {
-      const z = events.planetView(p).tables.find((t) => t.id === info.id)
+      const z = viewOf(p).tables.find((t) => t.id === info.id)
       if (z) zoneOwner = { sector: s, planet: p, zone: z }
     }
   }
@@ -327,9 +346,7 @@ export default function GalaxyView({ events, canClaim }: { events: EventApi; can
               <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>
               <div className="layout-placeholder">Battlezone layout image goes here</div>
               <p className="muted">{table.note}</p>
-              <button className="primary" disabled={!canClaim || table.status !== 'open'}>
-                {!canClaim ? 'Log in as a player to claim' : table.status === 'open' ? 'Claim this battlezone' : 'Battlezone in use'}
-              </button>
+              <Seats tableId={table.id} where={`${planet.name} · ${table.name}`} auth={auth} claims={claims} onView={onViewList} />
             </div>
           )}
         </div>

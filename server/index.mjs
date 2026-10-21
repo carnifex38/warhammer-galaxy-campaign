@@ -3,7 +3,7 @@
 //   GM_PASSWORD  required. The gamemaster password (checked here, never sent to browsers).
 //   PORT         default 3000
 //   HOST         default 0.0.0.0
-//   DATA_DIR     default ./data   (state.json and profiles.json live here)
+//   DATA_DIR     default ./data   (state.json, profiles.json and claims.json live here)
 //   DIST_DIR     default ./dist
 import { createServer } from 'node:http'
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
@@ -155,6 +155,7 @@ async function profilesApi(req, res, path) {
     }
     if (m === 'DELETE') {
       delete profiles[p.id]
+      dropSeatsOf(p.id)
       persistProfiles()
       return json(res, 200, { ok: true })
     }
@@ -201,8 +202,139 @@ async function profilesApi(req, res, path) {
     }
     if (m === 'DELETE') {
       delete profiles[p.id]
+      dropSeatsOf(p.id)
       persistProfiles()
       return json(res, 200, { ok: true })
+    }
+  }
+  return null
+}
+
+
+// ---- battlezone claims ---------------------------------------------------------------------------------------------
+// A battlezone is "open" or "in play". Players drop in freely: each picks a side (A or B) and one of their army lists. Others see
+// who is there, their side, and the list's name, era and points; the list itself is readable by signed-in players and the
+// gamemaster, and only through a seat. The list is live while the battlezone is open; when the gamemaster marks it in play a
+// copy is frozen, and reopening it unfreezes it. Seats of a deleted profile disappear.
+const CLAIMS_FILE = join(DATA_DIR, 'claims.json')
+/** tableId -> { status: 'open' | 'in_play', seats: [{ profileId, team, armyId, claimedAt, snapshot? }] } */
+let claims = {}
+try { if (existsSync(CLAIMS_FILE)) claims = JSON.parse(readFileSync(CLAIMS_FILE, 'utf8')) } catch (e) { console.error('Could not read claims.json, starting empty:', e.message) }
+
+function persistClaims() {
+  const tmp = CLAIMS_FILE + '.tmp'
+  writeFileSync(tmp, JSON.stringify(claims))
+  renameSync(tmp, CLAIMS_FILE)
+}
+const changed = () => { persistClaims(); version++; broadcast() }
+
+function dropSeatsOf(profileId) {
+  let any = false
+  for (const t of Object.values(claims)) {
+    const n = t.seats.length
+    t.seats = t.seats.filter((s) => s.profileId !== profileId)
+    if (t.seats.length !== n) any = true
+  }
+  for (const [id, t] of Object.entries(claims)) if (t.seats.length === 0 && t.status === 'open') delete claims[id]
+  if (any) changed()
+}
+
+const validTable = (id) => typeof id === 'string' && /^[a-z0-9-]{1,80}$/.test(id)
+const armyOf = (profile, armyId) => profile?.armies.find((a) => a.id === armyId)
+
+/** A seat as everyone may see it: who, which side, and the list's name, era and points (not its contents). */
+function seatView(seat) {
+  const p = profiles[seat.profileId]
+  const army = seat.snapshot ?? armyOf(p, seat.armyId)
+  return {
+    profileId: seat.profileId, name: p?.name ?? 'Unknown', team: seat.team, armyId: seat.armyId,
+    armyName: army?.name || 'Untitled army', era: army?.era ?? '40k', pts: army?.roster?.pts, locked: !!seat.snapshot, missing: !army,
+  }
+}
+
+function claimsView() {
+  const out = {}
+  for (const [id, t] of Object.entries(claims)) out[id] = { status: t.status, seats: t.seats.map(seatView) }
+  return out
+}
+
+/** Who is asking: a profile (a player, or a gamemaster with a profile) or the gamemaster. */
+const askedBy = (req) => ({ profile: profileFromToken(bearer(req)), gm: isGm(req) })
+
+async function claimsApi(req, res, path) {
+  const m = req.method
+
+  if (path === '/api/claims' && m === 'GET') return json(res, 200, { tables: claimsView() })
+
+  const one = /^\/api\/claims\/([a-z0-9-]{1,80})$/.exec(path)
+  if (one) {
+    const tableId = one[1]
+    const who = askedBy(req)
+    if (m === 'POST') { // take (or change) a seat
+      if (!who.profile) return json(res, 401, { error: 'Sign in with a profile to claim a battlezone.' })
+      const body = await readBody(req).catch(() => null)
+      if (body?.team !== 'A' && body?.team !== 'B') return json(res, 400, { error: 'Pick team A or B.' })
+      if (!armyOf(who.profile, body?.armyId)) return json(res, 400, { error: 'Pick one of your army lists.' })
+      const t = claims[tableId] ?? (claims[tableId] = { status: 'open', seats: [] })
+      if (t.status !== 'open') return json(res, 409, { error: 'This battlezone is already in play.' })
+      if (Object.keys(claims).length > 2000) return json(res, 507, { error: 'Too many battlezones.' })
+      const seat = t.seats.find((s) => s.profileId === who.profile.id)
+      if (seat) { seat.team = body.team; seat.armyId = body.armyId } else t.seats.push({ profileId: who.profile.id, team: body.team, armyId: body.armyId, claimedAt: Date.now() })
+      changed()
+      return json(res, 200, { tables: claimsView() })
+    }
+    if (m === 'DELETE') { // leave, any time
+      if (!who.profile) return json(res, 401, { error: 'Sign in with a profile.' })
+      const t = claims[tableId]
+      if (t) {
+        t.seats = t.seats.filter((s) => s.profileId !== who.profile.id)
+        if (t.seats.length === 0 && t.status === 'open') delete claims[tableId]
+        changed()
+      }
+      return json(res, 200, { tables: claimsView() })
+    }
+    return null
+  }
+
+  const status = /^\/api\/claims\/([a-z0-9-]{1,80})\/status$/.exec(path)
+  if (status && m === 'PUT') { // gamemaster: open / in play
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    const body = await readBody(req).catch(() => null)
+    if (body?.status !== 'open' && body?.status !== 'in_play') return json(res, 400, { error: 'Bad status.' })
+    const t = claims[status[1]] ?? (claims[status[1]] = { status: 'open', seats: [] })
+    t.status = body.status
+    for (const seat of t.seats) {
+      if (body.status === 'in_play') {
+        const army = armyOf(profiles[seat.profileId], seat.armyId)
+        seat.snapshot = army ? JSON.parse(JSON.stringify(army)) : undefined // the lists freeze as they are now
+      } else delete seat.snapshot
+    }
+    if (t.seats.length === 0 && t.status === 'open') delete claims[status[1]]
+    changed()
+    return json(res, 200, { tables: claimsView() })
+  }
+
+  const seatRoute = /^\/api\/claims\/([a-z0-9-]{1,80})\/([0-9a-f]{16})(\/list)?$/.exec(path)
+  if (seatRoute) {
+    const [, tableId, profileId, list] = seatRoute
+    const who = askedBy(req)
+    if (m === 'DELETE' && !list) { // gamemaster removes someone
+      if (!who.gm) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+      const t = claims[tableId]
+      if (t) {
+        t.seats = t.seats.filter((s) => s.profileId !== profileId)
+        if (t.seats.length === 0 && t.status === 'open') delete claims[tableId]
+        changed()
+      }
+      return json(res, 200, { tables: claimsView() })
+    }
+    if (m === 'GET' && list) { // read a list: only through a seat, and only for signed-in players and the gamemaster
+      if (!who.profile && !who.gm) return json(res, 401, { error: 'Sign in to read lists.' })
+      const seat = claims[tableId]?.seats.find((s) => s.profileId === profileId)
+      if (!seat) return json(res, 404, { error: 'That player has no seat here.' })
+      const army = seat.snapshot ?? armyOf(profiles[profileId], seat.armyId)
+      if (!army) return json(res, 404, { error: 'That list no longer exists.' })
+      return json(res, 200, { list: { name: army.name, era: army.era, notes: army.notes ?? '', roster: army.roster ?? null, locked: !!seat.snapshot, player: profiles[profileId]?.name ?? 'Unknown', team: seat.team, status: claims[tableId].status } })
     }
   }
   return null
@@ -268,6 +400,12 @@ async function api(req, res, path) {
     streams.add(res)
     req.on('close', () => streams.delete(res))
     return
+  }
+
+  if (path === '/api/claims' || path.startsWith('/api/claims/')) {
+    const r = await claimsApi(req, res, path)
+    if (r !== null) return r
+    return json(res, 405, { error: 'Method not allowed.' })
   }
 
   if (path === '/api/profiles' || path === '/api/profile' || path === '/api/profile-login' || path.startsWith('/api/profiles/')) {
