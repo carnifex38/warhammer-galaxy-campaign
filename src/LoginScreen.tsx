@@ -20,13 +20,17 @@ export default function LoginScreen({ auth }: { auth: AuthApi }) {
     setRole(r)
   }
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (role === 'player') {
       if (!name.trim()) { setError('Choose a callsign to enter.'); return }
       auth.loginPlayer(name)
     } else if (role === 'gm') {
-      if (!auth.loginGm(password)) { setError('Wrong password.'); setPassword('') }
+      try {
+        if (!(await auth.loginGm(password))) { setError('Wrong password.'); setPassword('') }
+      } catch {
+        setError('Cannot reach the server.')
+      }
     }
   }
 

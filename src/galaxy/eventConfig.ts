@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { getState, putState, watchState, Unauthorized } from '../api'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
 import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, type GameTable, type Planet, type Sector } from './data'
 
 // What the event host has set up: which planets and hulks are shown, in play, how many battlezones they have,
 // what players may read about them, and which sectors are locked.
-// For now this is saved in the browser on this device only; sharing it with every player's phone
-// needs the live-event server (a later milestone), and that is also where "who may edit it" gets enforced.
-// Until then nothing here is truly secret: the Host tab and the player view live in the same app.
+// It lives on the live-event server (server/index.mjs): only the gamemaster can change it, and the server strips the text
+// of hidden sections before sending the event to players.
 
 export const MIN_TABLES = 1
 export const MAX_TABLES = 12
@@ -31,15 +31,16 @@ const DEFAULT_HULKS: HulkCounts = { tempestus: 1 }
 
 const clampHulks = (n: number) => Math.min(MAX_HULKS, Math.max(0, Math.round(n)))
 
+function parseHulks(parsed: Record<string, number>): HulkCounts {
+  const out: HulkCounts = {}
+  for (const s of SECTORS) if (typeof parsed[s.id] === 'number') out[s.id] = clampHulks(parsed[s.id])
+  return out
+}
+
 function loadHulks(): HulkCounts {
   try {
     const raw = localStorage.getItem(HULKS_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Record<string, number>
-      const out: HulkCounts = {}
-      for (const s of SECTORS) if (typeof parsed[s.id] === 'number') out[s.id] = clampHulks(parsed[s.id])
-      return out
-    }
+    if (raw) return parseHulks(JSON.parse(raw) as Record<string, number>)
     // carry over the old one-hulk setting
     const old = localStorage.getItem(HULK_KEY)
     if (old) {
@@ -62,11 +63,12 @@ function loadInfo(): InfoOverrides {
   }
 }
 
+const parseLocked = (ids: string[]): string[] => ids.filter((id) => SECTORS.some((s) => s.id === id))
+
 function loadLocked(): string[] {
   try {
     const raw = localStorage.getItem(LOCKED_KEY)
-    const ids = raw ? (JSON.parse(raw) as string[]) : []
-    return ids.filter((id) => SECTORS.some((s) => s.id === id))
+    return raw ? parseLocked(JSON.parse(raw) as string[]) : []
   } catch {
     return []
   }
@@ -74,16 +76,18 @@ function loadLocked(): string[] {
 
 const clamp = (n: number) => Math.min(MAX_TABLES, Math.max(MIN_TABLES, Math.round(n)))
 
+function parseConfig(parsed: Record<string, Partial<PlanetSetting>>): EventConfig {
+  const out: EventConfig = {}
+  for (const [id, v] of Object.entries(parsed)) {
+    out[id] = { enabled: v.enabled !== false, visible: v.visible !== false, tables: clamp(typeof v.tables === 'number' ? v.tables : DEFAULT_TABLES) }
+  }
+  return out
+}
+
 function load(): EventConfig {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, Partial<PlanetSetting>>
-    const out: EventConfig = {}
-    for (const [id, v] of Object.entries(parsed)) {
-      out[id] = { enabled: v.enabled !== false, visible: v.visible !== false, tables: clamp(typeof v.tables === 'number' ? v.tables : DEFAULT_TABLES) }
-    }
-    return out
+    return raw ? parseConfig(JSON.parse(raw) as Record<string, Partial<PlanetSetting>>) : {}
   } catch {
     return {}
   }
@@ -101,11 +105,23 @@ const PRESETS: Record<Exclude<RevealPreset, 'hidden'>, { enabled: boolean; info:
   open: { enabled: true, info: { infoHidden: false, intelHidden: false, missionHidden: false, zonesHidden: false } },
 }
 
-export function useEventConfig(canHost = true) {
+/** Where this device's copy of the event stands with the live-event server. 'denied' = the gamemaster login is no longer valid. */
+export type SyncStatus = 'loading' | 'live' | 'offline' | 'denied'
+
+/**
+ * The event is kept on the live-event server: the gamemaster (`token`) writes it, everyone else reads it and follows
+ * changes live. The browser's own copy is only a cache so the app still opens when the server cannot be reached.
+ */
+export function useEventConfig(canHost = true, token?: string) {
   const [config, setConfig] = useState<EventConfig>(load)
   const [hulks, setHulks] = useState<HulkCounts>(loadHulks)
   const [infoOverrides, setInfoOverrides] = useState<InfoOverrides>(loadInfo)
   const [locked, setLocked] = useState<string[]>(loadLocked)
+  const [sync, setSync] = useState<SyncStatus>('loading')
+  // the last state this device and the server agree on (as JSON), and whether the gamemaster has caught up with the server
+  const synced = useRef('')
+  const [caughtUp, setCaughtUp] = useState(false)
+  const gmToken = canHost ? token : undefined
   // the host sees everything, whatever is hidden or locked for players
   const [previewOn, setHostPreview] = useState<boolean>(() => {
     try { return localStorage.getItem(PREVIEW_KEY) === 'yes' } catch { return false }
@@ -121,6 +137,63 @@ export function useEventConfig(canHost = true) {
   useEffect(() => save(INFO_KEY, infoOverrides), [infoOverrides])
   useEffect(() => save(LOCKED_KEY, locked), [locked])
   useEffect(() => { try { localStorage.setItem(PREVIEW_KEY, previewOn ? 'yes' : 'no') } catch { /* not remembered */ } }, [previewOn])
+
+  // pull the event from the server: once for the gamemaster, and live for everyone else
+  useEffect(() => {
+    let stopped = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    setCaughtUp(false)
+    setSync('loading')
+
+    const pull = async () => {
+      try {
+        const s = await getState(gmToken)
+        if (stopped) return
+        if (s) {
+          const next = {
+            config: parseConfig(s.config as Record<string, Partial<PlanetSetting>>),
+            hulks: parseHulks(s.hulks as Record<string, number>),
+            info: s.info as InfoOverrides,
+            locked: parseLocked(s.locked as string[]),
+          }
+          synced.current = JSON.stringify(next)
+          setConfig(next.config); setHulks(next.hulks); setInfoOverrides(next.info); setLocked(next.locked)
+        } else if (!gmToken) {
+          // nothing published yet: players see the built-in galaxy, not a stale copy
+          synced.current = ''
+          setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([])
+        } else {
+          synced.current = '' // the server is empty: this gamemaster device's saved setup becomes the event
+        }
+        setCaughtUp(true)
+        setSync('live')
+      } catch (e) {
+        if (stopped) return
+        if (e instanceof Unauthorized) { setSync('denied'); return }
+        setSync('offline')
+        if (gmToken) retry = setTimeout(pull, 5000) // players get retries from the live connection
+      }
+    }
+
+    if (gmToken) void pull()
+    const unwatch = gmToken ? undefined : watchState(() => void pull())
+    return () => { stopped = true; clearTimeout(retry); unwatch?.() }
+  }, [gmToken])
+
+  // gamemaster: send every change to the server
+  useEffect(() => {
+    if (!gmToken || !caughtUp) return
+    const state = { config, hulks, info: infoOverrides, locked }
+    const json = JSON.stringify(state)
+    if (json === synced.current) return
+    const t = setTimeout(() => {
+      putState(gmToken, state).then(
+        () => { synced.current = json; setSync('live') },
+        (e) => setSync(e instanceof Unauthorized ? 'denied' : 'offline'),
+      )
+    }, 400)
+    return () => clearTimeout(t)
+  }, [gmToken, caughtUp, config, hulks, infoOverrides, locked])
 
   // every sector as this event has it, hulks included (this is what the host edits)
   const sectors = useMemo<Sector[]>(
@@ -143,6 +216,7 @@ export function useEventConfig(canHost = true) {
     setInfoOverrides((o) => ({ ...o, [id]: { ...o[id], ...change } }))
 
   return {
+    sync,
     config,
     hulks,
     sectors,

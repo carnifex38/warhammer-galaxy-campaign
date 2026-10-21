@@ -2,16 +2,14 @@ import { useState } from 'react'
 
 // Who is using the app: a guest, a player, or the gamemaster (host).
 //
-// IMPORTANT: this is only a *door sign* for now. Everything runs in the browser, so the password below is visible to
-// anyone who looks at the app's code, and the host's settings live on the same device. Real logins (accounts,
-// password checking, keeping hidden things away from players) arrive with the live-event server (milestone 4).
+// Guests and players are only a name (no password, no accounts). The gamemaster password is checked by the live-event
+// server (server/index.mjs), which hands back a token that lets this browser change the event.
+
+import { gmLogin } from './api'
 
 export type Role = 'guest' | 'player' | 'gm'
 
-export interface Session { role: Role; name: string }
-
-/** TEMPORARY gamemaster password, as requested, until the server can check real ones. */
-const GM_PASSWORD = 'admin'
+export interface Session { role: Role; name: string; /** gamemaster only: proves the server accepted the password */ token?: string }
 
 const KEY = 'galaxy-session'
 
@@ -23,7 +21,8 @@ function load(): Session | null {
     const raw = sessionStorage.getItem(KEY) ?? localStorage.getItem(KEY)
     if (!raw) return null
     const s = JSON.parse(raw) as Partial<Session>
-    if (s.role === 'guest' || s.role === 'player' || s.role === 'gm') return { role: s.role, name: String(s.name ?? '').slice(0, 24) }
+    if (s.role === 'guest' || s.role === 'player') return { role: s.role, name: String(s.name ?? '').slice(0, 24) }
+    if (s.role === 'gm' && typeof s.token === 'string') return { role: 'gm', name: String(s.name ?? '').slice(0, 24), token: s.token }
   } catch { /* fall through */ }
   return null
 }
@@ -45,10 +44,11 @@ export function useAuth() {
     session,
     loginGuest: () => start({ role: 'guest', name: 'Guest' }),
     loginPlayer: (name: string) => start({ role: 'player', name: name.trim().slice(0, 24) || 'Player' }),
-    /** Returns false when the password is wrong. */
-    loginGm: (password: string, name = 'Gamemaster') => {
-      if (password !== GM_PASSWORD) return false
-      start({ role: 'gm', name })
+    /** Returns false when the password is wrong; throws when the server cannot be reached. */
+    loginGm: async (password: string, name = 'Gamemaster') => {
+      const token = await gmLogin(password)
+      if (!token) return false
+      start({ role: 'gm', name, token })
       return true
     },
     logout: () => start(null),

@@ -1,0 +1,14 @@
+services:
+  campaign:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # set in a .env file next to this one:  GM_PASSWORD=something-only-you-know
+      GM_PASSWORD: ${GM_PASSWORD:?set GM_PASSWORD in .env}
+    volumes:
+      - campaign-data:/data
+
+volumes:
+  campaign-data:

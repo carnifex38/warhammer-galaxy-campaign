@@ -27,18 +27,51 @@ npm run dev      # development server
 npm run build    # production build
 ```
 
+## Host it for your players
+
+`server/index.mjs` is a small dependency-free Node server (Node 20+). It serves the built app and keeps the event state:
+the gamemaster's changes are saved on the server and appear on every player's screen within a moment, no reload needed.
+It checks the gamemaster password itself, and the text of any section you have hidden (and anything about hidden planets) is
+stripped before the event is sent to players.
+
+```bash
+npm install
+npm run build
+GM_PASSWORD="pick-something" npm run serve     # http://localhost:3000
+```
+
+Or with Docker (state is kept in a volume, so it survives restarts and rebuilds):
+
+```bash
+echo 'GM_PASSWORD=pick-something' > .env
+docker compose up -d --build
+```
+
+Settings (environment variables): `GM_PASSWORD` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (`./data`, holds
+`state.json`), `DIST_DIR` (`./dist`). To back up an event, copy `state.json`.
+
+**Reaching it from outside your home.** Players need a public https address (https is also required to install the app on a
+phone). The easiest options that need no router changes: a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+(`cloudflared tunnel --url http://localhost:3000` for a quick temporary address) or Tailscale Funnel. Then send players the link;
+they choose Player, type a callsign and they are in.
+
+For development run `npm run serve` (with a `GM_PASSWORD`) and `npm run dev` side by side; the dev server proxies `/api`.
+
 ## Known limits
 
-- **Everything is saved in the browser on one device.** Settings are not shared between devices yet.
-- **The logins are only a door sign.** The gamemaster password is `admin`, set in `src/auth.ts`. It sits in the code, so it
-  protects nothing until the live-event server exists. Hidden and locked content is not truly hidden from a determined player.
+- **There are no accounts.** Players are just a typed callsign (two people can use the same one), and there is one shared
+  gamemaster password. Anyone with the link can enter as a player.
+- **Hidden things are hidden from the network, not from the app's built-in text.** The server never sends the text you wrote
+  in hidden sections, but the app's built-in lore for every planet ships inside the page, so it can be read by a determined player.
+- **One gamemaster at a time.** Two gamemaster tabs open at once will overwrite each other's changes.
+- **The first gamemaster to log in publishes the event.** If the server has no saved event yet, whatever is saved in that
+  gamemaster's browser becomes the event.
 
 ## Roadmap
 
-1. A small live-event server that holds the event state, checks the gamemaster password, and sends players only what they may see.
-2. Live battlezone claiming.
-3. Organiser tools to place sectors and planets and upload battlezone layouts.
-4. Army builders for 40K and 30K.
+1. Live battlezone claiming.
+2. Organiser tools to place sectors and planets and upload battlezone layouts.
+3. Army builders for 40K and 30K.
 
 ## Built with
 

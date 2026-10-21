@@ -8,7 +8,8 @@ const base = process.env.BASE_PATH ?? '/'
 // https://vite.dev/config/
 export default defineConfig({
   base,
-  server: { host: true },
+  // `npm run dev` proxies /api to the live-event server (`npm run serve`)
+  server: { host: true, proxy: { '/api': 'http://localhost:3000' } },
   plugins: [
     react(),
     VitePWA({
@@ -32,6 +33,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg}'],
+        navigateFallbackDenylist: [/^\/api\//], // the service worker must never answer API calls with index.html
       },
       devOptions: { enabled: true },
     }),
