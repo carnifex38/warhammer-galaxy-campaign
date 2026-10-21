@@ -706,6 +706,6 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-force, .bld-force.depth1, .bld-force.depth2 { border-left: 2px solid #6f86e6; }
 .bld-force > .bld-force, .bld-force > .bld-force.depth1, .bld-force > .bld-force.depth2 { border-left: 0; }
 
-/* every other column a touch lighter, as one unbroken band from the headings to the last line (the weapon names and notes sit on top of it) */
-.bld-stats table { background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / var(--cols, 1)), rgba(255, 255, 255, 0.05) calc(100% / var(--cols, 1)), rgba(255, 255, 255, 0.05) calc(200% / var(--cols, 1))); }
-.bld-stats thead th, .bld-stats tr.stat-name td, .bld-stats tr.stat-notes td { background: transparent; }
+/* every other column a touch lighter, so a row of numbers is easy to follow */
+.bld-stats thead th:nth-child(even) { background: #232834; }
+.bld-stats tr.stat-vals td:nth-child(even) { background: rgba(255, 255, 255, 0.045); }
