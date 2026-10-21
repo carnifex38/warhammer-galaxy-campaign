@@ -84,6 +84,8 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   useEffect(() => { onSelect?.({ sector: sectorId, planet: planetId, table: tableId }) }, [sectorId, planetId, tableId]) // eslint-disable-line react-hooks/exhaustive-deps
   // the list row the pointer is over; the matching sector / planet lights up in 3D
   const [hover, setHover] = useState<{ kind: 'sector' | 'planet'; id: string } | null>(null)
+  // the battlezone row the pointer is over: a targeting reticle settles on its spot on the planet
+  const [hoverZone, setHoverZone] = useState<string | null>(null)
 
   // on wide screens the information window sits over the left of the map and the view glides to make room
   const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1000px)').matches)
@@ -114,6 +116,8 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   // a restricted planet, or one whose battlezones are not revealed, shows no battlezones
   const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
+  // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
+  const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name } : null })()
 
   /** Battlezones counted for a sector: only planets in play whose battlezones the host has revealed. */
   const sectorCounts = (s: Sector) => {
@@ -219,6 +223,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         onClear={goGalaxy}
         hoverSectorId={hover?.kind === 'sector' ? hover.id : null}
         hoverPlanetId={hover?.kind === 'planet' ? hover.id : null}
+        hoverZone={zoneFx}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
@@ -326,7 +331,13 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
               <ul className="list">
                 {planetTables.map((t) => (
                   <li key={t.id} className="with-info">
-                    <button onClick={() => selectTable(t.id)}>
+                    <button
+                      onClick={() => selectTable(t.id)}
+                      onMouseEnter={() => setHoverZone(t.id)}
+                      onMouseLeave={() => setHoverZone(null)}
+                      onFocus={() => setHoverZone(t.id)}
+                      onBlur={() => setHoverZone(null)}
+                    >
                       <span>{t.name} <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em></span>
                       <small>{t.note}</small>
                     </button>

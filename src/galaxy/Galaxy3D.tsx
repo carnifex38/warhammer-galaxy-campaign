@@ -6,10 +6,11 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { sliced } from '../idle'
 import { SkyNebula } from './Nebula'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
+import { ZoneReticle } from './ZoneReticle'
 import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial } from './PlanetBody'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
-import type { Era } from './planetLooks'
+import { lookNameFor, type Era } from './planetLooks'
 import { GALAXY_BOX, bbox, isHulkId, openCount, sectorCenter, toWorld, type Planet, type Sector } from './data'
 
 export interface PlanetInfo { enabled: boolean; open: number; total: number; zonesHidden?: boolean }
@@ -24,6 +25,8 @@ interface Props {
   /** A sector / planet the user is pointing at in the side list; highlighted in 3D. */
   hoverSectorId: string | null
   hoverPlanetId: string | null
+  /** The battlezone being pointed at (or open) on the selected planet: a targeting reticle settles on its spot. */
+  hoverZone?: { id: string; name: string } | null
   /** 40K (Dark Imperium) or 30K (Horus Heresy). */
   era: Era
   /** The host's setup for every planet: in play or closed, and its table counts. */
@@ -952,9 +955,12 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
 /** One unit sphere shared by every planet dot (sized by scale), so picking a planet does not rebuild a hundred little spheres. */
 const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
 
-function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, onSelect }: {
-  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; onSelect: () => void
+function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, zone, onSelect }: {
+  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string } | null; onSelect: () => void
 }) {
+  // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
+  const look = lookNameFor(p.name, era)
+  const roundWorld = !isHulkId(p.id) && look !== 'rock' && look !== 'shattered'
   return (
     <group position={[p.x, 0.12, p.z]}>
       {/* big invisible target so fingers can hit it */}
@@ -969,6 +975,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
           <PlanetBody name={p.name} era={era} position={[0, 0, 0]} />
+          {roundWorld && <ZoneReticle zone={zone} />}
         </Arrive>
       ) : (
         <FadeWithBackdrop>
@@ -1168,7 +1175,7 @@ function Later({ ms, children }: { ms: number; children: ReactNode }) {
 
 // ---------- scene ----------
 
-function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
+function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, hoverZone, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
   const sector = SECTORS.find((s) => s.id === sectorId)
   const planet = sector?.planets.find((p) => p.id === planetId)
   const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height))
@@ -1237,6 +1244,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
                 hot={p.id === hoverPlanetId}
                 enabled={planetInfo[p.id]?.enabled !== false}
                 selectable
+                zone={p.id === planetId ? hoverZone ?? null : null}
                 onSelect={() => onSelectPlanet(s.id, p.id)}
               />
             ))}
