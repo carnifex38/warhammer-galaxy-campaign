@@ -5,8 +5,8 @@ import { DEV_TOOLS, type AuthApi, type Role } from './auth'
 // without a password, from the top-right corner of the login screen, and flip between them from the top bar.
 //
 // It is for LOCAL testing only: a dev gamemaster has no server token, so it can look at and change this browser's own
-// settings but can never change the shared event on a live server. It is switched off in the published site
-// (it only exists when DEV_TOOLS is true: the dev server, or a build made with VITE_DEV_TOOLS=true).
+// settings but can never change the shared event on a live server. On the published site the DEV button is hidden unless
+// the address ends in `?dev` (see DEV_TOOLS in src/auth.ts), so a tester opens that link once and his browser remembers it.
 //
 // TO REMOVE IT LATER: delete this file, then delete the lines marked DEV-TOOLS in src/auth.ts, src/LoginScreen.tsx,
 // src/App.tsx and the "Dev tools" block at the end of src/index.css.

@@ -11,8 +11,22 @@ export type Role = 'guest' | 'player' | 'gm'
 
 export interface Session { role: Role; name: string; /** gamemaster only: proves the server accepted the password */ token?: string; dev?: boolean /* DEV-TOOLS */ }
 
-/** DEV-TOOLS: the developer shortcuts exist only in the dev server (or a build made with VITE_DEV_TOOLS=true), never in the published site. */
-export const DEV_TOOLS = import.meta.env.DEV || import.meta.env.VITE_DEV_TOOLS === 'true'
+/**
+ * DEV-TOOLS: the developer shortcuts are on in the dev server, in a build made with VITE_DEV_TOOLS=true, and in any browser
+ * that has opened the site once with `?dev` on the end of the address (remembered on that browser; `?dev=off` forgets it).
+ * On the published site nobody sees the DEV button without that link.
+ */
+function devLink(): boolean {
+  try {
+    const p = new URLSearchParams(location.search).get('dev')
+    if (p === 'off') localStorage.removeItem('galaxy-dev-link')
+    else if (p !== null) localStorage.setItem('galaxy-dev-link', '1')
+    return p !== 'off' && localStorage.getItem('galaxy-dev-link') === '1'
+  } catch {
+    return false
+  }
+}
+export const DEV_TOOLS = import.meta.env.DEV || import.meta.env.VITE_DEV_TOOLS === 'true' || devLink()
 
 const KEY = 'galaxy-session'
 
