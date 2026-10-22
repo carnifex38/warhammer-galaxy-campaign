@@ -78,17 +78,17 @@ const FRAG = /* glsl */ `
   // one shot hitting the shield: a flash, a ripple running out, and lightning crawling over the shell
   // (returns x = flash, y = ripple, z = lightning; written without an early return, which some graphics cards get wrong)
   vec3 strike(vec4 hit, vec3 p) {
-    float on = step(0.0, hit.w) * step(uTime - hit.w, 1.8);
+    float on = step(0.0, hit.w) * step(uTime - hit.w, 2.4);
     float age = clamp(uTime - hit.w, 0.0, 2.0);
     float d = acos(clamp(dot(p, hit.xyz), -1.0, 1.0));
     // every part fades IN first and then OUT: nothing pops on or snaps off
-    float fadeIn = smoothstep(0.0, 0.14, age);
-    float flashEnv = fadeIn * (1.0 - smoothstep(0.14, 0.75, age));
+    float fadeIn = smoothstep(0.0, 0.3, age);
+    float flashEnv = fadeIn * (1.0 - smoothstep(0.3, 1.3, age));
     float flash = exp(-d * d / 0.008) * flashEnv;
-    float ripple = exp(-sq((d - age * 0.45) / 0.06)) * smoothstep(0.0, 0.2, age) * (1.0 - smoothstep(0.5, 1.7, age));
+    float ripple = exp(-sq((d - age * 0.45) / 0.06)) * smoothstep(0.0, 0.35, age) * (1.0 - smoothstep(0.8, 2.3, age));
     // lightning: thin branching electric veins that crawl out from the hit, quickly, then die away
-    float reach = min(0.5, age * 3.0 + 0.06);
-    float life = smoothstep(0.0, 0.1, age) * (1.0 - smoothstep(0.15, 0.95, age));
+    float reach = min(0.45, age * 1.6 + 0.06);
+    float life = smoothstep(0.0, 0.3, age) * (1.0 - smoothstep(0.35, 1.5, age));
     vec3 q = p * 24.0 + vec3(hit.w * 3.1, hit.w * 1.7, 5.0);
     float f1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 12.0);
     float f2 = pow(1.0 - abs(noise3(q * 2.1 + 7.0) * 2.0 - 1.0), 12.0);
@@ -120,7 +120,7 @@ const FRAG = /* glsl */ `
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
     float edgeLine = exp(-sq((ang - e) / 0.075)) * (0.4 + 0.35 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
     float edgeGlow = exp(-sq((ang - e) / 0.2)) * 0.2;
-    float front = exp(-sq((ang - e) / 0.05)) * (1.0 - prog) * 1.2;
+    float front = exp(-sq((ang - e) / 0.07)) * (1.0 - prog) * 0.55;
 
     // faint energy veins drifting through the glass, and a soft sheen
     vec3 q = p * 5.0 + vec3(uTime * 0.05, uSeed, -uTime * 0.04);
@@ -139,7 +139,7 @@ const FRAG = /* glsl */ `
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
-    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.8 + bolts * 0.9) * inside + (edgeLine + edgeGlow + front) * outer;
+    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.55 + bolts * 0.6) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
     gl_FragColor = vec4(col * a, a);
@@ -241,7 +241,7 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
       ;[U.uHit0, U.uHit1, U.uHit2][h.slot % 3].value.set(tmp.a.x, tmp.a.y, tmp.a.z, now / slow)
       h.slot++
       h.last = now / slow
-      h.next = now + (prog < 1 ? 0.12 + Math.random() * 0.14 : 1.2 + Math.random() * 1.8)
+      h.next = now + (prog < 1 ? 0.7 + Math.random() * 0.4 : 2.6 + Math.random() * 2.4)
     }
 
     // the label: visible while its spot faces the viewer, like the reticle's; it arrives as the dome finishes
