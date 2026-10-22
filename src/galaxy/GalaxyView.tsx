@@ -135,8 +135,6 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
     const team: 'A' | 'B' = a.length > b.length ? 'A' : 'B'
     return { team, at: Math.max(...shieldZones.map((z) => z.at)), count: Math.max(a.length, b.length) }
   })()
-  // every battlezone picked and split evenly: nobody controls the planet, so it has no planet shield at all
-  const tied = shieldOn && planetTables.length > 0 && shieldZones.length === planetTables.length && shieldZones.filter((z) => z.team === 'A').length === shieldZones.filter((z) => z.team === 'B').length
   const heldBy = shieldOn && shieldZones.length === planetTables.length && planetTables.length > 0 && shieldZones.every((z) => z.team === shieldZones[0].team) ? shieldZones[0].team : null
   // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
   const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name, live: isLive(z) } : null })()
@@ -249,7 +247,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
         shieldZones={shieldZones}
         shieldTotal={planetTables.length}
-        shieldMajority={shieldOn ? { team: majority?.team ?? null, at: majority?.at ?? 0, active: shieldZones.length > 0 && !tied } : null}
+        shieldMajority={majority ? { team: majority.team, at: majority.at, active: true } : null} // only once every zone is picked and one team has more
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
