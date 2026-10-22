@@ -6,6 +6,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PLANET_VERT, REAL_FRAG, HERO_HEAD, HERO_TAIL, HERO_BODIES } from './planetShaders'
 import { PlanetBake, canBake, liteFragmentFor } from './planetBake'
+import { configureSurfaces, useSurface, wantSurface } from './planetSurfaces'
 import BaalMoons from './BaalMoons'
 import CadiaPylons from './CadiaPylons'
 import MacraggeOrbit from './MacraggeOrbit'
@@ -98,6 +99,16 @@ function makePlanetUniforms(name: string, era: Era) {
   }
 }
 
+// the surface store makes uniforms and looks up the world's kind through these
+configureSurfaces({ makeUniforms: (name, era) => makePlanetUniforms(name, era as Era), heroOf: (name, era) => lookFor(name, era as Era).hero })
+
+/** Is this world a baked sphere (not a space hulk, a floating rock or a shattered field)? */
+export function isBakedWorld(name: string, era: Era): boolean {
+  if (isHulkName(name)) return false
+  const k = lookNameFor(name, era)
+  return k !== 'rock' && k !== 'shattered'
+}
+
 /** One planet from each kind of shader, used to compile everything in the background at startup. */
 export const WARMUP_PLANETS: { label: string; name: string; era: Era }[] = [
   { label: 'Terra', name: 'Terra', era: '40k' },
@@ -134,15 +145,11 @@ export function createWarmupMaterial(name: string, era: Era) {
  * material must be kept alive, or the renderer drops the compiled program again.
  */
 export async function warmBake(gl: THREE.WebGLRenderer, name: string, era: Era): Promise<THREE.Material> {
-  const b = new PlanetBake(gl, makePlanetUniforms(name, era), lookFor(name, era).hero, true)
+  const b = new PlanetBake(gl, makePlanetUniforms(name, era), lookFor(name, era).hero, [1, 1])
   await b.compile()
   b.disposeSurface()
   return b.programMaterial
 }
-
-/** Surfaces already baked, newest last; the oldest are freed so a long session does not fill the graphics memory. */
-const bakedCache = new Map<string, PlanetBake>()
-const BAKED_KEEP = 3
 
 /** Dev only: `?direct` draws with the full shader on every frame, as before baking, to compare the looks. */
 const DIRECT = import.meta.env.DEV && new URLSearchParams(location.search).has('direct')
@@ -160,33 +167,11 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
   const hero = lookFor(name, era).hero
   const bakes = !DIRECT && canBake(gl)
 
-  // The surface is baked into textures once, a band of rows per frame (see planetBake.ts); until it is done a plain placeholder
-  // globe is shown. A card that cannot draw into float textures falls back to the full shader below.
-  const bakeKey = `${name}|${era}`
-  const [baked, setBaked] = useState<PlanetBake | null>(() => bakedCache.get(bakeKey) ?? null)
-  const [, setVersion] = useState(0) // a sharper stage of the baked surface is ready
-  const working = useRef<{ bake: PlanetBake; compiled: boolean } | null>(null)
-  useEffect(() => {
-    if (!bakes) return
-    const hit = bakedCache.get(bakeKey)
-    if (hit) { bakedCache.delete(bakeKey); bakedCache.set(bakeKey, hit); setBaked(hit); return }
-    setBaked(null)
-    let live = true
-    const bake = new PlanetBake(gl, planetUniforms, hero)
-    const job = { bake, compiled: false }
-    working.current = job
-    void (async () => {
-      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))) // let the placeholder draw first
-      if (!live) return
-      try { await bake.compile() } catch { /* it will compile when first drawn instead */ }
-      if (live) job.compiled = true
-    })()
-    return () => {
-      live = false
-      if (working.current === job) working.current = null
-      if (!bake.done) { bake.disposeSurface(); bake.disposeWork() }
-    }
-  }, [bakes, bakeKey, gl, planetUniforms, hero])
+  // The planet is drawn from baked textures (see planetSurfaces.ts): the soft surface baked for every planet in the background, then
+  // a sharper one baked once this planet is picked. Until there is any surface a plain placeholder globe is shown. A card that cannot
+  // draw into float textures falls back to the full shader below.
+  const baked = useSurface(name, era)
+  useEffect(() => (bakes ? wantSurface(name, era) : undefined), [bakes, name, era])
 
   // Without baking: if this planet's shader has not been compiled yet, show a plain placeholder globe straight away and compile the
   // real one in the background (off the main thread where the browser can), then swap it in. Nothing waits on the compile.
@@ -227,22 +212,6 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
   }, [name, era])
 
   useFrame((s, dt) => {
-    const job = working.current
-    if (job && job.compiled && !job.bake.done) {
-      const before = job.bake.version
-      job.bake.step()
-      if (job.bake.version !== before) { setBaked(job.bake); setVersion(job.bake.version) }
-      if (job.bake.done) {
-        bakedCache.set(bakeKey, job.bake)
-        while (bakedCache.size > BAKED_KEEP) {
-          const [oldKey, old] = bakedCache.entries().next().value as [string, PlanetBake]
-          bakedCache.delete(oldKey)
-          old.disposeSurface()
-          old.disposeWork()
-        }
-        working.current = null
-      }
-    }
     planetUniforms.uTime.value = s.clock.elapsedTime
     if (spin.current) {
       if (!FROZEN) spin.current.rotation.y += dt * 0.1
@@ -262,9 +231,8 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
   // Mars is tilted on its axis, so the equatorial shipyard ring shows as an open ellipse
   const tilt: [number, number, number] = hero === 2 ? [0.6, 0, 0.3] : [0, 0, 0]
   const liteUniforms = useMemo(() => {
-    const sf = baked?.surface
-    return sf ? { ...planetUniforms, tA: { value: sf.a }, tB: { value: sf.b }, tC: { value: sf.c }, tD: { value: sf.d } } : null
-  }, [baked, baked?.version, planetUniforms])
+    return baked ? { ...planetUniforms, tA: { value: baked.a }, tB: { value: baked.b }, tC: { value: baked.c }, tD: { value: baked.d } } : null
+  }, [baked, planetUniforms])
 
   return (
     <group position={position}>
@@ -275,7 +243,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
           {bakes && liteUniforms ? (
             <mesh geometry={geometry} renderOrder={5}>
               <shaderMaterial
-                key={`lite${hero}-${bakeKey}`}
+                key={`lite${hero}-${era}`}
                 uniforms={liteUniforms}
                 vertexShader={PLANET_VERT}
                 fragmentShader={withArriveFade(liteFragmentFor(hero))}

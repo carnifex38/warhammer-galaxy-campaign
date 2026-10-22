@@ -7,8 +7,9 @@ import { sliced } from '../idle'
 import { SkyNebula } from './Nebula'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
-import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, markShaderReady, warmBake } from './PlanetBody'
+import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
+import { attachSurfaces, setPrebake, setPrebakeAllowed, tickSurfaces } from './planetSurfaces'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
@@ -1138,6 +1139,7 @@ function Warmup() {
         return
       }
 
+      let slowed = false
       const holder = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 4))
       holder.frustumCulled = false
       holder.layers.set(5) // compiled but never drawn: drawing it while it compiles makes the browser wait for the compile to finish (a multi-second freeze)
@@ -1161,15 +1163,37 @@ function Warmup() {
         if (performance.now() - c0 > 2500) {
           try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
           console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
+          slowed = true
           break
         }
         setLoad({ done: 2 + i })
       }
       setLoad({ done: total, label: 'Ready' })
+      // a quick graphics card that compiled everything easily can also bake every planet quietly in the background
+      setPrebakeAllowed(!slowed && canBake(gl))
       if (import.meta.env.DEV) console.info(`[galaxy] background compile: ${Math.round(performance.now() - t0)} ms, ${gl.info.programs?.length ?? '?'} programs`)
     })()
   }, [gl, scene, camera])
 
+  return null
+}
+
+/**
+ * Bakes planet surfaces (see planetSurfaces.ts): one small band per frame, the planets of the sector you are looking at first, and
+ * only while you are not moving around.
+ */
+function BakeScheduler({ sectors, sectorId, era }: { sectors: Sector[]; sectorId: string | null | undefined; era: Era }) {
+  const gl = useThree((s) => s.gl)
+  useEffect(() => { if (canBake(gl)) attachSurfaces(gl) }, [gl])
+  useEffect(() => {
+    if (!canBake(gl)) return
+    const list: { name: string; era: string }[] = []
+    for (const s of [...sectors].sort((a, b) => Number(b.id === sectorId) - Number(a.id === sectorId))) {
+      for (const p of s.planets) if (isBakedWorld(p.name, era)) list.push({ name: p.name, era })
+    }
+    setPrebake(list)
+  }, [gl, sectors, sectorId, era])
+  useFrame(() => tickSurfaces())
   return null
 }
 
@@ -1238,6 +1262,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
     <>
       <color attach="background" args={['#05060d']} />
       <Warmup />
+      <BakeScheduler sectors={SECTORS} sectorId={sectorId} era={era} />
       <DimOverlay dimmed={!!sector} />
       <SkyNebula era={era} />
       <Stars era={era} />

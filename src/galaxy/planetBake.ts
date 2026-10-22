@@ -237,46 +237,39 @@ export function canBake(gl: THREE.WebGLRenderer): boolean {
 
 export interface BakedSurface { a: THREE.Texture; b: THREE.Texture; c: THREE.Texture; d: THREE.Texture }
 
-/** Quick and soft first, then sharper: the planet shows after the first stage and is refined in the background. */
-const STAGES: [number, number][] = [[512, 256], [1024, 512]]
-
-/** If the next stage (4x the work of the one just finished) would take longer than this on the graphics card, it is skipped. */
-const MAX_NEXT_STAGE_MS = 12000
+/** The two sizes planets are baked at: every planet gets the soft one in the background; the one you pick gets the sharp one. */
+export const SIZE_LOW: [number, number] = [512, 256]
+export const SIZE_HIGH: [number, number] = [1024, 512]
 
 /** The textures of one stage (and the second set that holds the full-night glow of a hero world). */
 interface Targets { main: THREE.WebGLRenderTarget; night: THREE.WebGLRenderTarget | null; w: number; h: number }
 
 /**
- * One planet's surface being baked. Call `compile()` once, then `step()` every frame until `done`. Each step draws a band of
- * rows sized to take a few milliseconds on this graphics card. `surface` appears after the first stage and is replaced by a
- * sharper one after each later stage (`version` counts the replacements).
+ * One planet's surface being baked, at one size. Call `compile()` once, then `step()` every frame until `done`. Each step draws a
+ * band of rows sized to take a few milliseconds on this graphics card; `surface` is the finished set of textures.
  */
 export class PlanetBake {
   done = false
   surface: BakedSurface | null = null
-  version = 0
   private readonly gl: THREE.WebGLRenderer
   private readonly isHero: boolean
-  private readonly stages: [number, number][]
+  private readonly size: [number, number]
   private readonly material: THREE.ShaderMaterial
   private readonly scene = new THREE.Scene()
   private readonly camera = new THREE.Camera()
   private readonly opts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false }
-  private work: Targets // the stage being drawn
-  private shown: Targets | null = null // the stage on show
-  private stage = 0
+  private work: Targets
   private pass = 0
   private y = 0
   private rows = 2
-  private stageGpuMs = 0
   private readonly probe = new Uint16Array(4)
 
-  /** `tiny`: a single 1x1 stage, only to get the program compiled ahead of time. */
-  constructor(gl: THREE.WebGLRenderer, uniforms: Record<string, { value: unknown }>, hero: number, tiny = false) {
+  /** `size`: the texture size; 1x1 is only used to get the program compiled ahead of time. */
+  constructor(gl: THREE.WebGLRenderer, uniforms: Record<string, { value: unknown }>, hero: number, size: [number, number] = SIZE_LOW) {
     this.gl = gl
     this.isHero = hero > 0 && !!HERO_BODIES[hero]
-    this.stages = tiny ? [[1, 1]] : STAGES
-    this.work = this.makeTargets(this.stages[0])
+    this.size = size
+    this.work = this.makeTargets(this.size)
     this.material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       uniforms: { ...uniforms, uOct: { value: 6 }, uNight: { value: 0 }, uPass: { value: 0 }, uTime: { value: 0 } },
@@ -336,7 +329,6 @@ export class PlanetBake {
     gl.setRenderTarget(prevTarget)
     gl.autoClear = prevAuto
     const took = Math.max(0.5, performance.now() - ts)
-    this.stageGpuMs += took
     this.rows = Math.max(1, Math.min(160, Math.round(rows * Math.min(1.6, Math.max(0.4, 8 / took)))))
 
     this.y += rows
@@ -345,22 +337,9 @@ export class PlanetBake {
     this.pass++
     if (this.pass < (this.isHero ? 2 : 1)) return
 
-    // a stage is finished: put it on show, free the one it replaces, and go on to a sharper one if the card is quick enough
     const t = this.work.main.textures
     this.surface = { a: t[0], b: t[1], c: t[2], d: this.work.night ? this.work.night.texture : t[3] }
-    this.version++
-    this.dispose(this.shown)
-    this.shown = this.work
-    this.pass = 0
-    this.stage++
-    const slow = this.stageGpuMs * 4 > MAX_NEXT_STAGE_MS
-    if (this.stage >= this.stages.length || slow) {
-      this.done = true
-      return
-    }
-    this.stageGpuMs = 0
-    this.rows = Math.max(1, Math.round(this.rows / 4))
-    this.work = this.makeTargets(this.stages[this.stage])
+    this.done = true
   }
 
   private dispose(t: Targets | null) {
@@ -374,9 +353,7 @@ export class PlanetBake {
   }
 
   disposeSurface() {
-    this.dispose(this.shown)
-    if (this.work !== this.shown) this.dispose(this.work)
-    this.shown = null
+    this.dispose(this.work)
   }
 
   /** Keep the compiled program alive in the renderer's cache (see the warm-up). */
