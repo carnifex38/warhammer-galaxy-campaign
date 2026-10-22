@@ -123,6 +123,16 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   // DEV-TOOLS: battlezones a team has captured get a void shield (only on the planets the test is switched on for)
   const shieldOn = DEV_TOOLS && !!planet && SHIELD_TEST_PLANETS.has(planet.name)
   const shieldZones = shieldOn ? planetTables.filter((t) => winners[t.id]).map((t) => ({ id: t.id, name: t.name, team: winners[t.id].team, at: winners[t.id].at })) : []
+  // a team holds a MAJORITY of the planet's battlezones: a shield covers the whole planet (since its Nth capture, N = the majority)
+  const majority = (() => {
+    if (!shieldOn || planetTables.length === 0) return null
+    for (const team of ['A', 'B'] as const) {
+      const mine = shieldZones.filter((z) => z.team === team).map((z) => z.at).sort((a, b) => a - b)
+      const need = Math.floor(planetTables.length / 2) + 1
+      if (mine.length >= need) return { team, at: mine[need - 1], count: mine.length }
+    }
+    return null
+  })()
   const heldBy = shieldOn && shieldZones.length === planetTables.length && planetTables.length > 0 && shieldZones.every((z) => z.team === shieldZones[0].team) ? shieldZones[0].team : null
   // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
   const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name, live: isLive(z) } : null })()
@@ -235,13 +245,14 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
         shieldZones={shieldZones}
         shieldTotal={planetTables.length}
+        shieldMajority={majority ? { team: majority.team, at: majority.at } : null}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
         lockedSectors={lockedIds}
         planetInfo={planetInfo}
       >
-        {heldBy && planet && <div className={`shield-banner team-${heldBy}`}>VOID SHIELDS ACTIVE · TEAM {heldBy} HOLDS {planet.name.toUpperCase()}</div>}
+        {majority && planet && <div className={`shield-banner team-${majority.team}`}>VOID SHIELD ACTIVE · TEAM {majority.team} {heldBy ? 'HOLDS' : 'CONTROLS'} {planet.name.toUpperCase()}{heldBy ? '' : ` · ${majority.count} OF ${planetTables.length}`}</div>}
         <div className="era-switch" role="group" aria-label="Era">
           <button className={shownEra === '40k' ? 'on' : ''} aria-pressed={shownEra === '40k'} onClick={() => setEra('40k')}>40K</button>
           <button className={shownEra === '30k' ? 'on' : ''} aria-pressed={shownEra === '30k'} onClick={() => setEra('30k')}>30K</button>
@@ -354,6 +365,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
                   <div className="row">
                     <button className="a" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'A'))}>All A</button>
                     <button className="b" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'B'))}>All B</button>
+                    <button className="a" onClick={() => planetTables.forEach((t, i) => setWinner(t.id, i < planetTables.length - 1 ? 'A' : 'B'))}>3A 1B</button>
                     <button onClick={() => planetTables.forEach((t) => setWinner(t.id, null))}>Clear</button>
                     <button onClick={() => window.dispatchEvent(new Event('shield-test-hit'))}>Fire shot</button>
                   </div>

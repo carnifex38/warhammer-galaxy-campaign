@@ -282,8 +282,140 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
   )
 }
 
-/** The shields of every captured battlezone on a planet. `total`: how many battlezones the planet has. */
-export function VoidShields({ zones, total }: { zones: ShieldZone[]; total: number }) {
+// ---------------------------------------------------------------------------------------------------------------------------
+// The whole-planet shield: when one team holds a MAJORITY of a planet's battlezones, a glass shell covers the entire globe in its
+// colour (the zone domes stay under it). Same look as the domes: clear glass, bright rim toward the limb, faint drifting energy veins,
+// a slow breath, and now and then a hit with a soft flash, ripple and lightning.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+export interface PlanetShieldInfo { team: 'A' | 'B'; at: number }
+
+const PLANET_SHELL = new THREE.SphereGeometry(PLANET_RADIUS, 128, 96)
+
+const GLOBE_VERT = /* glsl */ `
+  varying vec3 vObj;
+  varying vec3 vN;
+  varying vec3 vWP;
+  uniform float uProgress, uTime;
+  void main() {
+    vObj = normalize(position);
+    vN = normalize(mat3(modelMatrix) * vObj);
+    float ease = smoothstep(0.0, 1.0, uProgress);
+    float breathe = 1.0 + 0.012 * sin(uTime * 1.3);
+    vec4 wp = modelMatrix * vec4(position * (1.0 + 0.1 * ease * breathe), 1.0);
+    vWP = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`
+
+const GLOBE_FRAG = /* glsl */ `
+  varying vec3 vObj;
+  varying vec3 vN;
+  varying vec3 vWP;
+  uniform vec3 uTint, uLight;
+  uniform float uProgress, uTime, uArrive;
+  uniform vec4 uHit0, uHit1, uHit2;
+  ${NOISE3}
+
+  float sq(float x) { return x * x; }
+
+  // one hit: x = flash, y = ripple, z = lightning (no early return)
+  vec3 strike(vec4 hit, vec3 p) {
+    float on = step(0.0, hit.w) * step(uTime - hit.w, 2.4);
+    float age = clamp(uTime - hit.w, 0.0, 2.4);
+    float d = acos(clamp(dot(p, hit.xyz), -1.0, 1.0));
+    float flashEnv = smoothstep(0.0, 0.3, age) * (1.0 - smoothstep(0.3, 1.3, age));
+    float flash = exp(-d * d / 0.01) * flashEnv;
+    float ripple = exp(-sq((d - age * 0.5) / 0.07)) * smoothstep(0.0, 0.35, age) * (1.0 - smoothstep(0.8, 2.3, age));
+    float reach = min(0.4, age * 1.4 + 0.06);
+    float life = smoothstep(0.0, 0.3, age) * (1.0 - smoothstep(0.35, 1.5, age));
+    vec3 q = p * 24.0 + vec3(hit.w * 3.1, hit.w * 1.7, 5.0);
+    float f1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 12.0);
+    float f2 = pow(1.0 - abs(noise3(q * 2.1 + 7.0) * 2.0 - 1.0), 12.0);
+    float bolts = (f1 + 0.6 * f2) * (1.0 - smoothstep(reach * 0.7, reach, d)) * smoothstep(0.015, 0.05, d) * life;
+    return vec3(flash, ripple, bolts) * on;
+  }
+
+  void main() {
+    vec3 p = normalize(vObj);
+    vec3 V = normalize(cameraPosition - vWP);
+    vec3 N = normalize(vN);
+    if (dot(N, V) < 0.0) N = -N;
+    float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.6);
+    float pulse = 0.5 + 0.5 * sin(uTime * 1.3);
+
+    vec3 q = p * 4.0 + vec3(uTime * 0.05, 1.3, -uTime * 0.04);
+    float v1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 8.0);
+    float v2 = pow(1.0 - abs(noise3(q * 2.3 + 4.1) * 2.0 - 1.0), 8.0);
+    float veins = v1 * 0.7 + v2 * 0.45;
+    float spec = pow(max(dot(reflect(-normalize(uLight), N), V), 0.0), 40.0);
+    float sheen = spec * 0.5 + (0.01 + 0.07 * fr) * (0.5 + 0.5 * sin(p.y * 7.0 - uTime * 0.6));
+
+    vec3 hits = strike(uHit0, p) + strike(uHit1, p) + strike(uHit2, p);
+
+    // clear glass: only the limb, a little veining and the hits carry light
+    float rest = (0.008 + fr * 0.38 + veins * (0.03 + 0.2 * fr) + sheen) * (0.78 + 0.44 * pulse);
+    float a = (rest + hits.y * 0.07 + hits.x * 0.3 + hits.z * 0.16) * smoothstep(0.0, 1.0, uProgress);
+    a *= uArrive;
+    vec3 col = mix(uTint, vec3(1.0), clamp(0.04 + (hits.z + hits.x) * 0.7 + fr * 0.06, 0.0, 0.6));
+    gl_FragColor = vec4(col * a, a);
+  }
+`
+
+function PlanetShield({ info }: { info: PlanetShieldInfo }) {
+  const mat = useRef<THREE.ShaderMaterial>(null)
+  const hits = useRef({ next: 0.4, slot: 0 })
+  const uniforms = useMemo(() => ({
+    uTint: { value: new THREE.Vector3(...TEAM_TINT[info.team]) },
+    uLight: { value: LIGHT },
+    uProgress: { value: 1 },
+    uTime: { value: 0 },
+    uArrive: arriveFade,
+    uHit0: { value: new THREE.Vector4(0, 0, 1, -1) },
+    uHit1: { value: new THREE.Vector4(0, 0, 1, -1) },
+    uHit2: { value: new THREE.Vector4(0, 0, 1, -1) },
+  }), [info.team])
+
+  useFrame((s) => {
+    const U = mat.current?.uniforms as typeof uniforms | undefined // the material's own copy of the uniforms (see Shield)
+    if (!U) return
+    const now = s.clock.elapsedTime
+    U.uTime.value = now
+    U.uArrive.value = arriveFade.value
+    const prog = info.at ? Math.min(1, (Date.now() - info.at) / 1000 / 2.4) : 1
+    U.uProgress.value = prog
+    const h = hits.current
+    if (now >= h.next) {
+      const v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize()
+      ;[U.uHit0, U.uHit1, U.uHit2][h.slot % 3].value.set(v.x, v.y, v.z, now)
+      h.slot++
+      h.next = now + (prog < 1 ? 0.9 + Math.random() * 0.5 : 2.8 + Math.random() * 2.6)
+    }
+  })
+
+  return (
+    <mesh geometry={PLANET_SHELL} renderOrder={10} frustumCulled={false}>
+      <shaderMaterial
+        ref={mat}
+        uniforms={uniforms}
+        vertexShader={GLOBE_VERT}
+        fragmentShader={GLOBE_FRAG}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+        side={THREE.FrontSide}
+      />
+    </mesh>
+  )
+}
+
+/** The shields of every captured battlezone on a planet. `total`: how many battlezones it has. `majority`: a team holds most of them. */
+export function VoidShields({ zones, total, majority }: { zones: ShieldZone[]; total: number; majority?: PlanetShieldInfo | null }) {
   const full = zones.length > 0 && zones.length === total && zones.every((z) => z.team === zones[0].team)
-  return <>{zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} />)}</>
+  return (
+    <>
+      {zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} />)}
+      {majority && <PlanetShield key={majority.team} info={majority} />}
+    </>
+  )
 }
