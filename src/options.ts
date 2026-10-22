@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react'
 
 export type PlanetDisplay = 'dots' | 'close' | 'all'
 export type SectorHighlight = 'full' | 'reduced' | 'minimal'
+export type HoverHighlight = 'strong' | 'soft' | 'off'
 
 export interface Options {
   /** How planets look on the galaxy map: plain coloured dots, the planet's surface once you zoom in close, or always. */
@@ -12,10 +13,12 @@ export interface Options {
   hideStarfield: boolean
   /** How strongly sectors are coloured and outlined on the galaxy map. */
   sectorHighlight: SectorHighlight
+  /** How bright a sector lights up when you point at it (or at it in the list). */
+  hoverHighlight: HoverHighlight
 }
 
 const KEY = 'galaxy-options'
-const DEFAULTS: Options = { planetDisplay: 'dots', hideStarfield: false, sectorHighlight: 'full' }
+const DEFAULTS: Options = { planetDisplay: 'dots', hideStarfield: false, sectorHighlight: 'full', hoverHighlight: 'strong' }
 
 function load(): Options {
   try {
@@ -24,6 +27,7 @@ function load(): Options {
       planetDisplay: raw.planetDisplay === 'close' || raw.planetDisplay === 'all' || raw.planetDisplay === 'dots' ? raw.planetDisplay : DEFAULTS.planetDisplay,
       hideStarfield: raw.hideStarfield === true,
       sectorHighlight: raw.sectorHighlight === 'reduced' || raw.sectorHighlight === 'minimal' ? raw.sectorHighlight : 'full',
+      hoverHighlight: raw.hoverHighlight === 'soft' || raw.hoverHighlight === 'off' ? raw.hoverHighlight : 'strong',
     }
   } catch {
     return DEFAULTS

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { setOption, useOptions, type PlanetDisplay, type SectorHighlight } from './options'
+import { setOption, useOptions, type HoverHighlight, type PlanetDisplay, type SectorHighlight } from './options'
 
 type Category = 'graphics' | 'ui' | 'display'
 
@@ -19,6 +19,12 @@ const HIGHLIGHT_CHOICES: { id: SectorHighlight; label: string; note: string }[] 
   { id: 'full', label: 'Full', note: 'Sectors are coloured and outlined clearly.' },
   { id: 'reduced', label: 'Reduced', note: 'Softer colour and thinner outlines.' },
   { id: 'minimal', label: 'Minimal', note: 'Only a faint outline; the colour appears when you point at a sector.' },
+]
+
+const HOVER_CHOICES: { id: HoverHighlight; label: string; note: string }[] = [
+  { id: 'strong', label: 'Strong', note: 'A sector lights up brightly when you point at it.' },
+  { id: 'soft', label: 'Soft', note: 'A gentle glow when you point at a sector.' },
+  { id: 'off', label: 'Off', note: 'Sectors do not light up when you point at them.' },
 ]
 
 export default function OptionsView() {
@@ -49,6 +55,15 @@ export default function OptionsView() {
               <div className="options-choices" role="radiogroup" aria-label="Sector highlighting">
                 {HIGHLIGHT_CHOICES.map((c) => (
                   <button key={c.id} role="radio" aria-checked={o.sectorHighlight === c.id} className={o.sectorHighlight === c.id ? 'on' : ''} onClick={() => setOption('sectorHighlight', c.id)}>
+                    <strong>{c.label}</strong>
+                    <span>{c.note}</span>
+                  </button>
+                ))}
+              </div>
+              <h3>Highlight when pointing at a sector</h3>
+              <div className="options-choices" role="radiogroup" aria-label="Highlight when pointing">
+                {HOVER_CHOICES.map((c) => (
+                  <button key={c.id} role="radio" aria-checked={o.hoverHighlight === c.id} className={o.hoverHighlight === c.id ? 'on' : ''} onClick={() => setOption('hoverHighlight', c.id)}>
                     <strong>{c.label}</strong>
                     <span>{c.note}</span>
                   </button>

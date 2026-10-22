@@ -754,12 +754,14 @@ function DimOverlay({ dimmed }: { dimmed: boolean }) {
 function SectorZone({ s, state, hot, onSelect }: { s: Sector; state: 'idle' | 'active' | 'dim'; hot: boolean; onSelect: () => void }) {
   const [hover, setHover] = useState(false)
   const outline = useMemo(() => [...s.polygon, s.polygon[0]].map(([x, z]) => [x, 0.02, z] as [number, number, number]), [s])
-  const lit = hover || hot
+  const { hoverHighlight } = useOptions()
+  const lit = (hover || hot) && hoverHighlight !== 'off'
+  const soft = hoverHighlight === 'soft'
   // the player's option: how strongly sectors are coloured (the fill) and outlined; pointing at one always shows it clearly
   const { sectorHighlight } = useOptions()
   const fillK = lit ? 1 : sectorHighlight === 'full' ? 1 : sectorHighlight === 'reduced' ? 0.45 : 0
   const lineK = lit ? 1 : sectorHighlight === 'full' ? 1 : sectorHighlight === 'reduced' ? 0.6 : 0.35
-  const opacity = (state === 'active' ? 0.2 : lit ? 0.5 : state === 'dim' ? 0.03 : 0.1) * fillK
+  const opacity = (state === 'active' ? 0.2 : lit ? (soft ? 0.22 : 0.5) : state === 'dim' ? 0.03 : 0.1) * fillK
 
   // ShapeGeometry lives in the XY plane; rotating -90deg about X maps (x, y) to (x, -y) on the ground, so feed it -z.
   const geometry = useMemo(() => new THREE.ShapeGeometry(new THREE.Shape(s.polygon.map(([x, z]) => new THREE.Vector2(x, -z)))), [s])
@@ -777,7 +779,7 @@ function SectorZone({ s, state, hot, onSelect }: { s: Sector; state: 'idle' | 'a
       >
         <meshBasicMaterial color={s.color} transparent opacity={opacity} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <Line points={outline} color={s.color} lineWidth={(state === 'active' ? 2.5 : lit ? 4 : 1.2) * (lit ? 1 : sectorHighlight === 'full' ? 1 : 0.7)} transparent opacity={(lit ? 1 : state === 'dim' ? 0.25 : 0.85) * lineK} renderOrder={4} />
+      <Line points={outline} color={s.color} lineWidth={(state === 'active' ? 2.5 : lit ? (soft ? 2 : 4) : 1.2) * (lit ? 1 : sectorHighlight === 'full' ? 1 : 0.7)} transparent opacity={(lit ? (soft ? 0.8 : 1) : state === 'dim' ? 0.25 : 0.85) * lineK} renderOrder={4} />
     </FadeWithBackdrop>
   )
 }
