@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getMyProfile, watchState, type Army } from './api'
+import { getMyProfile, getProfile, listProfiles, watchState, type Army, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { local } from './localProfiles' // DEV-TOOLS
 
@@ -103,6 +103,28 @@ export function useClaims(auth: AuthApi) {
       }
       if (!profileToken) return
       after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}`, { method: 'DELETE' }, profileToken)).tables)
+    },
+    /** Gamemaster: the players that can be put at a battlezone. */
+    gmPlayers: async (): Promise<ProfileSummary[]> => (dev ? local.list() : listProfiles(gmToken ?? '')),
+    /** Gamemaster: one player's army lists. */
+    gmArmies: async (profileId: string): Promise<Army[]> => (dev ? (await local.get(profileId)).armies : (await getProfile(gmToken ?? '', profileId)).armies),
+    /** Gamemaster: put a player at a battlezone, or change their team or list. Works for a battlezone in play too. */
+    assign: async (tableId: string, profileId: string, team: Team, armyId: string) => {
+      if (dev) {
+        const p = await local.get(profileId)
+        const army = p.armies.find((a) => a.id === armyId)
+        if (!army) throw new Error("Pick one of that player's army lists.")
+        const m = readDev()
+        const t = m[tableId] ?? (m[tableId] = { status: 'open', seats: [] })
+        let seat = t.seats.find((x) => x.profileId === profileId)
+        if (seat) { seat.team = team; seat.armyId = armyId; seat.armyName = army.name || 'Untitled army'; seat.era = army.era; seat.pts = (army.roster as { pts?: number } | undefined)?.pts } else {
+          seat = { profileId, name: p.name, team, armyId, armyName: army.name || 'Untitled army', era: army.era, pts: (army.roster as { pts?: number } | undefined)?.pts, locked: false }
+          t.seats.push(seat)
+        }
+        if (t.status === 'in_play') seat.snapshot = JSON.parse(JSON.stringify(army))
+        writeDev(m); after(); return
+      }
+      after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}/${profileId}`, { method: 'PUT', body: JSON.stringify({ team, armyId }) }, gmToken)).tables)
     },
     /** Gamemaster: remove someone from a battlezone. */
     remove: async (tableId: string, profileId: string) => {

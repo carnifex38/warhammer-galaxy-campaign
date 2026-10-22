@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { Army, ProfileSummary } from '../api'
 import type { AuthApi } from '../auth'
 import { useMyProfile, type ClaimsApi, type Seat, type Team, type Viewing } from '../claims'
 
@@ -8,7 +9,79 @@ import { useMyProfile, type ClaimsApi, type Seat, type Team, type Viewing } from
 
 const TEAMS: Team[] = ['A', 'B']
 
-function SeatRow({ seat, mine, canRead, gm, onView, onRemove }: { seat: Seat; mine: boolean; canRead: boolean; gm: boolean; onView: () => void; onRemove: () => void }) {
+/** Gamemaster: change a seated player's team or list. The list choices are fetched when the gamemaster asks for them. */
+function GmSeatEdit({ seat, otherTeam, claims, tableId, run, busy }: { seat: Seat; otherTeam: Team; claims: ClaimsApi; tableId: string; run: (job: () => Promise<void>) => Promise<void>; busy: boolean }) {
+  const [armies, setArmies] = useState<Army[] | null>(null)
+  const [picking, setPicking] = useState(false)
+  const pickList = () => {
+    setPicking(true)
+    void claims.gmArmies(seat.profileId).then(setArmies).catch(() => setArmies([]))
+  }
+  return (
+    <div className="seat-gm">
+      <button className="ghost" disabled={busy} onClick={() => void run(() => claims.assign(tableId, seat.profileId, otherTeam, seat.armyId))}>Move to Team {otherTeam}</button>
+      {!picking ? (
+        <button className="ghost" disabled={busy} onClick={pickList}>Change list</button>
+      ) : armies === null ? (
+        <small className="muted">Loading…</small>
+      ) : armies.length === 0 ? (
+        <small className="muted">No lists</small>
+      ) : (
+        <select value={seat.armyId} disabled={busy} aria-label={`List for ${seat.name}`} onChange={(e) => void run(async () => { await claims.assign(tableId, seat.profileId, seat.team, e.target.value); setPicking(false) })}>
+          {armies.map((a) => <option key={a.id} value={a.id}>{(a.name || 'Untitled army')} · {a.era.toUpperCase()}</option>)}
+        </select>
+      )}
+    </div>
+  )
+}
+
+/** Gamemaster: put any player at this battlezone, on a team, with one of their lists. */
+function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: string; claims: ClaimsApi; seatedIds: string[]; run: (job: () => Promise<void>) => Promise<void>; busy: boolean }) {
+  const [players, setPlayers] = useState<ProfileSummary[] | null>(null)
+  const [profileId, setProfileId] = useState('')
+  const [armies, setArmies] = useState<Army[]>([])
+  const [armyId, setArmyId] = useState('')
+  const [team, setTeam] = useState<Team>('A')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open || players) return
+    void claims.gmPlayers().then(setPlayers).catch(() => setPlayers([]))
+  }, [open, players, claims])
+  useEffect(() => {
+    if (!profileId) return
+    let live = true
+    void claims.gmArmies(profileId).then((a) => { if (live) { setArmies(a); setArmyId(a[0]?.id ?? '') } }).catch(() => { if (live) setArmies([]) })
+    return () => { live = false }
+  }, [profileId, claims])
+
+  const free = (players ?? []).filter((p) => !seatedIds.includes(p.id))
+  if (!open) return <button className="ghost seat-gm-add" onClick={() => setOpen(true)}>+ Add a player</button>
+  return (
+    <div className="seat-join seat-gm-form">
+      {players === null ? <small className="muted">Loading players…</small> : free.length === 0 ? <small className="muted">Every player is already here (or none have signed up yet).</small> : (
+        <>
+          <select value={profileId} onChange={(e) => { setArmies([]); setArmyId(''); setProfileId(e.target.value) }} aria-label="Player">
+            <option value="">Choose a player…</option>
+            {free.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {profileId && (armies.length === 0 ? <small className="muted">That player has no army lists yet.</small> : (
+            <select value={armyId} onChange={(e) => setArmyId(e.target.value)} aria-label="Army list">
+              {armies.map((a) => <option key={a.id} value={a.id}>{(a.name || 'Untitled army')} · {a.era.toUpperCase()}</option>)}
+            </select>
+          ))}
+          <div className="seat-sides" role="group" aria-label="Team">
+            {TEAMS.map((t) => <button key={t} className={team === t ? 'on' : ''} aria-pressed={team === t} onClick={() => setTeam(t)}>Team {t}</button>)}
+          </div>
+          <button className="primary" disabled={busy || !profileId || !armyId} onClick={() => void run(async () => { await claims.assign(tableId, profileId, team, armyId); setProfileId(''); setArmyId(''); setArmies([]); setPlayers(null) })}>Add to Team {team}</button>
+        </>
+      )}
+      <button className="ghost" onClick={() => setOpen(false)}>Close</button>
+    </div>
+  )
+}
+
+function SeatRow({ seat, mine, canRead, gm, onView, onRemove, edit }: { seat: Seat; mine: boolean; canRead: boolean; gm: boolean; onView: () => void; onRemove: () => void; edit?: React.ReactNode }) {
   return (
     <li className="seat">
       <div className="seat-who">
@@ -17,6 +90,7 @@ function SeatRow({ seat, mine, canRead, gm, onView, onRemove }: { seat: Seat; mi
       </div>
       {canRead && !seat.missing && <button className="ghost" onClick={onView}>View list</button>}
       {gm && <button className="ghost" onClick={onRemove} aria-label={`Remove ${seat.name}`}>✕</button>}
+      {gm && edit}
     </li>
   )
 }
@@ -79,6 +153,7 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
                     gm={role === 'gm'}
                     onView={() => onView({ tableId, profileId: s.profileId, player: s.name, team: s.team, where })}
                     onRemove={() => void run(() => claims.remove(tableId, s.profileId))}
+                    edit={<GmSeatEdit seat={s} otherTeam={t === 'A' ? 'B' : 'A'} claims={claims} tableId={tableId} run={run} busy={busy} />}
                   />
                 ))}
               </ul>
@@ -86,6 +161,8 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
           )
         })}
       </div>
+
+      {role === 'gm' && <GmAddPlayer tableId={tableId} claims={claims} seatedIds={seats.map((s) => s.profileId)} run={run} busy={busy} />}
 
       {!open && <p className="muted seat-note">In play: the lists are locked as they were.</p>}
       {role === 'guest' && <p className="muted seat-note">Log in as a player to take a seat.</p>}

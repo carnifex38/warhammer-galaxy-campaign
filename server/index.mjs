@@ -339,6 +339,22 @@ async function claimsApi(req, res, path) {
       }
       return json(res, 200, { tables: claimsView() })
     }
+    if (m === 'PUT' && !list) { // gamemaster: put a player at this battlezone, or change their team or list (even once it is in play)
+      if (!who.gm) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+      const body = await readBody(req).catch(() => null)
+      if (body?.team !== 'A' && body?.team !== 'B') return json(res, 400, { error: 'Pick team A or B.' })
+      const profile = profiles[profileId]
+      if (!profile) return json(res, 404, { error: 'No such player.' })
+      const army = armyOf(profile, body?.armyId)
+      if (!army) return json(res, 400, { error: "Pick one of that player's army lists." })
+      if (Object.keys(claims).length > 2000) return json(res, 507, { error: 'Too many battlezones.' })
+      const t = claims[tableId] ?? (claims[tableId] = { status: 'open', seats: [] })
+      let seat = t.seats.find((s) => s.profileId === profileId)
+      if (seat) { seat.team = body.team; seat.armyId = body.armyId } else { seat = { profileId, team: body.team, armyId: body.armyId, claimedAt: Date.now() }; t.seats.push(seat) }
+      if (t.status === 'in_play') seat.snapshot = JSON.parse(JSON.stringify(army)) // the list is frozen as chosen
+      changed()
+      return json(res, 200, { tables: claimsView() })
+    }
     if (m === 'GET' && list) { // read a list: only through a seat, and only for signed-in players and the gamemaster
       if (!who.profile && !who.gm) return json(res, 401, { error: 'Sign in to read lists.' })
       const seat = claims[tableId]?.seats.find((s) => s.profileId === profileId)

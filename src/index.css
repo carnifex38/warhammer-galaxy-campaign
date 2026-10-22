@@ -745,3 +745,9 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .options-check input { margin-top: 3px; }
 .options-check span { display: flex; flex-direction: column; gap: 2px; }
 .options-check em { font-style: normal; font-size: 0.8rem; color: var(--muted); }
+
+/* gamemaster seat tools */
+.seat-gm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 100%; margin-top: 4px; }
+.seat-gm select { max-width: 100%; }
+.seat-gm-add { margin: 6px 0; }
+.seat-gm-form { margin: 6px 0; }
