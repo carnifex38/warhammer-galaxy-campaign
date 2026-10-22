@@ -17,8 +17,8 @@ import { zoneSpot } from './ZoneReticle'
 
 export interface ShieldZone { id: string; name: string; team: 'A' | 'B'; at: number }
 
-const TEAM_TINT: Record<'A' | 'B', [number, number, number]> = { A: [0.55, 0.85, 1.0], B: [1.0, 0.7, 0.42] }
-const TEAM_TEXT: Record<'A' | 'B', string> = { A: '#9fe0ff', B: '#ffc08f' }
+const TEAM_TINT: Record<'A' | 'B', [number, number, number]> = { A: [0.2, 0.62, 1.0], B: [1.0, 0.4, 0.14] }
+const TEAM_TEXT: Record<'A' | 'B', string> = { A: '#6fd0ff', B: '#ff9a5c' }
 const DOME_RADIUS = 0.4 // how far a dome reaches over the surface from its spot (radians), about 23 degrees
 const NETWORK_RADIUS = 0.85 // when the planet is fully held: wide enough that the domes overlap
 const POWER_UP_S = 1.8
@@ -141,7 +141,8 @@ const FRAG = /* glsl */ `
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + ripple * (0.08 + 0.15 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
-    vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
+    // mostly the team's colour; only the brightest sparks go toward white
+    vec3 col = mix(uTint, vec3(1.0), clamp(0.04 + (bolts + flash) * 0.7 + front * 0.3 + edgeLine * 0.08, 0.0, 0.6));
     gl_FragColor = vec4(col * a, a);
   }
 `
