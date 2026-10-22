@@ -131,15 +131,15 @@ const FRAG = /* glsl */ `
     float sheen = spec * 0.5 + (0.01 + 0.07 * fr) * (0.5 + 0.5 * sin(ang * 9.0 - uTime * 0.6));
 
     // shots hitting the shield: a flash, a ripple (the hexagon cells flare inside it) and lightning crawling over the shell
-    vec2 hq = vec2(dot(p, uU), dot(p, uV)) / max(c, 0.2) * 7.0;
-    float hexLine = smoothstep(0.36, 0.47, hexEdge(hexCell(hq)));
+    vec2 hq = vec2(dot(p, uU), dot(p, uV)) / max(c, 0.2) * 13.0; // smaller cells
+    float hexLine = smoothstep(0.42, 0.49, hexEdge(hexCell(hq))); // thin lines
     vec3 hits = strike(uHit0, p) + strike(uHit1, p) + strike(uHit2, p);
     float flash = hits.x, ripple = hits.y, bolts = hits.z;
 
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
-    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.55 + bolts * 0.6) * inside + (edgeLine + edgeGlow + front) * outer;
+    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
     gl_FragColor = vec4(col * a, a);
