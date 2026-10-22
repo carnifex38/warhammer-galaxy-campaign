@@ -1139,6 +1139,7 @@ function Warmup() {
 
       const holder = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 4))
       holder.frustumCulled = false
+      holder.layers.set(5) // compiled but never drawn: drawing it while it compiles makes the browser wait for the compile to finish (a multi-second freeze)
       holder.renderOrder = -10
       for (let i = 0; i < WARMUP_PLANETS.length; i++) {
         const w = WARMUP_PLANETS[i]

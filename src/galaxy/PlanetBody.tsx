@@ -758,6 +758,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
       keptMaterials.push(mat)
       const holder = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 4), mat)
       holder.frustumCulled = false
+      holder.layers.set(5) // compiled but never drawn: drawing it while it compiles makes the browser wait for the compile to finish (a multi-second freeze)
       scene.add(holder)
       try { await gl.compileAsync(scene, camera) } catch { /* it will compile when first drawn instead */ }
       scene.remove(holder)
