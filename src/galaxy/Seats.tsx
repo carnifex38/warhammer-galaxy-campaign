@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Army, ProfileSummary } from '../api'
 import type { AuthApi } from '../auth'
 import { useMyProfile, type ClaimsApi, type Seat, type Team, type Viewing } from '../claims'
@@ -39,21 +39,25 @@ function GmSeatEdit({ seat, otherTeam, claims, tableId, run, busy }: { seat: Sea
 function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: string; claims: ClaimsApi; seatedIds: string[]; run: (job: () => Promise<void>) => Promise<void>; busy: boolean }) {
   const [players, setPlayers] = useState<ProfileSummary[] | null>(null)
   const [profileId, setProfileId] = useState('')
-  const [armies, setArmies] = useState<Army[]>([])
+  const [armies, setArmies] = useState<Army[] | null>(null) // null = not loaded yet
   const [armyId, setArmyId] = useState('')
   const [team, setTeam] = useState<Team>('A')
   const [open, setOpen] = useState(false)
+  // `claims` is a new object on every render, so the effects below read it through a ref: otherwise each re-render of the page would
+  // cancel the load in flight and the lists would never arrive
+  const api = useRef(claims)
+  api.current = claims
 
   useEffect(() => {
     if (!open || players) return
-    void claims.gmPlayers().then(setPlayers).catch(() => setPlayers([]))
-  }, [open, players, claims])
+    void api.current.gmPlayers().then(setPlayers).catch(() => setPlayers([]))
+  }, [open, players])
   useEffect(() => {
     if (!profileId) return
     let live = true
-    void claims.gmArmies(profileId).then((a) => { if (live) { setArmies(a); setArmyId(a[0]?.id ?? '') } }).catch(() => { if (live) setArmies([]) })
+    void api.current.gmArmies(profileId).then((a) => { if (live) { setArmies(a); setArmyId(a[0]?.id ?? '') } }).catch(() => { if (live) setArmies([]) })
     return () => { live = false }
-  }, [profileId, claims])
+  }, [profileId])
 
   const free = (players ?? []).filter((p) => !seatedIds.includes(p.id))
   if (!open) return <button className="ghost seat-gm-add" onClick={() => setOpen(true)}>+ Add a player</button>
@@ -61,11 +65,11 @@ function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: strin
     <div className="seat-join seat-gm-form">
       {players === null ? <small className="muted">Loading players…</small> : free.length === 0 ? <small className="muted">Every player is already here (or none have signed up yet).</small> : (
         <>
-          <select value={profileId} onChange={(e) => { setArmies([]); setArmyId(''); setProfileId(e.target.value) }} aria-label="Player">
+          <select value={profileId} onChange={(e) => { setArmies(null); setArmyId(''); setProfileId(e.target.value) }} aria-label="Player">
             <option value="">Choose a player…</option>
             {free.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          {profileId && (armies.length === 0 ? <small className="muted">That player has no army lists yet.</small> : (
+          {profileId && (armies === null ? <small className="muted">Loading lists…</small> : armies.length === 0 ? <small className="muted">That player has no army lists yet.</small> : (
             <select value={armyId} onChange={(e) => setArmyId(e.target.value)} aria-label="Army list">
               {armies.map((a) => <option key={a.id} value={a.id}>{(a.name || 'Untitled army')} · {a.era.toUpperCase()}</option>)}
             </select>
@@ -73,7 +77,7 @@ function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: strin
           <div className="seat-sides" role="group" aria-label="Team">
             {TEAMS.map((t) => <button key={t} className={team === t ? 'on' : ''} aria-pressed={team === t} onClick={() => setTeam(t)}>Team {t}</button>)}
           </div>
-          <button className="primary" disabled={busy || !profileId || !armyId} onClick={() => void run(async () => { await claims.assign(tableId, profileId, team, armyId); setProfileId(''); setArmyId(''); setArmies([]); setPlayers(null) })}>Add to Team {team}</button>
+          <button className="primary" disabled={busy || !profileId || !armyId} onClick={() => void run(async () => { await claims.assign(tableId, profileId, team, armyId); setProfileId(''); setArmyId(''); setArmies(null); setPlayers(null) })}>Add to Team {team}</button>
         </>
       )}
       <button className="ghost" onClick={() => setOpen(false)}>Close</button>
