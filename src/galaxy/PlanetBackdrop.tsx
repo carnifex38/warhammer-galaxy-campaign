@@ -75,7 +75,7 @@ function layerStars() {
   return { positions, colors }
 }
 
-export function PlanetBackdrop({ planetId, era, anchor }: { planetId: string | null; era: Era; anchor: [number, number, number] | null }) {
+export function PlanetBackdrop({ planetId, era, anchor, hidden = false }: { planetId: string | null; era: Era; anchor: [number, number, number] | null; hidden?: boolean }) {
   const layersMat = useRef<THREE.PointsMaterial>(null)
   const layersPts = useRef<THREE.Points>(null)
   const lastAnchor = useRef<[number, number, number]>([0, 0, 0])
@@ -100,7 +100,7 @@ export function PlanetBackdrop({ planetId, era, anchor }: { planetId: string | n
     if (!g) return
     const dist = controls ? camera.position.distanceTo(controls.target) : 0
     // with a planet picked: full black when close, thinning out as the camera pulls away
-    const want = planetId ? 1 - smoothstep(FADE_FROM, FADE_TO, dist) : 0
+    const want = planetId && !hidden ? 1 - smoothstep(FADE_FROM, FADE_TO, dist) : 0 // `hidden`: the player chose to keep the galaxy in view
     level.current += (want - level.current) * Math.min(1, dt * 6)
     const o = level.current
     backdropLevel.v = o

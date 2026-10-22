@@ -360,6 +360,9 @@ export default function PlanetBody({ name, era, position, surface }: { name: str
   return <SpherePlanet name={name} era={era} position={position} surface={surface} />
 }
 
+/** A lighter sphere for the many small planets on the map. */
+const LOD_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 40, 28)
+
 /**
  * A small textured planet for the galaxy map: as the camera comes close to a planet's dot, the dot gives way to the planet's soft
  * baked surface (see planetSurfaces.ts), lit like the big one. Far away it is not drawn at all, so zoomed out the map keeps its
@@ -406,7 +409,7 @@ export function PlanetLod({ name, era, radius, far = 12, near = 6, getFade }: { 
   return (
     <group ref={group} visible={false}>
       <group ref={spin}>
-        <mesh geometry={PLANET_GEOMETRY} renderOrder={3}>
+        <mesh geometry={LOD_GEOMETRY} renderOrder={3}>
           <shaderMaterial
             ref={mat}
             key={`lod${hero}-${era}`}

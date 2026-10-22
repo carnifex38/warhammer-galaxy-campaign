@@ -9,6 +9,7 @@ import { ZoneReticle } from './ZoneReticle'
 import { VoidShields, type PlanetShieldInfo, type ShieldZone } from './VoidShields'
 import PlanetBody, { PlanetLod, PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
+import { useOptions } from '../options'
 import { attachSurfaces, setPrebake, setPrebakeAllowed, tickSurfaces } from './planetSurfaces'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
@@ -968,6 +969,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
   p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
+  const { planetDisplay } = useOptions()
   const look = lookNameFor(p.name, era)
   const roundWorld = !isHulkId(p.id) && look !== 'rock' && look !== 'shattered'
   return (
@@ -995,7 +997,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
             </mesh>
           )}
           {/* zoomed in close, the dot gives way to the planet's own surface */}
-          {roundWorld && enabled && <PlanetLod name={p.name} era={era} radius={0.24} getFade={() => 1 - (1 - OTHERS_LEFT) * backdropLevel.v} />}
+          {roundWorld && enabled && planetDisplay !== 'dots' && <PlanetLod name={p.name} era={era} radius={0.24} {...(planetDisplay === 'all' ? { far: 1e6, near: 1e5 } : {})} getFade={() => 1 - (1 - OTHERS_LEFT) * backdropLevel.v} />}
           {hot && (
             <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
               <ringGeometry args={[0.55, 0.68, 48]} />
@@ -1191,15 +1193,17 @@ function Warmup() {
  */
 function BakeScheduler({ sectors, sectorId, era }: { sectors: Sector[]; sectorId: string | null | undefined; era: Era }) {
   const gl = useThree((s) => s.gl)
+  const { planetDisplay } = useOptions()
   useEffect(() => { if (canBake(gl)) attachSurfaces(gl) }, [gl])
   useEffect(() => {
     if (!canBake(gl)) return
     const list: { name: string; era: string }[] = []
+    if (planetDisplay === 'dots') { setPrebake(list); return } // the simple map shows no surfaces, so none are baked ahead of time
     for (const s of [...sectors].sort((a, b) => Number(b.id === sectorId) - Number(a.id === sectorId))) {
       for (const p of s.planets) if (isBakedWorld(p.name, era)) list.push({ name: p.name, era })
     }
     setPrebake(list)
-  }, [gl, sectors, sectorId, era])
+  }, [gl, sectors, sectorId, era, planetDisplay])
   useFrame(() => tickSurfaces())
   return null
 }
@@ -1280,7 +1284,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       <Later ms={540}><GlowStars era={era} /></Later>
       <Later ms={680}><Rift on={era === '40k'} /></Later>
       <Later ms={820}><WarpStorms era={era} /></Later>
-      <PlanetBackdrop planetId={planetId} era={era} anchor={planet ? [planet.x, PLANET_FOCUS_Y, planet.z] : null} />
+      <PlanetBackdrop hidden={useOptions().hideStarfield} planetId={planetId} era={era} anchor={planet ? [planet.x, PLANET_FOCUS_Y, planet.z] : null} />
       <Labels specs={specs} layer={layer} />
 
       {SECTORS.map((s) => {

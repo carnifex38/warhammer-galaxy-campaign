@@ -11,14 +11,16 @@ import type { GalaxySelection } from './galaxy/GalaxyView'
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
 const HostView = lazy(() => import('./galaxy/HostView'))
 const ArmyLists = lazy(() => import('./ArmyLists'))
+const OptionsView = lazy(() => import('./OptionsView'))
 
-type TabId = 'galaxy' | 'lists' | 'event' | 'host'
+type TabId = 'galaxy' | 'lists' | 'event' | 'host' | 'options'
 
 const TABS: { id: TabId; label: string; icon: string; blurb: string; roles: Role[] }[] = [
   { id: 'galaxy', label: 'Galaxy', icon: '✦', blurb: 'Interactive galaxy map: sectors, planets and battlezones.', roles: ['guest', 'player', 'gm'] },
   { id: 'lists', label: 'Army Lists', icon: '☰', blurb: 'Build and view 40k and 30k armies.', roles: ['player', 'gm'] },
   { id: 'event', label: 'Event', icon: '\u2691', blurb: 'Join an event and see your battlezone assignment.', roles: ['player', 'gm'] },
   { id: 'host', label: 'Host', icon: '\u2699', blurb: 'Set up the event.', roles: ['gm'] },
+  { id: 'options', label: 'Options', icon: '◐', blurb: 'Graphics, UI and display settings.', roles: ['guest', 'player', 'gm'] },
 ]
 
 function useOnline() {
@@ -106,6 +108,12 @@ export default function App() {
         <main className="content">
           <Suspense fallback={<p className="muted">Loading…</p>}>
             <HostView events={events} />
+          </Suspense>
+        </main>
+      ) : activeId === 'options' ? (
+        <main className="content">
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <OptionsView />
           </Suspense>
         </main>
       ) : activeId === 'lists' ? (

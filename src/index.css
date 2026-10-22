@@ -728,3 +728,20 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .badge.won { border-color: currentColor; background: transparent; font-weight: 600; white-space: nowrap; }
 .badge.won.team-A { color: #6fd0ff; }
 .badge.won.team-B { color: #ff9a5c; }
+
+/* ---------- Options ---------- */
+.options-body { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.options-cats { display: flex; flex-direction: column; gap: 6px; min-width: 150px; }
+.options-cats button { text-align: left; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.options-cats button.active { background: var(--gold); color: #1a1203; border-color: var(--gold); }
+.options-panel { flex: 1; min-width: 260px; max-width: 640px; }
+.options-panel h3 { margin: 18px 0 8px; font-size: 0.95rem; color: var(--gold); }
+.options-panel h3:first-child { margin-top: 0; }
+.options-choices { display: flex; flex-direction: column; gap: 8px; }
+.options-choices button { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.options-choices button span { font-size: 0.8rem; color: var(--muted); }
+.options-choices button.on { border-color: var(--gold); background: rgba(224, 182, 80, 0.08); }
+.options-check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.options-check input { margin-top: 3px; }
+.options-check span { display: flex; flex-direction: column; gap: 2px; }
+.options-check em { font-style: normal; font-size: 0.8rem; color: var(--muted); }
