@@ -6,7 +6,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PLANET_VERT, REAL_FRAG, HERO_HEAD, HERO_TAIL, HERO_BODIES } from './planetShaders'
 import { PlanetBake, canBake, liteFragmentFor } from './planetBake'
-import { configureSurfaces, useSurface, wantSurface } from './planetSurfaces'
+import { configureSurfaces, describeSurfaces, useSurface, wantSurface } from './planetSurfaces'
+import { addPerfLine } from '../perf'
 import BaalMoons from './BaalMoons'
 import CadiaPylons from './CadiaPylons'
 import MacraggeOrbit from './MacraggeOrbit'
@@ -51,6 +52,19 @@ function withArriveFade(src: string): string {
   return `uniform float uArrive;
 ${src.replace(/gl_FragColor\s*=\s*([^;]+);/g, 'gl_FragColor = $1; gl_FragColor.a *= uArrive;')}`
 }
+
+/** A plain lit globe in the planet's own colour, shown for the moment before its surface is ready. */
+const PLACEHOLDER_FRAG = withArriveFade(/* glsl */ `
+  varying vec3 vWN;
+  varying vec3 vWP;
+  uniform vec3 uColor, uLight;
+  void main() {
+    vec3 N = normalize(vWN);
+    float d = max(dot(N, normalize(uLight)), 0.0);
+    float limb = pow(1.0 - max(dot(N, normalize(cameraPosition - vWP)), 0.0), 2.0);
+    gl_FragColor = vec4(uColor * (0.12 + 0.95 * d) + uColor * limb * 0.25, 1.0);
+  }
+`)
 
 const ATMO_VERT = /* glsl */ `
   varying vec3 vN;
@@ -98,6 +112,8 @@ function makePlanetUniforms(name: string, era: Era) {
     uCells: { value: 27 }, // the 3x3x3 neighbourhood searched by the cell patterns (kept as a uniform so the loop is a real loop)
   }
 }
+
+addPerfLine(() => `fade ${arriveFade.value.toFixed(2)} | ${describeSurfaces()}`)
 
 // the surface store makes uniforms and looks up the world's kind through these
 configureSurfaces({ makeUniforms: (name, era) => makePlanetUniforms(name, era as Era), heroOf: (name, era) => lookFor(name, era as Era).hero })
@@ -202,8 +218,9 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
   }, [bakes, name, era, gl, scene, camera])
   const placeholderColor = useMemo(() => {
     const look = lookFor(name, era)
-    return new THREE.Color(look.landA).lerp(new THREE.Color(look.deep), 0.5).multiplyScalar(0.55)
+    return new THREE.Color(look.landA).lerp(new THREE.Color(look.deep), 0.5).multiplyScalar(0.8)
   }, [name, era])
+  const placeholderUniforms = useMemo(() => ({ uColor: { value: placeholderColor }, uLight: { value: new THREE.Vector3(-0.8, 0.35, 0.55) }, uArrive: arriveFade }), [placeholderColor])
 
   const atmoUniforms = useMemo(() => {
     const look = lookFor(name, era)
@@ -230,9 +247,18 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
   }, [])
   // Mars is tilted on its axis, so the equatorial shipyard ring shows as an open ellipse
   const tilt: [number, number, number] = hero === 2 ? [0.6, 0, 0.3] : [0, 0, 0]
-  const liteUniforms = useMemo(() => {
-    return baked ? { ...planetUniforms, tA: { value: baked.a }, tB: { value: baked.b }, tC: { value: baked.c }, tD: { value: baked.d } } : null
-  }, [baked, planetUniforms])
+  // One uniforms object for the life of this planet; the baked textures are put into it (not swapped in as a new object, which the
+  // renderer would not notice once the material has been built).
+  const liteUniforms = useMemo(
+    () => ({ ...planetUniforms, tA: { value: null as THREE.Texture | null }, tB: { value: null as THREE.Texture | null }, tC: { value: null as THREE.Texture | null }, tD: { value: null as THREE.Texture | null } }),
+    [planetUniforms],
+  )
+  if (baked) {
+    liteUniforms.tA.value = baked.a
+    liteUniforms.tB.value = baked.b
+    liteUniforms.tC.value = baked.c
+    liteUniforms.tD.value = baked.d
+  }
 
   return (
     <group position={position}>
@@ -240,7 +266,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
         {/* everything in here turns together: the planet and, on Mars, the ring held up by its elevators */}
         <group ref={spin}>
           {surface}
-          {bakes && liteUniforms ? (
+          {bakes && baked ? (
             <mesh geometry={geometry} renderOrder={5}>
               <shaderMaterial
                 key={`lite${hero}-${era}`}
@@ -262,7 +288,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
             </mesh>
           ) : (
             <mesh geometry={geometry} renderOrder={5}>
-              <meshBasicMaterial color={placeholderColor} transparent />
+              <shaderMaterial uniforms={placeholderUniforms} vertexShader={PLANET_VERT} fragmentShader={PLACEHOLDER_FRAG} transparent />
             </mesh>
           )}
           {hero === 2 && <MarsShipyard radius={PLANET_RADIUS} />}

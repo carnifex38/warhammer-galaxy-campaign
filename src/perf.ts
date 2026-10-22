@@ -7,6 +7,10 @@ import { DEV_TOOLS } from './auth' // DEV-TOOLS
 // it had finished) and whether the player was moving the camera. A small panel in the corner shows the worst ones, so a tester
 // can send a screenshot. `__perf.report()` in the console gives the same as text.
 
+/** Other parts of the app can add a line to the panel (what they are doing right now). */
+const extraLines: (() => string)[] = []
+export function addPerfLine(f: () => string) { extraLines.push(f) }
+
 interface Stall { at: number; ms: number; phase: string; moving: boolean }
 
 export function startPerf() {
@@ -43,6 +47,7 @@ export function startPerf() {
       `perf  ${Math.round((performance.now() - t0) / 1000)}s  now: ${phase()}`,
       `stalls >50ms while loading: ${during.length} (${sum(during)} ms)   after: ${after.length} (${sum(after)} ms)`,
       `while moving: ${stalls.filter((s) => s.moving).length} of ${stalls.length}`,
+      ...extraLines.map((f) => { try { return f() } catch { return '?' } }),
       'worst:',
       ...worst.map((s) => `  ${String(s.ms).padStart(5)} ms  @${(s.at / 1000).toFixed(1)}s  ${s.moving ? 'moving ' : 'still  '} ${s.phase}`),
     ].join('\n')

@@ -28,6 +28,7 @@ interface Entry {
 interface Job { entry: Entry; level: 'low' | 'high'; bake: PlanetBake; compiled: boolean; priority: boolean }
 
 const KEEP_HIGH = 3
+const PRIORITY_BUDGET_MS = 24
 
 let config: Config | null = null
 let gl: THREE.WebGLRenderer | null = null
@@ -107,6 +108,14 @@ export function setPrebake(list: { name: string; era: string }[]) {
   bump()
 }
 
+/** For the stutter panel: what is baked, what the picked planet is showing, and what is being baked right now. */
+export function describeSurfaces(): string {
+  const all = [...entries.values()]
+  const shown = all.filter((e) => e.wanted > 0).map((e) => `${e.name}:${e.high ? 'sharp' : e.low ? 'soft' : 'none'}`).join(',') || '-'
+  const job = current ? `${current.entry.name} ${current.level}${current.compiled ? '' : ' (compiling)'}` : '-'
+  return `baked ${all.filter((e) => e.low).length}/${all.length} soft, ${all.filter((e) => e.high).length} sharp | showing ${shown} | job ${job} | prebake ${prebakeOn ? 'on' : 'off'}`
+}
+
 export function setPrebakeAllowed(on: boolean) {
   prebakeOn = on
 }
@@ -168,7 +177,11 @@ export function tickSurfaces() {
   const job = current
   if (!job.compiled) return
   if (!job.priority && !idle) return // background work waits while the player is busy
-  job.bake.step()
+  // a planet someone is waiting for gets a few bands per frame (about 24 ms), so it is ready in a handful of frames even when the
+  // page runs slowly; background work stays at one small band per frame
+  const t0 = performance.now()
+  do job.bake.step()
+  while (job.priority && !job.bake.done && performance.now() - t0 < PRIORITY_BUDGET_MS)
   if (!job.bake.done) return
 
   current = null
