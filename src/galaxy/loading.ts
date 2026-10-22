@@ -18,6 +18,8 @@ export function setLoad(patch: Partial<LoadState>) {
   listeners.forEach((l) => l())
 }
 
+export const getLoad = () => state
+
 const subscribe = (l: () => void) => {
   listeners.add(l)
   return () => { listeners.delete(l) }
