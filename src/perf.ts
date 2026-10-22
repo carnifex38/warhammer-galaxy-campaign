@@ -1,6 +1,8 @@
 import { getLoad } from './galaxy/loading'
+import { DEV_TOOLS } from './auth' // DEV-TOOLS
 
-// A stutter finder. Open the app with `?perf` on the address (works on the live site too) and it watches every frame: any frame
+// A stutter finder, for the developer tools only (DEV-TOOLS): it needs the dev link (`?dev`) as well as `?perf` on the address, so
+// nobody else ever sees it. Open the app with `?dev&perf` and it watches every frame: any frame
 // that takes over 50 ms is written down with what the start-up was doing at that moment (which planet it was preparing, or that
 // it had finished) and whether the player was moving the camera. A small panel in the corner shows the worst ones, so a tester
 // can send a screenshot. `__perf.report()` in the console gives the same as text.
@@ -8,6 +10,7 @@ import { getLoad } from './galaxy/loading'
 interface Stall { at: number; ms: number; phase: string; moving: boolean }
 
 export function startPerf() {
+  if (!DEV_TOOLS) return
   // remembered for the tab, because the app sometimes tidies the address (dropping `?perf`) or reloads itself
   try { if (new URLSearchParams(location.search).has('perf')) sessionStorage.setItem('galaxy-perf', '1') } catch { /* not remembered */ }
   let on = new URLSearchParams(location.search).has('perf')
