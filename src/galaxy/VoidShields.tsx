@@ -241,7 +241,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
     U.uProgress.value = prog
     // widen to one joined network when the planet is fully held (and back again)
     const target = full ? JOIN_RADIUS : DOME_RADIUS
-    radius.current += (target - radius.current) * Math.min(1, dt * 0.42) // a slow, calm widening
+    radius.current += (target - radius.current) * Math.min(1, dt * 0.18) // a slow, calm widening
     U.uRadius.value = radius.current
     U.uHeight.value = 0.085 + 0.015 * U.uFull.value // a thin skin over the ground, settling to the planet shield's height as it widens
     U.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
@@ -413,7 +413,7 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
     if (mesh.current) mesh.current.visible = U.uGain.value > 0.01
     U.uTime.value = now
     U.uArrive.value = arriveFade.value
-    const prog = Math.min(1, (now - born.current) / 5) // it forms around the planet slowly, once
+    const prog = Math.min(1, (now - born.current) / 8) // it forms around the planet slowly, once
     U.uProgress.value = prog
     const h = hits.current
     if (now >= h.next) {
@@ -490,7 +490,7 @@ function SphereShield({ zone, control }: { zone: ShieldZone; control: 'A' | 'B' 
     U.uArrive.value = arriveFade.value
     U.uProgress.value = prog
     // when a team controls the planet the sphere slides to the planet's centre and swells to the planet shield's size, then fades into it
-    merge.current += ((control ? 1 : 0) - merge.current) * Math.min(1, dt * 0.42)
+    merge.current += ((control ? 1 : 0) - merge.current) * Math.min(1, dt * 0.18)
     const m = merge.current * merge.current * (3 - 2 * merge.current)
     const grow = 0.25 + 0.75 * (prog * prog * (3 - 2 * prog)) // it swells up out of the ground when it powers up
     const rNow = (SPHERE_R + (PLANET_RADIUS * 1.1 - SPHERE_R) * m) * grow
