@@ -175,6 +175,10 @@ const PLANET_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 96, 64)
 
 function SpherePlanet({ name, era, position, surface }: { name: string; era: Era; position: [number, number, number]; surface?: ReactNode }) {
   const spin = useRef<THREE.Group>(null)
+  const liteMat = useRef<THREE.ShaderMaterial>(null)
+  const directMat = useRef<THREE.ShaderMaterial>(null)
+  const holderMat = useRef<THREE.ShaderMaterial>(null)
+  const atmoMat = useRef<THREE.ShaderMaterial>(null)
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
   const camera = useThree((s) => s.camera)
@@ -235,6 +239,18 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
       spin.current.updateMatrixWorld()
       planetUniforms.uModelRot.value.setFromMatrix4(spin.current.matrixWorld)
     }
+    // A material gets its OWN COPY of the uniforms it is given, made at the moment it is created. So anything that changes later (the
+    // arrival fade, the time, the spin, the baked textures) has to be pushed into the material's own set, every frame; otherwise a planet
+    // whose surface finishes baking in the middle of its fade-in keeps that half-faded value forever and stays see-through.
+    for (const m of [liteMat.current, directMat.current, holderMat.current, atmoMat.current]) {
+      const u = m?.uniforms
+      if (!u) continue
+      if (u.uArrive) u.uArrive.value = arriveFade.value
+      if (u.uTime) u.uTime.value = planetUniforms.uTime.value
+      if (u.uModelRot) u.uModelRot.value.copy(planetUniforms.uModelRot.value)
+    }
+    const lu = liteMat.current?.uniforms
+    if (lu && baked) { lu.tA.value = baked.a; lu.tB.value = baked.b; lu.tC.value = baked.c; lu.tD.value = baked.d }
   })
 
   const geometry = PLANET_GEOMETRY
@@ -269,6 +285,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
           {bakes && baked ? (
             <mesh geometry={geometry} renderOrder={5}>
               <shaderMaterial
+                ref={liteMat}
                 key={`lite${hero}-${era}`}
                 uniforms={liteUniforms}
                 vertexShader={PLANET_VERT}
@@ -279,6 +296,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
           ) : !bakes && ready ? (
             <mesh geometry={geometry} renderOrder={5}>
               <shaderMaterial
+                ref={directMat}
                 key={`real${hero}-${era}`}
                 uniforms={planetUniforms}
                 vertexShader={PLANET_VERT}
@@ -288,7 +306,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
             </mesh>
           ) : (
             <mesh geometry={geometry} renderOrder={5}>
-              <shaderMaterial uniforms={placeholderUniforms} vertexShader={PLANET_VERT} fragmentShader={PLACEHOLDER_FRAG} transparent />
+              <shaderMaterial ref={holderMat} uniforms={placeholderUniforms} vertexShader={PLANET_VERT} fragmentShader={PLACEHOLDER_FRAG} transparent />
             </mesh>
           )}
           {hero === 2 && <MarsShipyard radius={PLANET_RADIUS} />}
@@ -307,6 +325,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
       {hero === 6 && <BaalMoons radius={PLANET_RADIUS} />}
       <mesh scale={1.17} geometry={geometry} renderOrder={6}>
         <shaderMaterial
+          ref={atmoMat}
           uniforms={atmoUniforms}
           vertexShader={ATMO_VERT}
           fragmentShader={ATMO_FRAG}
