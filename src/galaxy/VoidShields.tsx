@@ -45,8 +45,8 @@ const VERT = /* glsl */ `
     float ang = acos(clamp(dot(dir, uCenter), -1.0, 1.0));
     float t = clamp(ang / max(e, 0.001), 0.0, 1.0);
     // as the dome widens to cover the planet its rounded top flattens into an even skin, the same height as the planet shield
-    float flat = smoothstep(0.7, 2.0, uRadius);
-    float arch = mix(sqrt(max(1.0 - t * t, 0.0)), 1.0, flat);
+    float flatten = smoothstep(0.7, 2.0, uRadius);
+    float arch = mix(sqrt(max(1.0 - t * t, 0.0)), 1.0, flatten);
     float inflate = smoothstep(0.0, 1.0, prog);
     vObj = dir;
     vN = normalize(mat3(modelMatrix) * dir);
@@ -109,7 +109,7 @@ const FRAG = /* glsl */ `
 
     // how far the dome has spread; nothing beyond that
     float e = uRadius * (1.0 - pow(1.0 - prog, 3.0));
-    float inside = 1.0 - smoothstep(e - 0.11, e, ang); // the skin thins out toward its edge instead of ending sharply
+    float inside = 1.0 - smoothstep(e - 0.08, e, ang); // the skin thins out toward its edge instead of ending sharply
     float outer = 1.0 - smoothstep(e, e + 0.22, ang); // the glow carries on past the edge and fades out softly, so there is no hard cut
     if (max(inside, outer) <= 0.001) discard;
 
@@ -123,8 +123,8 @@ const FRAG = /* glsl */ `
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
 
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
-    float edgeLine = exp(-sq((ang - e) / 0.075)) * (0.4 - 0.2 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
-    float edgeGlow = exp(-sq((ang - e) / 0.2)) * (0.2 - 0.1 * uFull);
+    float edgeLine = exp(-sq((ang - e) / 0.06)) * (0.6 - 0.35 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
+    float edgeGlow = exp(-sq((ang - e) / 0.2)) * (0.32 - 0.2 * uFull);
     float front = exp(-sq((ang - e) / 0.07)) * (1.0 - prog) * 0.55;
 
     // faint energy veins drifting through the glass, and a soft sheen
@@ -143,7 +143,7 @@ const FRAG = /* glsl */ `
 
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
-    float rest = (0.012 + 0.04 * fr + fr * (0.5 - 0.2 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
+    float rest = (0.035 + 0.05 * fr + fr * (0.6 - 0.3 * uFull) + veins * (0.12 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + ripple * (0.08 + 0.15 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive * uGain;
     // mostly the team's colour; only the brightest sparks go toward white
