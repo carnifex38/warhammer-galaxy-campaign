@@ -366,7 +366,7 @@ export default function PlanetBody({ name, era, position, surface }: { name: str
  * simple coloured dots. `radius`: the planet's size on the map; `far`/`near`: the camera distances where it starts to appear and
  * where it is fully there; `getFade`: an extra 0..1 factor (the other planets dim when one is picked).
  */
-export function PlanetLod({ name, era, radius, far = 7, near = 3.2, getFade }: { name: string; era: Era; radius: number; far?: number; near?: number; getFade?: () => number }) {
+export function PlanetLod({ name, era, radius, far = 12, near = 6, getFade }: { name: string; era: Era; radius: number; far?: number; near?: number; getFade?: () => number }) {
   const baked = useSurface(name, era) // whatever is baked already (the soft one, made in the background for every planet)
   const hero = lookFor(name, era).hero
   const group = useRef<THREE.Group>(null)
