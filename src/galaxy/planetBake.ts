@@ -13,8 +13,6 @@ import { REAL_FRAG, HERO_HEAD, HERO_TAIL, HERO_BODIES } from './planetShaders'
 // Everything that depends on the lighting (which side faces the sun, the glint on the sea, the night-side glow) is NOT baked:
 // the cheap shader still does that every frame, so the planet turns and is lit exactly as before.
 
-export const BAKE_W = 2048
-export const BAKE_H = 1024
 
 const BAKE_VERT = /* glsl */ `
   varying vec2 vUv;
@@ -240,7 +238,7 @@ export function canBake(gl: THREE.WebGLRenderer): boolean {
 export interface BakedSurface { a: THREE.Texture; b: THREE.Texture; c: THREE.Texture; d: THREE.Texture }
 
 /** Quick and soft first, then sharper: the planet shows after the first stage and is refined in the background. */
-const STAGES: [number, number][] = [[512, 256], [1024, 512], [BAKE_W, BAKE_H]]
+const STAGES: [number, number][] = [[512, 256], [1024, 512]]
 
 /** If the next stage (4x the work of the one just finished) would take longer than this on the graphics card, it is skipped. */
 const MAX_NEXT_STAGE_MS = 12000
