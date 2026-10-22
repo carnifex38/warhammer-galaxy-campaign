@@ -4,7 +4,6 @@ import { Line, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { sliced } from '../idle'
-import { SkyNebula } from './Nebula'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
 import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
@@ -1264,7 +1263,6 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       <Warmup />
       <BakeScheduler sectors={SECTORS} sectorId={sectorId} era={era} />
       <DimOverlay dimmed={!!sector} />
-      <SkyNebula era={era} />
       <Stars era={era} />
       <CoreGlow />
       {/* the sector map is on screen straight away; the atmosphere layers join it one at a time */}
