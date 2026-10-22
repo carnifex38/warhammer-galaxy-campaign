@@ -47,7 +47,7 @@ export function startPerf() {
   ;(window as unknown as { __perf: unknown }).__perf = { stalls, report: text }
 
   const box = document.createElement('pre')
-  box.style.cssText = 'position:fixed;left:6px;top:6px;z-index:99999;margin:0;padding:6px 8px;background:rgba(0,0,0,.78);color:#9dffb8;font:11px/1.35 ui-monospace,Consolas,monospace;pointer-events:none;border-radius:6px;max-width:92vw;white-space:pre-wrap'
+  box.style.cssText = 'position:fixed;left:6px;bottom:6px;z-index:99999;margin:0;padding:6px 8px;background:rgba(0,0,0,.78);color:#9dffb8;font:11px/1.35 ui-monospace,Consolas,monospace;pointer-events:none;border-radius:6px;max-width:92vw;white-space:pre-wrap'
   document.body.appendChild(box)
   setInterval(() => { box.textContent = text() }, 500)
 }
