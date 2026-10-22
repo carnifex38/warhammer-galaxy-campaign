@@ -139,7 +139,7 @@ const FRAG = /* glsl */ `
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
-    float a = (rest + ripple * (0.1 + 0.28 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
+    float a = (rest + ripple * (0.08 + 0.15 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
     gl_FragColor = vec4(col * a, a);
