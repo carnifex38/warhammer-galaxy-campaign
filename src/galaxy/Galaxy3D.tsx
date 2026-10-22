@@ -7,7 +7,7 @@ import { sliced } from '../idle'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
 import { VoidShields, type PlanetShieldInfo, type ShieldZone } from './VoidShields'
-import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
+import PlanetBody, { PlanetLod, PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
 import { attachSurfaces, setPrebake, setPrebakeAllowed, tickSurfaces } from './planetSurfaces'
 import { setLoad, useLoad } from './loading'
@@ -994,6 +994,8 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
               <meshBasicMaterial color={!enabled ? '#4b5064' : hot ? '#ffffff' : color} transparent />
             </mesh>
           )}
+          {/* zoomed in close, the dot gives way to the planet's own surface */}
+          {roundWorld && enabled && <PlanetLod name={p.name} era={era} radius={0.24} getFade={() => 1 - (1 - OTHERS_LEFT) * backdropLevel.v} />}
           {hot && (
             <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={5}>
               <ringGeometry args={[0.55, 0.68, 48]} />

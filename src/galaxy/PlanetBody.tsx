@@ -359,3 +359,62 @@ export default function PlanetBody({ name, era, position, surface }: { name: str
   }
   return <SpherePlanet name={name} era={era} position={position} surface={surface} />
 }
+
+/**
+ * A small textured planet for the galaxy map: as the camera comes close to a planet's dot, the dot gives way to the planet's soft
+ * baked surface (see planetSurfaces.ts), lit like the big one. Far away it is not drawn at all, so zoomed out the map keeps its
+ * simple coloured dots. `radius`: the planet's size on the map; `far`/`near`: the camera distances where it starts to appear and
+ * where it is fully there; `getFade`: an extra 0..1 factor (the other planets dim when one is picked).
+ */
+export function PlanetLod({ name, era, radius, far = 7, near = 3.2, getFade }: { name: string; era: Era; radius: number; far?: number; near?: number; getFade?: () => number }) {
+  const baked = useSurface(name, era) // whatever is baked already (the soft one, made in the background for every planet)
+  const hero = lookFor(name, era).hero
+  const group = useRef<THREE.Group>(null)
+  const spin = useRef<THREE.Group>(null)
+  const mat = useRef<THREE.ShaderMaterial>(null)
+  const uniforms = useMemo(() => {
+    const u = makePlanetUniforms(name, era)
+    return { ...u, uArrive: { value: 0 }, tA: { value: null as THREE.Texture | null }, tB: { value: null as THREE.Texture | null }, tC: { value: null as THREE.Texture | null }, tD: { value: null as THREE.Texture | null } }
+  }, [name, era])
+  const world = useMemo(() => new THREE.Vector3(), [])
+  const turn = useRef(Math.random() * 6.28)
+
+  useFrame((s, dt) => {
+    const g = group.current
+    const m = mat.current
+    if (!g || !m || !spin.current) return
+    g.getWorldPosition(world)
+    const d = s.camera.position.distanceTo(world)
+    const t = Math.min(1, Math.max(0, (far - d) / (far - near)))
+    const k = t * t * (3 - 2 * t) * (getFade ? getFade() : 1)
+    g.visible = !!baked && k > 0.01
+    if (!g.visible) return
+    turn.current += dt * 0.1
+    spin.current.rotation.y = turn.current
+    spin.current.updateMatrixWorld()
+    const u = m.uniforms
+    u.uArrive.value = k
+    // lit from the upper left of the view, so the side facing the viewer is always the bright one (never a black disc)
+    u.uLight.value.set(-0.7, 0.4, 0.6).applyQuaternion(s.camera.quaternion)
+    u.uTime.value = s.clock.elapsedTime
+    u.uModelRot.value.setFromMatrix4(spin.current.matrixWorld)
+    if (baked) { u.tA.value = baked.a; u.tB.value = baked.b; u.tC.value = baked.c; u.tD.value = baked.d }
+  })
+
+  return (
+    <group ref={group} visible={false}>
+      <group ref={spin} scale={radius / PLANET_RADIUS}>
+        <mesh geometry={PLANET_GEOMETRY} renderOrder={3}>
+          <shaderMaterial
+            ref={mat}
+            key={`lod${hero}-${era}`}
+            uniforms={uniforms}
+            vertexShader={PLANET_VERT}
+            fragmentShader={withArriveFade(liteFragmentFor(hero))}
+            transparent
+          />
+        </mesh>
+      </group>
+    </group>
+  )
+}
