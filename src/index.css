@@ -730,3 +730,7 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .seat-result button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
 .seat-result button.on { background: var(--gold); color: #1a1203; }
 .seat-won { margin: 0 0 8px; font-size: 0.78rem; color: var(--gold); }
+
+.badge.won { margin-left: 6px; border-color: currentColor; background: transparent; font-weight: 600; }
+.badge.won.team-A { color: #6fd0ff; }
+.badge.won.team-B { color: #ff9a5c; }
