@@ -147,7 +147,8 @@ const FRAG = /* glsl */ `
   }
 `
 
-function labelTexture(team: 'A' | 'B') {
+/** `heldBy`: when set, the zone was captured by that team but another team now controls the planet. */
+function labelTexture(team: 'A' | 'B', heldBy: 'A' | 'B' | null = null) {
   const cv = document.createElement('canvas')
   cv.width = 512
   cv.height = 128
@@ -159,18 +160,20 @@ function labelTexture(team: 'A' | 'B') {
   c.fillStyle = col
   c.lineWidth = 8
   c.font = 'bold 54px ui-monospace, Consolas, monospace'
-  c.strokeText(`TEAM ${team} CAPTURED`, 256, 56)
-  c.fillText(`TEAM ${team} CAPTURED`, 256, 56)
+  const head = heldBy ? `TEAM ${team} CONTROL` : `TEAM ${team} CAPTURED`
+  c.strokeText(head, 256, 56)
+  c.fillText(head, 256, 56)
   c.lineWidth = 6
   c.font = '26px ui-monospace, Consolas, monospace'
-  c.strokeText('VOID SHIELD ACTIVE', 256, 100)
-  c.fillText('VOID SHIELD ACTIVE', 256, 100)
+  const sub = heldBy ? `ZONE HELD BY TEAM ${heldBy}` : 'VOID SHIELD ACTIVE'
+  c.strokeText(sub, 256, 100)
+  c.fillText(sub, 256, 100)
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
   return t
 }
 
-function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
+function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; control: 'A' | 'B' | null }) {
   const group = useRef<THREE.Group>(null)
   const label = useRef<THREE.Sprite>(null)
   const mat = useRef<THREE.ShaderMaterial>(null)
@@ -178,8 +181,12 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
   const radius = useRef(full ? NETWORK_RADIUS : DOME_RADIUS)
   const hits = useRef({ next: 0.1, slot: 0, last: -1 })
   const tmp = useMemo(() => ({ q: new THREE.Quaternion(), centre: new THREE.Vector3(), toCam: new THREE.Vector3(), world: new THREE.Vector3(), t: new THREE.Vector3(), a: new THREE.Vector3() }), [])
-  const tex = useMemo(() => labelTexture(zone.team), [zone.team])
+  // when another team controls the planet, this dome takes THEIR colour, and its label says so
+  const shownTeam = control ?? zone.team
+  const flipped = control !== null && control !== zone.team
+  const tex = useMemo(() => labelTexture(shownTeam, flipped ? zone.team : null), [shownTeam, flipped, zone.team])
   useEffect(() => () => tex.dispose(), [tex])
+  const tint = useMemo(() => new THREE.Vector3(), [])
   // DEV-TOOLS: the test panel's "fire a shot" button makes every shield take a hit right away
   useEffect(() => {
     const hit = () => { hits.current.next = 0 }
@@ -218,6 +225,8 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
     if (!g || !g.parent || !U) return
     const now = s.clock.elapsedTime
     const prog = zone.at ? Math.min(1, (Date.now() - zone.at) / 1000 / POWER_UP_S) : 1
+    tint.set(...TEAM_TINT[shownTeam])
+    U.uTint.value.lerp(tint, 1 - Math.exp(-dt * 2.2)) // a flip of colour is a smooth change
     const slow = (import.meta.env.DEV && (window as unknown as { __shieldSlow?: number }).__shieldSlow) || 1 // dev only: slow motion, to look at an effect
     U.uTime.value = now / slow
     // dev only: `__shieldHold = 0.2` freezes the latest hit at that age (seconds), to look at one moment of it
@@ -288,7 +297,10 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
 // a slow breath, and now and then a hit with a soft flash, ripple and lightning.
 // ---------------------------------------------------------------------------------------------------------------------------
 
-export interface PlanetShieldInfo { team: 'A' | 'B'; at: number }
+/** `team`: who controls the planet (a majority of its battlezones), or null while nobody does (the shield is then neutral). */
+export interface PlanetShieldInfo { team: 'A' | 'B' | null; at: number }
+
+const NEUTRAL_TINT: [number, number, number] = [0.72, 0.82, 0.95]
 
 const PLANET_SHELL = new THREE.SphereGeometry(PLANET_RADIUS, 128, 96)
 
@@ -313,7 +325,7 @@ const GLOBE_FRAG = /* glsl */ `
   varying vec3 vN;
   varying vec3 vWP;
   uniform vec3 uTint, uLight;
-  uniform float uProgress, uTime, uArrive;
+  uniform float uProgress, uTime, uArrive, uGain;
   uniform vec4 uHit0, uHit1, uHit2;
   ${NOISE3}
 
@@ -354,9 +366,9 @@ const GLOBE_FRAG = /* glsl */ `
     vec3 hits = strike(uHit0, p) + strike(uHit1, p) + strike(uHit2, p);
 
     // clear glass: only the limb, a little veining and the hits carry light
-    float rest = (0.008 + fr * 0.38 + veins * (0.03 + 0.2 * fr) + sheen) * (0.78 + 0.44 * pulse);
+    float rest = (0.01 + fr * 0.62 + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + hits.y * 0.07 + hits.x * 0.3 + hits.z * 0.16) * smoothstep(0.0, 1.0, uProgress);
-    a *= uArrive;
+    a *= uArrive * uGain;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.04 + (hits.z + hits.x) * 0.7 + fr * 0.06, 0.0, 0.6));
     gl_FragColor = vec4(col * a, a);
   }
@@ -366,23 +378,33 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
   const mat = useRef<THREE.ShaderMaterial>(null)
   const hits = useRef({ next: 0.4, slot: 0 })
   const uniforms = useMemo(() => ({
-    uTint: { value: new THREE.Vector3(...TEAM_TINT[info.team]) },
+    uTint: { value: new THREE.Vector3(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT)) },
+    uGain: { value: info.team ? 1 : 0.85 },
     uLight: { value: LIGHT },
-    uProgress: { value: 1 },
+    uProgress: { value: 0 },
     uTime: { value: 0 },
     uArrive: arriveFade,
     uHit0: { value: new THREE.Vector4(0, 0, 1, -1) },
     uHit1: { value: new THREE.Vector4(0, 0, 1, -1) },
     uHit2: { value: new THREE.Vector4(0, 0, 1, -1) },
-  }), [info.team])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one stable uniforms object; the colour is eased toward the controlling team every frame
+  }), [])
+  const born = useRef(-1)
+  const target = useMemo(() => new THREE.Vector3(), [])
 
-  useFrame((s) => {
+  useFrame((s, dt) => {
     const U = mat.current?.uniforms as typeof uniforms | undefined // the material's own copy of the uniforms (see Shield)
     if (!U) return
     const now = s.clock.elapsedTime
+    if (born.current < 0) born.current = now
+    // neutral until a team controls the planet, then it turns that team's colour (smoothly), and brightens
+    target.set(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT))
+    const k = 1 - Math.exp(-dt * 2.2)
+    U.uTint.value.lerp(target, k)
+    U.uGain.value += ((info.team ? 1 : 0.85) - U.uGain.value) * k
     U.uTime.value = now
     U.uArrive.value = arriveFade.value
-    const prog = info.at ? Math.min(1, (Date.now() - info.at) / 1000 / 2.4) : 1
+    const prog = Math.min(1, (now - born.current) / 2.4) // it forms around the planet once, when the planet is first shown
     U.uProgress.value = prog
     const h = hits.current
     if (now >= h.next) {
@@ -414,8 +436,8 @@ export function VoidShields({ zones, total, majority }: { zones: ShieldZone[]; t
   const full = zones.length > 0 && zones.length === total && zones.every((z) => z.team === zones[0].team)
   return (
     <>
-      {zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} />)}
-      {majority && <PlanetShield key={majority.team} info={majority} />}
+      {zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} control={majority?.team ?? null} />)}
+      {majority && <PlanetShield info={majority} />}
     </>
   )
 }

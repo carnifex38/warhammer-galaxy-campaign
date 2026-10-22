@@ -245,7 +245,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
         shieldZones={shieldZones}
         shieldTotal={planetTables.length}
-        shieldMajority={majority ? { team: majority.team, at: majority.at } : null}
+        shieldMajority={shieldOn ? { team: majority?.team ?? null, at: majority?.at ?? 0 } : null}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
