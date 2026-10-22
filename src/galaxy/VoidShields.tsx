@@ -105,7 +105,8 @@ const FRAG = /* glsl */ `
     // how far the dome has spread; nothing beyond that
     float e = uRadius * (1.0 - pow(1.0 - prog, 3.0));
     float inside = 1.0 - smoothstep(e - 0.11, e, ang); // the skin thins out toward its edge instead of ending sharply
-    if (inside <= 0.001) discard;
+    float outer = 1.0 - smoothstep(e, e + 0.22, ang); // the glow carries on past the edge and fades out softly, so there is no hard cut
+    if (max(inside, outer) <= 0.001) discard;
 
     vec3 V = normalize(cameraPosition - vWP);
     // the bubble's own surface direction: straight up at the top, leaning over to stand upright at its edge
@@ -117,8 +118,8 @@ const FRAG = /* glsl */ `
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
 
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
-    float edgeLine = exp(-sq((ang - e) / 0.045)) * (0.55 + 0.4 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
-    float edgeGlow = exp(-sq((ang - e) / 0.16)) * 0.22;
+    float edgeLine = exp(-sq((ang - e) / 0.075)) * (0.4 + 0.35 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
+    float edgeGlow = exp(-sq((ang - e) / 0.2)) * 0.2;
     float front = exp(-sq((ang - e) / 0.05)) * (1.0 - prog) * 1.2;
 
     // faint energy veins drifting through the glass, and a soft sheen
@@ -138,7 +139,7 @@ const FRAG = /* glsl */ `
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
-    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.8 + bolts * 0.9) * inside + edgeLine + edgeGlow + front;
+    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.8 + bolts * 0.9) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
     gl_FragColor = vec4(col * a, a);
