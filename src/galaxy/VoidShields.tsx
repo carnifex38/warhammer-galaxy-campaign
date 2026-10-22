@@ -19,8 +19,8 @@ export interface ShieldZone { id: string; name: string; team: 'A' | 'B'; at: num
 
 const TEAM_TINT: Record<'A' | 'B', [number, number, number]> = { A: [0.55, 0.85, 1.0], B: [1.0, 0.7, 0.42] }
 const TEAM_TEXT: Record<'A' | 'B', string> = { A: '#9fe0ff', B: '#ffc08f' }
-const DOME_RADIUS = 0.5 // how far a dome reaches over the surface from its spot (radians), about 29 degrees
-const NETWORK_RADIUS = 1.08 // when the planet is fully held: wide enough that the domes overlap
+const DOME_RADIUS = 0.4 // how far a dome reaches over the surface from its spot (radians), about 23 degrees
+const NETWORK_RADIUS = 0.85 // when the planet is fully held: wide enough that the domes overlap
 const POWER_UP_S = 1.8
 const LIGHT = new THREE.Vector3(-0.8, 0.35, 0.55)
 
@@ -33,7 +33,7 @@ const VERT = /* glsl */ `
   varying vec3 vN;
   varying vec3 vCW;
   uniform vec3 uCenter;
-  uniform float uRadius, uProgress, uHeight;
+  uniform float uRadius, uProgress, uHeight, uTime;
   void main() {
     vec3 dir = normalize(position);
     float prog = clamp(uProgress, 0.0, 1.0);
@@ -46,7 +46,8 @@ const VERT = /* glsl */ `
     vObj = dir;
     vN = normalize(mat3(modelMatrix) * dir);
     vCW = normalize(mat3(modelMatrix) * uCenter);
-    vec4 wp = modelMatrix * vec4(position * (1.012 + uHeight * arch * inflate), 1.0);
+    float breathe = 1.0 + 0.06 * sin(uTime * 1.3); // the bubble swells and settles a little, slowly
+    vec4 wp = modelMatrix * vec4(position * (1.01 + uHeight * breathe * arch * inflate), 1.0);
     vWP = wp.xyz;
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
@@ -80,11 +81,14 @@ const FRAG = /* glsl */ `
     float on = step(0.0, hit.w) * step(uTime - hit.w, 1.8);
     float age = clamp(uTime - hit.w, 0.0, 2.0);
     float d = acos(clamp(dot(p, hit.xyz), -1.0, 1.0));
-    float flash = exp(-d * d / 0.004) * exp(-age * 6.0);
-    float ripple = exp(-sq((d - age * 0.5) / 0.055)) * exp(-age * 1.7);
+    // every part fades IN first and then OUT: nothing pops on or snaps off
+    float fadeIn = smoothstep(0.0, 0.14, age);
+    float flashEnv = fadeIn * (1.0 - smoothstep(0.14, 0.75, age));
+    float flash = exp(-d * d / 0.006) * flashEnv;
+    float ripple = exp(-sq((d - age * 0.45) / 0.06)) * smoothstep(0.0, 0.2, age) * (1.0 - smoothstep(0.5, 1.7, age));
     // lightning: thin branching electric veins that crawl out from the hit, quickly, then die away
     float reach = min(0.4, age * 3.0 + 0.05);
-    float life = exp(-age * 4.0) * (1.0 - smoothstep(0.6, 0.9, age));
+    float life = smoothstep(0.0, 0.1, age) * (1.0 - smoothstep(0.12, 0.8, age));
     vec3 q = p * 24.0 + vec3(hit.w * 3.1, hit.w * 1.7, 5.0);
     float f1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 14.0);
     float f2 = pow(1.0 - abs(noise3(q * 2.1 + 7.0) * 2.0 - 1.0), 14.0);
@@ -113,7 +117,7 @@ const FRAG = /* glsl */ `
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
 
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
-    float edgeLine = exp(-sq((ang - e) / 0.026)) * (1.0 + 0.6 * uFull);
+    float edgeLine = exp(-sq((ang - e) / 0.026)) * (1.0 + 0.6 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
     float edgeGlow = exp(-sq((ang - e) / 0.1)) * 0.32;
     float front = exp(-sq((ang - e) / 0.05)) * (1.0 - prog) * 1.2;
 
@@ -132,7 +136,8 @@ const FRAG = /* glsl */ `
     float flash = hits.x, ripple = hits.y, bolts = hits.z;
 
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
-    float rest = 0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen;
+    float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
+    float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + ripple * (0.3 + 1.0 * hexLine) + flash * 1.4 + bolts * 1.7) * inside + edgeLine + edgeGlow + front;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
@@ -184,7 +189,7 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
       uTint: { value: new THREE.Vector3(...TEAM_TINT[zone.team]) },
       uLight: { value: LIGHT },
       uRadius: { value: DOME_RADIUS },
-      uHeight: { value: 0.3 },
+      uHeight: { value: 0.085 },
       uProgress: { value: 1 },
       uFull: { value: 0 },
       uTime: { value: 0 },
@@ -208,7 +213,7 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
     const target = full ? NETWORK_RADIUS : DOME_RADIUS
     radius.current += (target - radius.current) * Math.min(1, dt * 2.2)
     uniforms.uRadius.value = radius.current
-    uniforms.uHeight.value = 0.3 + 0.15 * (radius.current - DOME_RADIUS) // a wider dome stands a little taller
+    uniforms.uHeight.value = 0.085 + 0.1 * (radius.current - DOME_RADIUS) // a thin skin over the ground; a wider dome stands a touch taller
     uniforms.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
 
     // shots hitting the shield: a burst of them while it powers up, then now and then
@@ -236,7 +241,7 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
       const pop = Math.min(1, Math.max(0, (prog - 0.55) / 0.45))
       const joined = uniforms.uFull.value // one joined network: the banner says it instead
       ;(label.current.material as THREE.SpriteMaterial).opacity = edge * pop * (1 - joined) * arriveFade.value
-      label.current.position.copy(spot).multiplyScalar(PLANET_RADIUS * (1.1 + uniforms.uHeight.value * Math.min(1, prog * 1.4)))
+      label.current.position.copy(spot).multiplyScalar(PLANET_RADIUS * (1.04 + uniforms.uHeight.value * Math.min(1, prog * 1.4)))
     }
   })
 
