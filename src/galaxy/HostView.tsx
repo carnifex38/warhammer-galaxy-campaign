@@ -4,6 +4,7 @@ import InfoEditor from './InfoEditor'
 import { MARS_SAMPLE } from './sampleMissions'
 import { defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 import type { Era } from './planetLooks'
+import type { ClaimsApi } from '../claims'
 import { MAX_TABLES, MIN_TABLES, type EventApi, type RevealPreset } from './eventConfig'
 
 /** The era the galaxy view is currently set to (the host edits starting from that era's built-in text). */
@@ -19,7 +20,7 @@ const PRESETS: { id: RevealPreset; label: string; hint: string }[] = [
 ]
 
 /** Event host controls: what is shown in each sector, what is in play, what players may read, and which sectors are locked. */
-export default function HostView({ events }: { events: EventApi }) {
+export default function HostView({ events, claims }: { events: EventApi; claims: ClaimsApi }) {
   // which information window is open for editing (a sector, planet or hulk id)
   const [editing, setEditing] = useState<string | null>(null)
   // which battlezone is open for editing inside a planet
@@ -53,6 +54,16 @@ export default function HostView({ events }: { events: EventApi }) {
             Host preview: see everything on the galaxy map
             <small className="muted" style={{ display: 'block' }}>Shows locked sectors, hidden planets and hidden sections, so you can check your setup. Turn it off to see what players see.</small>
           </span>
+        </div>
+      </section>
+
+      <section className="host-sector">
+        <div className="hulk-controls">
+          <span className="pname">
+            Battlezone results
+            <small className="muted" style={{ display: 'block' }}>{claims.resultCount() === 0 ? 'No battlezone has a declared winner.' : `${claims.resultCount()} battlezone${claims.resultCount() === 1 ? ' has' : 's have'} a declared winner (each raises a void shield).`}</small>
+          </span>
+          <button className="ghost" disabled={claims.resultCount() === 0} onClick={() => { if (window.confirm('Clear the results of every battlezone? The void shields come down.')) void claims.clearResults() }}>Clear all results</button>
         </div>
       </section>
 

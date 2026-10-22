@@ -751,3 +751,5 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .seat-gm select { max-width: 100%; }
 .seat-gm-add { margin: 6px 0; }
 .seat-gm-form { margin: 6px 0; }
+
+.clear-results { margin: 0 0 10px; }

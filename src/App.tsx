@@ -107,7 +107,7 @@ export default function App() {
       ) : activeId === 'host' ? (
         <main className="content">
           <Suspense fallback={<p className="muted">Loading…</p>}>
-            <HostView events={events} />
+            <HostView events={events} claims={claims} />
           </Suspense>
         </main>
       ) : activeId === 'options' ? (

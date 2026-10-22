@@ -313,6 +313,20 @@ async function claimsApi(req, res, path) {
     return json(res, 200, { tables: claimsView() })
   }
 
+  if (path === '/api/claims/results/clear' && m === 'POST') { // gamemaster: clear battlezone results (the listed battlezones, or all of them)
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    const body = await readBody(req).catch(() => null)
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((x) => typeof x === 'string') : null
+    for (const [id, t] of Object.entries(claims)) {
+      if (ids && !ids.includes(id)) continue
+      delete t.winner
+      delete t.wonAt
+      if (t.seats.length === 0 && t.status === 'open') delete claims[id]
+    }
+    changed()
+    return json(res, 200, { tables: claimsView() })
+  }
+
   const winner = /^\/api\/claims\/([a-z0-9-]{1,80})\/winner$/.exec(path)
   if (winner && m === 'PUT') { // gamemaster: which team won this battlezone (null clears it); a void shield goes up for the winner
     if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })

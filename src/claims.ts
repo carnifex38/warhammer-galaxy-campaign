@@ -87,6 +87,8 @@ export function useClaims(auth: AuthApi) {
     claims: map,
     statusOf: (tableId: string): ZoneStatus => map[tableId]?.status ?? 'open',
     seatsOf: (tableId: string): Seat[] => map[tableId]?.seats ?? [],
+    /** Which of these battlezones (or, with none listed, of all) have a declared result. */
+    resultCount: (tableIds?: string[]): number => Object.entries(map).filter(([id, t]) => !!t.winner && (!tableIds || tableIds.includes(id))).length,
     winnerOf: (tableId: string): { team: Team; at: number } | null => (map[tableId]?.winner ? { team: map[tableId].winner as Team, at: map[tableId].wonAt ?? 0 } : null),
 
     claim: async (tableId: string, team: Team, armyId: string) => {
@@ -159,6 +161,20 @@ export function useClaims(auth: AuthApi) {
         writeDev(m); after(); return
       }
       after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}/winner`, { method: 'PUT', body: JSON.stringify({ winner }) }, gmToken)).tables)
+    },
+    /** Gamemaster: clear the results of the listed battlezones, or of all of them when none are listed. */
+    clearResults: async (tableIds?: string[]) => {
+      if (dev) {
+        const m = readDev()
+        for (const [id, t] of Object.entries(m)) {
+          if (tableIds && !tableIds.includes(id)) continue
+          delete t.winner
+          delete t.wonAt
+          if (!t.seats.length && t.status === 'open') delete m[id]
+        }
+        writeDev(m); after(); return
+      }
+      after((await call<{ tables: ClaimMap }>('/api/claims/results/clear', { method: 'POST', body: JSON.stringify({ ids: tableIds ?? null }) }, gmToken)).tables)
     },
     /** Open a list through its seat. */
     loadList: async (tableId: string, profileId: string): Promise<SeatList> => {

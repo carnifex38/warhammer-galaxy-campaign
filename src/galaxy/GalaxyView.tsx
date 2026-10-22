@@ -352,6 +352,9 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
           {planet && !planetClosed && !planetZonesHidden && !table && (
             <>
               <p className="hint">Choose a battlezone on {planet.name}.</p>
+              {auth.session?.role === 'gm' && claims.resultCount(planetTables.map((t) => t.id)) > 0 && (
+                <button className="ghost clear-results" onClick={() => void claims.clearResults(planetTables.map((t) => t.id))}>Clear results on {planet.name}</button>
+              )}
               <ul className="list">
                 {planetTables.map((t) => (
                   <li key={t.id} className="with-info">
