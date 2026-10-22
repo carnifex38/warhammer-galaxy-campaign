@@ -379,6 +379,14 @@ export function PlanetLod({ name, era, radius, far = 12, near = 6, getFade }: { 
     const u = makePlanetUniforms(name, era)
     return { ...u, uArrive: { value: 0 }, tA: { value: null as THREE.Texture | null }, tB: { value: null as THREE.Texture | null }, tC: { value: null as THREE.Texture | null }, tD: { value: null as THREE.Texture | null } }
   }, [name, era])
+  // The little map planets leave out the pinpoint city lights: on a planet only a few pixels wide they turn into a sparse ring of
+  // shimmering dots that crawls as the camera turns (and the surface texture has no mipmaps to smooth that out).
+  const lodFragment = useMemo(() => withArriveFade(
+    liteFragmentFor(hero)
+      .replace('lit += vec3(1.0, 0.78, 0.45) * cityN * night;', '')
+      .replace('lit += vec3(1.0, 0.68, 0.28) * gridG * (0.3 + 0.9 * night);', '')
+      .replace('vec3 glow = mix(b.rgb, texture2D(tD, uv).rgb, night);', 'vec3 glow = vec3(0.0);'),
+  ), [hero])
   const world = useMemo(() => new THREE.Vector3(), [])
   const turn = useRef(Math.random() * 6.28)
 
@@ -415,7 +423,7 @@ export function PlanetLod({ name, era, radius, far = 12, near = 6, getFade }: { 
             key={`lod${hero}-${era}`}
             uniforms={uniforms}
             vertexShader={PLANET_VERT}
-            fragmentShader={withArriveFade(liteFragmentFor(hero))}
+            fragmentShader={lodFragment}
             transparent
           />
         </mesh>
