@@ -6,8 +6,7 @@ import type { Sector } from './data'
 import { isHulkId, openCount } from './data'
 import InfoPanel from './InfoPanel'
 import Seats from './Seats'
-import { DEV_TOOLS, type AuthApi } from '../auth'
-import { SHIELD_TEST_PLANETS, setShieldShape, setWinner, useShieldShape, useWinners } from './shieldTest'
+import type { AuthApi } from '../auth'
 import type { ClaimsApi, Viewing } from '../claims'
 import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 
@@ -45,16 +44,14 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
 }) {
-  const shieldShape = useShieldShape()
-  const winners = useWinners() // DEV-TOOLS: the void shield test (which team captured which battlezone)
   // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
   const viewOf = (p: Sector['planets'][number]) => {
     const v = events.planetView(p)
     return { ...v, tables: v.tables.map((t) => ({ ...t, status: claims.statusOf(t.id) })) }
   }
   // a battlezone is live (explosions on its spot) once it is in play or anyone has taken a seat there
-  // the winner of a battlezone: the gamemaster's declared result (real), or - in the developer tools on Terra - the shield test's pick
-  const winnerOf = (id: string) => (DEV_TOOLS && winners[id]) || claims.winnerOf(id)
+  // the winner of a battlezone: the result the gamemaster declared
+  const winnerOf = (id: string) => claims.winnerOf(id)
   const isLive = (t: { id: string; status: string }) => !winnerOf(t.id) && (t.status !== 'open' || claims.seatsOf(t.id).length > 0)
   // players see only what the host shows: hidden planets are gone, locked sectors stay shut
   const SECTORS = events.visibleSectors
@@ -125,7 +122,6 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   const table = planetTables.find((t) => t.id === tableId)
   // DEV-TOOLS: battlezones a team has captured get a void shield (only on the planets the test is switched on for)
   const shieldOn = !!planet
-  const testOn = DEV_TOOLS && !!planet && SHIELD_TEST_PLANETS.has(planet.name) // the dev test panel (Terra)
   const shieldZones = shieldOn ? planetTables.filter((t) => winnerOf(t.id)).map((t) => { const w = winnerOf(t.id)!; return { id: t.id, name: t.name, team: w.team, at: w.at } }) : []
   // a team holds a MAJORITY of the planet's battlezones: a shield covers the whole planet (since its Nth capture, N = the majority)
   const majority = (() => {
@@ -356,27 +352,6 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
           {planet && !planetClosed && !planetZonesHidden && !table && (
             <>
               <p className="hint">Choose a battlezone on {planet.name}.</p>
-              {testOn && (
-                <div className="shield-test">
-                  <strong>Void shield test (dev)</strong>
-                  {planetTables.map((t) => (
-                    <div key={t.id} className="row">
-                      <span>{t.name}</span>
-                      <button className={winners[t.id]?.team === 'A' ? 'on a' : 'a'} onClick={() => setWinner(t.id, 'A')}>A</button>
-                      <button className={winners[t.id]?.team === 'B' ? 'on b' : 'b'} onClick={() => setWinner(t.id, 'B')}>B</button>
-                      <button onClick={() => setWinner(t.id, null)} aria-label={`Clear ${t.name}`}>✕</button>
-                    </div>
-                  ))}
-                  <div className="row">
-                    <button className="a" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'A'))}>All A</button>
-                    <button className="b" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'B'))}>All B</button>
-                    <button className="a" onClick={() => planetTables.forEach((t, i) => setWinner(t.id, i < planetTables.length - 1 ? 'A' : 'B'))}>3A 1B</button>
-                    <button onClick={() => planetTables.forEach((t) => setWinner(t.id, null))}>Clear</button>
-                    <button onClick={() => window.dispatchEvent(new Event('shield-test-hit'))}>Fire shot</button>
-                    <button onClick={() => setShieldShape(shieldShape === 'dome' ? 'sphere' : 'dome')}>Shape: {shieldShape}</button>
-                  </div>
-                </div>
-              )}
               <ul className="list">
                 {planetTables.map((t) => (
                   <li key={t.id} className="with-info">
