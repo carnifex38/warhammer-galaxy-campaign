@@ -298,7 +298,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
 // ---------------------------------------------------------------------------------------------------------------------------
 
 /** `team`: who controls the planet (a majority of its battlezones), or null while nobody does (the shield is then neutral). */
-export interface PlanetShieldInfo { team: 'A' | 'B' | null; at: number }
+export interface PlanetShieldInfo { team: 'A' | 'B' | null; at: number; /** false while no battlezone has a shield: the planet shield is then not shown (it fades away) */ active: boolean }
 
 const NEUTRAL_TINT: [number, number, number] = [0.72, 0.82, 0.95]
 
@@ -376,10 +376,11 @@ const GLOBE_FRAG = /* glsl */ `
 
 function PlanetShield({ info }: { info: PlanetShieldInfo }) {
   const mat = useRef<THREE.ShaderMaterial>(null)
+  const mesh = useRef<THREE.Mesh>(null)
   const hits = useRef({ next: 0.4, slot: 0 })
   const uniforms = useMemo(() => ({
     uTint: { value: new THREE.Vector3(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT)) },
-    uGain: { value: info.team ? 1 : 0.85 },
+    uGain: { value: 0 },
     uLight: { value: LIGHT },
     uProgress: { value: 0 },
     uTime: { value: 0 },
@@ -401,7 +402,8 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
     target.set(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT))
     const k = 1 - Math.exp(-dt * 2.2)
     U.uTint.value.lerp(target, k)
-    U.uGain.value += ((info.team ? 1 : 0.85) - U.uGain.value) * k
+    U.uGain.value += ((!info.active ? 0 : info.team ? 1 : 0.85) - U.uGain.value) * k
+    if (mesh.current) mesh.current.visible = U.uGain.value > 0.01
     U.uTime.value = now
     U.uArrive.value = arriveFade.value
     const prog = Math.min(1, (now - born.current) / 2.4) // it forms around the planet once, when the planet is first shown
@@ -416,7 +418,7 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
   })
 
   return (
-    <mesh geometry={PLANET_SHELL} renderOrder={10} frustumCulled={false}>
+    <mesh ref={mesh} geometry={PLANET_SHELL} renderOrder={10} frustumCulled={false}>
       <shaderMaterial
         ref={mat}
         uniforms={uniforms}
