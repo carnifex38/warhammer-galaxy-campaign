@@ -55,6 +55,13 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
         )}
       </header>
 
+      {role === 'gm' && (
+        <div className="seat-result">
+          <span>Result</span>
+          {TEAMS.map((t) => <button key={t} className={claims.winnerOf(tableId)?.team === t ? 'on' : ''} disabled={busy} onClick={() => void run(() => claims.setWinner(tableId, claims.winnerOf(tableId)?.team === t ? null : t))}>Team {t} won</button>)}
+        </div>
+      )}
+      {claims.winnerOf(tableId) && <p className="seat-won">Team {claims.winnerOf(tableId)?.team} won this battlezone. A void shield is up.</p>}
       <div className="seat-teams">
         {TEAMS.map((t) => {
           const list = seats.filter((s) => s.team === t)

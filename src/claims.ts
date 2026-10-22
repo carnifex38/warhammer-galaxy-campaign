@@ -12,7 +12,7 @@ export type ZoneStatus = 'open' | 'in_play'
 
 /** A seat as everyone may see it: who, which side, and the list's name, era and points (not its contents). */
 export interface Seat { profileId: string; name: string; team: Team; armyId: string; armyName: string; era: '40k' | '30k'; pts?: number; locked: boolean; missing?: boolean }
-export interface TableClaims { status: ZoneStatus; seats: Seat[] }
+export interface TableClaims { status: ZoneStatus; seats: Seat[]; /** the team the gamemaster declared the winner (a void shield goes up for them) */ winner?: Team | null; wonAt?: number }
 export type ClaimMap = Record<string, TableClaims>
 
 /** A list opened through a seat. */
@@ -39,7 +39,7 @@ async function call<T>(path: string, init: RequestInit = {}, token?: string): Pr
 
 const DEV_KEY = 'galaxy-dev-claims' // DEV-TOOLS
 interface DevSeat extends Seat { snapshot?: Army }
-type DevMap = Record<string, { status: ZoneStatus; seats: DevSeat[] }>
+type DevMap = Record<string, { status: ZoneStatus; seats: DevSeat[]; winner?: Team | null; wonAt?: number }>
 
 function readDev(): DevMap {
   try { return JSON.parse(localStorage.getItem(DEV_KEY) ?? '{}') as DevMap } catch { return {} }
@@ -48,7 +48,7 @@ function writeDev(m: DevMap) {
   try { localStorage.setItem(DEV_KEY, JSON.stringify(m)) } catch { /* not remembered */ }
 }
 const publicMap = (m: DevMap): ClaimMap =>
-  Object.fromEntries(Object.entries(m).map(([id, t]) => [id, { status: t.status, seats: t.seats.map(({ snapshot, ...seat }) => ({ ...seat, locked: !!snapshot })) }]))
+  Object.fromEntries(Object.entries(m).map(([id, t]) => [id, { status: t.status, seats: t.seats.map(({ snapshot, ...seat }) => ({ ...seat, locked: !!snapshot })), winner: t.winner ?? null, wonAt: t.wonAt ?? 0 }]))
 
 async function devClaim(tableId: string, team: Team, armyId: string): Promise<void> {
   const me = await local.mine()
@@ -87,6 +87,7 @@ export function useClaims(auth: AuthApi) {
     claims: map,
     statusOf: (tableId: string): ZoneStatus => map[tableId]?.status ?? 'open',
     seatsOf: (tableId: string): Seat[] => map[tableId]?.seats ?? [],
+    winnerOf: (tableId: string): { team: Team; at: number } | null => (map[tableId]?.winner ? { team: map[tableId].winner as Team, at: map[tableId].wonAt ?? 0 } : null),
 
     claim: async (tableId: string, team: Team, armyId: string) => {
       if (dev) { await devClaim(tableId, team, armyId); after(); return }
@@ -97,7 +98,7 @@ export function useClaims(auth: AuthApi) {
       if (dev) {
         const me = await local.mine()
         const m = readDev()
-        if (m[tableId]) { m[tableId].seats = m[tableId].seats.filter((x) => x.profileId !== me.id); if (!m[tableId].seats.length && m[tableId].status === 'open') delete m[tableId] }
+        if (m[tableId]) { m[tableId].seats = m[tableId].seats.filter((x) => x.profileId !== me.id); if (!m[tableId].seats.length && m[tableId].status === 'open' && !m[tableId].winner) delete m[tableId] }
         writeDev(m); after(); return
       }
       if (!profileToken) return
@@ -107,7 +108,7 @@ export function useClaims(auth: AuthApi) {
     remove: async (tableId: string, profileId: string) => {
       if (dev) {
         const m = readDev()
-        if (m[tableId]) { m[tableId].seats = m[tableId].seats.filter((x) => x.profileId !== profileId); if (!m[tableId].seats.length && m[tableId].status === 'open') delete m[tableId] }
+        if (m[tableId]) { m[tableId].seats = m[tableId].seats.filter((x) => x.profileId !== profileId); if (!m[tableId].seats.length && m[tableId].status === 'open' && !m[tableId].winner) delete m[tableId] }
         writeDev(m); after(); return
       }
       after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}/${profileId}`, { method: 'DELETE' }, gmToken)).tables)
@@ -121,10 +122,21 @@ export function useClaims(auth: AuthApi) {
         for (const seat of t.seats) {
           if (status === 'in_play') { const p = await local.get(seat.profileId).catch(() => null); const a = p?.armies.find((x) => x.id === seat.armyId); seat.snapshot = a ? JSON.parse(JSON.stringify(a)) : undefined } else delete seat.snapshot
         }
-        if (!t.seats.length && status === 'open') delete m[tableId]
+        if (!t.seats.length && status === 'open' && !t.winner) delete m[tableId]
         writeDev(m); after(); return
       }
       after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}/status`, { method: 'PUT', body: JSON.stringify({ status }) }, gmToken)).tables)
+    },
+    /** Gamemaster: declare which team won a battlezone (null clears it). A void shield goes up for the winner. */
+    setWinner: async (tableId: string, winner: Team | null) => {
+      if (dev) {
+        const m = readDev()
+        const t = m[tableId] ?? (m[tableId] = { status: 'open', seats: [] })
+        if (winner) { t.winner = winner; t.wonAt = Date.now() } else { delete t.winner; delete t.wonAt }
+        if (!t.seats.length && t.status === 'open' && !t.winner) delete m[tableId]
+        writeDev(m); after(); return
+      }
+      after((await call<{ tables: ClaimMap }>(`/api/claims/${tableId}/winner`, { method: 'PUT', body: JSON.stringify({ winner }) }, gmToken)).tables)
     },
     /** Open a list through its seat. */
     loadList: async (tableId: string, profileId: string): Promise<SeatList> => {

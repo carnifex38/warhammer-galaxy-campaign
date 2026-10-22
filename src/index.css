@@ -724,3 +724,9 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .shield-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 16px; border-radius: 8px; font: 600 0.8rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; background: rgba(6, 12, 24, 0.8); border: 1px solid currentColor; pointer-events: none; }
 .shield-banner.team-A { color: #38c6ff; box-shadow: 0 0 14px rgba(56, 198, 255, 0.35); }
 .shield-banner.team-B { color: #ff7a3a; box-shadow: 0 0 14px rgba(255, 122, 58, 0.35); }
+
+.seat-result { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 0.8rem; }
+.seat-result span { flex: 1; color: var(--muted); }
+.seat-result button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.seat-result button.on { background: var(--gold); color: #1a1203; }
+.seat-won { margin: 0 0 8px; font-size: 0.78rem; color: var(--gold); }

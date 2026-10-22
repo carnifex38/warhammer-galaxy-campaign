@@ -235,7 +235,7 @@ function dropSeatsOf(profileId) {
     t.seats = t.seats.filter((s) => s.profileId !== profileId)
     if (t.seats.length !== n) any = true
   }
-  for (const [id, t] of Object.entries(claims)) if (t.seats.length === 0 && t.status === 'open') delete claims[id]
+  for (const [id, t] of Object.entries(claims)) if (t.seats.length === 0 && t.status === 'open' && !t.winner) delete claims[id]
   if (any) changed()
 }
 
@@ -253,7 +253,7 @@ function seatView(seat) {
 
 function claimsView() {
   const out = {}
-  for (const [id, t] of Object.entries(claims)) out[id] = { status: t.status, seats: t.seats.map(seatView) }
+  for (const [id, t] of Object.entries(claims)) out[id] = { status: t.status, seats: t.seats.map(seatView), winner: t.winner ?? null, wonAt: t.wonAt ?? 0 }
   return out
 }
 
@@ -287,7 +287,7 @@ async function claimsApi(req, res, path) {
       const t = claims[tableId]
       if (t) {
         t.seats = t.seats.filter((s) => s.profileId !== who.profile.id)
-        if (t.seats.length === 0 && t.status === 'open') delete claims[tableId]
+        if (t.seats.length === 0 && t.status === 'open' && !t.winner) delete claims[tableId]
         changed()
       }
       return json(res, 200, { tables: claimsView() })
@@ -308,7 +308,19 @@ async function claimsApi(req, res, path) {
         seat.snapshot = army ? JSON.parse(JSON.stringify(army)) : undefined // the lists freeze as they are now
       } else delete seat.snapshot
     }
-    if (t.seats.length === 0 && t.status === 'open') delete claims[status[1]]
+    if (t.seats.length === 0 && t.status === 'open' && !t.winner) delete claims[status[1]]
+    changed()
+    return json(res, 200, { tables: claimsView() })
+  }
+
+  const winner = /^\/api\/claims\/([a-z0-9-]{1,80})\/winner$/.exec(path)
+  if (winner && m === 'PUT') { // gamemaster: which team won this battlezone (null clears it); a void shield goes up for the winner
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    const body = await readBody(req).catch(() => null)
+    if (body?.winner !== 'A' && body?.winner !== 'B' && body?.winner !== null) return json(res, 400, { error: 'Bad winner.' })
+    const t = claims[winner[1]] ?? (claims[winner[1]] = { status: 'open', seats: [] })
+    if (body.winner) { t.winner = body.winner; t.wonAt = Date.now() } else { delete t.winner; delete t.wonAt }
+    if (t.seats.length === 0 && t.status === 'open' && !t.winner) delete claims[winner[1]]
     changed()
     return json(res, 200, { tables: claimsView() })
   }
@@ -322,7 +334,7 @@ async function claimsApi(req, res, path) {
       const t = claims[tableId]
       if (t) {
         t.seats = t.seats.filter((s) => s.profileId !== profileId)
-        if (t.seats.length === 0 && t.status === 'open') delete claims[tableId]
+        if (t.seats.length === 0 && t.status === 'open' && !t.winner) delete claims[tableId]
         changed()
       }
       return json(res, 200, { tables: claimsView() })

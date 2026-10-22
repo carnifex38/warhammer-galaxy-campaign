@@ -53,7 +53,9 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
     return { ...v, tables: v.tables.map((t) => ({ ...t, status: claims.statusOf(t.id) })) }
   }
   // a battlezone is live (explosions on its spot) once it is in play or anyone has taken a seat there
-  const isLive = (t: { id: string; status: string }) => !(DEV_TOOLS && winners[t.id]) && (t.status !== 'open' || claims.seatsOf(t.id).length > 0)
+  // the winner of a battlezone: the gamemaster's declared result (real), or - in the developer tools on Terra - the shield test's pick
+  const winnerOf = (id: string) => (DEV_TOOLS && winners[id]) || claims.winnerOf(id)
+  const isLive = (t: { id: string; status: string }) => !winnerOf(t.id) && (t.status !== 'open' || claims.seatsOf(t.id).length > 0)
   // players see only what the host shows: hidden planets are gone, locked sectors stay shut
   const SECTORS = events.visibleSectors
   const lockedIds = events.lockedForPlayers
@@ -122,8 +124,9 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
   // DEV-TOOLS: battlezones a team has captured get a void shield (only on the planets the test is switched on for)
-  const shieldOn = DEV_TOOLS && !!planet && SHIELD_TEST_PLANETS.has(planet.name)
-  const shieldZones = shieldOn ? planetTables.filter((t) => winners[t.id]).map((t) => ({ id: t.id, name: t.name, team: winners[t.id].team, at: winners[t.id].at })) : []
+  const shieldOn = !!planet
+  const testOn = DEV_TOOLS && !!planet && SHIELD_TEST_PLANETS.has(planet.name) // the dev test panel (Terra)
+  const shieldZones = shieldOn ? planetTables.filter((t) => winnerOf(t.id)).map((t) => { const w = winnerOf(t.id)!; return { id: t.id, name: t.name, team: w.team, at: w.at } }) : []
   // a team holds a MAJORITY of the planet's battlezones: a shield covers the whole planet (since its Nth capture, N = the majority)
   const majority = (() => {
     // decided only once EVERY battlezone has been picked: until then the planet shield stays neutral. The team with more of them controls
@@ -353,7 +356,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
           {planet && !planetClosed && !planetZonesHidden && !table && (
             <>
               <p className="hint">Choose a battlezone on {planet.name}.</p>
-              {shieldOn && (
+              {testOn && (
                 <div className="shield-test">
                   <strong>Void shield test (dev)</strong>
                   {planetTables.map((t) => (
