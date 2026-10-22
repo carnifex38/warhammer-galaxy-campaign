@@ -6,7 +6,8 @@ import type { Sector } from './data'
 import { isHulkId, openCount } from './data'
 import InfoPanel from './InfoPanel'
 import Seats from './Seats'
-import type { AuthApi } from '../auth'
+import { DEV_TOOLS, type AuthApi } from '../auth'
+import { SHIELD_TEST_PLANETS, setWinner, useWinners } from './shieldTest'
 import type { ClaimsApi, Viewing } from '../claims'
 import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 
@@ -44,13 +45,14 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
 }) {
+  const winners = useWinners() // DEV-TOOLS: the void shield test (which team captured which battlezone)
   // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
   const viewOf = (p: Sector['planets'][number]) => {
     const v = events.planetView(p)
     return { ...v, tables: v.tables.map((t) => ({ ...t, status: claims.statusOf(t.id) })) }
   }
   // a battlezone is live (explosions on its spot) once it is in play or anyone has taken a seat there
-  const isLive = (t: { id: string; status: string }) => t.status !== 'open' || claims.seatsOf(t.id).length > 0
+  const isLive = (t: { id: string; status: string }) => !(DEV_TOOLS && winners[t.id]) && (t.status !== 'open' || claims.seatsOf(t.id).length > 0)
   // players see only what the host shows: hidden planets are gone, locked sectors stay shut
   const SECTORS = events.visibleSectors
   const lockedIds = events.lockedForPlayers
@@ -118,6 +120,10 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   // a restricted planet, or one whose battlezones are not revealed, shows no battlezones
   const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
+  // DEV-TOOLS: battlezones a team has captured get a void shield (only on the planets the test is switched on for)
+  const shieldOn = DEV_TOOLS && !!planet && SHIELD_TEST_PLANETS.has(planet.name)
+  const shieldZones = shieldOn ? planetTables.filter((t) => winners[t.id]).map((t) => ({ id: t.id, name: t.name, team: winners[t.id].team, at: winners[t.id].at })) : []
+  const heldBy = shieldOn && shieldZones.length === planetTables.length && planetTables.length > 0 && shieldZones.every((z) => z.team === shieldZones[0].team) ? shieldZones[0].team : null
   // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
   const zoneFx = (() => { const z = planetTables.find((t) => t.id === (hoverZone ?? tableId)); return z ? { id: z.id, name: z.name, live: isLive(z) } : null })()
 
@@ -227,12 +233,15 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         hoverPlanetId={hover?.kind === 'planet' ? hover.id : null}
         hoverZone={zoneFx}
         playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
+        shieldZones={shieldZones}
+        shieldTotal={planetTables.length}
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
         lockedSectors={lockedIds}
         planetInfo={planetInfo}
       >
+        {heldBy && planet && <div className={`shield-banner team-${heldBy}`}>VOID SHIELDS ACTIVE · TEAM {heldBy} HOLDS {planet.name.toUpperCase()}</div>}
         <div className="era-switch" role="group" aria-label="Era">
           <button className={shownEra === '40k' ? 'on' : ''} aria-pressed={shownEra === '40k'} onClick={() => setEra('40k')}>40K</button>
           <button className={shownEra === '30k' ? 'on' : ''} aria-pressed={shownEra === '30k'} onClick={() => setEra('30k')}>30K</button>
@@ -331,6 +340,24 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
           {planet && !planetClosed && !planetZonesHidden && !table && (
             <>
               <p className="hint">Choose a battlezone on {planet.name}.</p>
+              {shieldOn && (
+                <div className="shield-test">
+                  <strong>Void shield test (dev)</strong>
+                  {planetTables.map((t) => (
+                    <div key={t.id} className="row">
+                      <span>{t.name}</span>
+                      <button className={winners[t.id]?.team === 'A' ? 'on a' : 'a'} onClick={() => setWinner(t.id, 'A')}>A</button>
+                      <button className={winners[t.id]?.team === 'B' ? 'on b' : 'b'} onClick={() => setWinner(t.id, 'B')}>B</button>
+                      <button onClick={() => setWinner(t.id, null)} aria-label={`Clear ${t.name}`}>✕</button>
+                    </div>
+                  ))}
+                  <div className="row">
+                    <button className="a" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'A'))}>All A</button>
+                    <button className="b" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'B'))}>All B</button>
+                    <button onClick={() => planetTables.forEach((t) => setWinner(t.id, null))}>Clear</button>
+                  </div>
+                </div>
+              )}
               <ul className="list">
                 {planetTables.map((t) => (
                   <li key={t.id} className="with-info">

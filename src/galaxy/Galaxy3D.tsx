@@ -6,6 +6,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { sliced } from '../idle'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
+import { VoidShields, type ShieldZone } from './VoidShields'
 import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
 import { attachSurfaces, setPrebake, setPrebakeAllowed, tickSurfaces } from './planetSurfaces'
@@ -30,6 +31,9 @@ interface Props {
   hoverZone?: { id: string; name: string; live?: boolean } | null
   /** The battlezones of the selected planet that are in play: each keeps a reticle and explosions on its spot. */
   playZones?: { id: string; name: string }[]
+  /** Battlezones of the selected planet that a team has captured: each gets a void shield. `shieldTotal`: how many battlezones it has. */
+  shieldZones?: ShieldZone[]
+  shieldTotal?: number
   /** 40K (Dark Imperium) or 30K (Horus Heresy). */
   era: Era
   /** The host's setup for every planet: in play or closed, and its table counts. */
@@ -958,8 +962,8 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
 /** One unit sphere shared by every planet dot (sized by scale), so picking a planet does not rebuild a hundred little spheres. */
 const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
 
-function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, zone, held, onSelect }: {
-  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; onSelect: () => void
+function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, zone, held, shields, shieldTotal, onSelect }: {
+  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
   const look = lookNameFor(p.name, era)
@@ -977,7 +981,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       </mesh>
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
-          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /></> : undefined} />
+          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /><VoidShields zones={shields} total={shieldTotal} /></> : undefined} />
         </Arrive>
       ) : (
         <FadeWithBackdrop>
@@ -1225,7 +1229,7 @@ function Later({ ms, children }: { ms: number; children: ReactNode }) {
 
 // ---------- scene ----------
 
-function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, hoverZone, playZones, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
+function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, hoverZone, playZones, shieldZones, shieldTotal, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
   const sector = SECTORS.find((s) => s.id === sectorId)
   const planet = sector?.planets.find((p) => p.id === planetId)
   const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height))
@@ -1296,6 +1300,8 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
                 selectable
                 zone={p.id === planetId ? hoverZone ?? null : null}
                 held={p.id === planetId ? playZones ?? [] : []}
+                shields={p.id === planetId ? shieldZones ?? [] : []}
+                shieldTotal={shieldTotal ?? 0}
                 onSelect={() => onSelectPlanet(s.id, p.id)}
               />
             ))}

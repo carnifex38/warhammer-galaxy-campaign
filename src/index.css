@@ -713,3 +713,14 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .zone-line.left { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to left, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
 .zone-line.right { height: 1px; transform: translateY(-0.5px); background: linear-gradient(to right, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
 .zone-line.down { width: 1px; transform: translateX(-0.5px); background: linear-gradient(to bottom, rgba(98, 255, 157, 0.9), rgba(98, 255, 157, 0)); }
+
+/* DEV-TOOLS: the void shield test panel and the "planet held" banner */
+.shield-test { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; margin: 0 0 10px; border: 1px dashed var(--line); border-radius: 10px; font-size: 0.8rem; }
+.shield-test .row { display: flex; align-items: center; gap: 6px; }
+.shield-test .row span { flex: 1; }
+.shield-test button { padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+.shield-test button.a.on { background: #38c6ff; color: #04202e; }
+.shield-test button.b.on { background: #ff7a3a; color: #2a0f02; }
+.shield-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 16px; border-radius: 8px; font: 600 0.8rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; background: rgba(6, 12, 24, 0.8); border: 1px solid currentColor; pointer-events: none; }
+.shield-banner.team-A { color: #38c6ff; box-shadow: 0 0 14px rgba(56, 198, 255, 0.35); }
+.shield-banner.team-B { color: #ff7a3a; box-shadow: 0 0 14px rgba(255, 122, 58, 0.35); }
