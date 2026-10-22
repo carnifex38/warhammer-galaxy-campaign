@@ -84,14 +84,14 @@ const FRAG = /* glsl */ `
     // every part fades IN first and then OUT: nothing pops on or snaps off
     float fadeIn = smoothstep(0.0, 0.14, age);
     float flashEnv = fadeIn * (1.0 - smoothstep(0.14, 0.75, age));
-    float flash = exp(-d * d / 0.006) * flashEnv;
+    float flash = exp(-d * d / 0.008) * flashEnv;
     float ripple = exp(-sq((d - age * 0.45) / 0.06)) * smoothstep(0.0, 0.2, age) * (1.0 - smoothstep(0.5, 1.7, age));
     // lightning: thin branching electric veins that crawl out from the hit, quickly, then die away
-    float reach = min(0.4, age * 3.0 + 0.05);
-    float life = smoothstep(0.0, 0.1, age) * (1.0 - smoothstep(0.12, 0.8, age));
+    float reach = min(0.5, age * 3.0 + 0.06);
+    float life = smoothstep(0.0, 0.1, age) * (1.0 - smoothstep(0.15, 0.95, age));
     vec3 q = p * 24.0 + vec3(hit.w * 3.1, hit.w * 1.7, 5.0);
-    float f1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 14.0);
-    float f2 = pow(1.0 - abs(noise3(q * 2.1 + 7.0) * 2.0 - 1.0), 14.0);
+    float f1 = pow(1.0 - abs(noise3(q) * 2.0 - 1.0), 12.0);
+    float f2 = pow(1.0 - abs(noise3(q * 2.1 + 7.0) * 2.0 - 1.0), 12.0);
     float bolts = (f1 + 0.6 * f2) * (1.0 - smoothstep(reach * 0.7, reach, d)) * smoothstep(0.015, 0.05, d) * life;
     return vec3(flash, ripple, bolts) * on;
   }
@@ -104,7 +104,7 @@ const FRAG = /* glsl */ `
 
     // how far the dome has spread; nothing beyond that
     float e = uRadius * (1.0 - pow(1.0 - prog, 3.0));
-    float inside = 1.0 - smoothstep(e - 0.04, e, ang);
+    float inside = 1.0 - smoothstep(e - 0.11, e, ang); // the skin thins out toward its edge instead of ending sharply
     if (inside <= 0.001) discard;
 
     vec3 V = normalize(cameraPosition - vWP);
@@ -117,8 +117,8 @@ const FRAG = /* glsl */ `
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
 
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
-    float edgeLine = exp(-sq((ang - e) / 0.026)) * (1.0 + 0.6 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
-    float edgeGlow = exp(-sq((ang - e) / 0.1)) * 0.32;
+    float edgeLine = exp(-sq((ang - e) / 0.045)) * (0.55 + 0.4 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
+    float edgeGlow = exp(-sq((ang - e) / 0.16)) * 0.22;
     float front = exp(-sq((ang - e) / 0.05)) * (1.0 - prog) * 1.2;
 
     // faint energy veins drifting through the glass, and a soft sheen
@@ -138,7 +138,7 @@ const FRAG = /* glsl */ `
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
-    float a = (rest + ripple * (0.3 + 1.0 * hexLine) + flash * 1.4 + bolts * 1.7) * inside + edgeLine + edgeGlow + front;
+    float a = (rest + ripple * (0.12 + 0.6 * hexLine) + flash * 0.8 + bolts * 0.9) * inside + edgeLine + edgeGlow + front;
     a *= uArrive;
     vec3 col = mix(uTint, vec3(1.0), clamp(0.3 + bolts + flash + front * 0.5 + edgeLine * 0.25, 0.0, 1.0));
     gl_FragColor = vec4(col * a, a);
@@ -171,12 +171,19 @@ function labelTexture(team: 'A' | 'B') {
 function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
   const group = useRef<THREE.Group>(null)
   const label = useRef<THREE.Sprite>(null)
+  const mat = useRef<THREE.ShaderMaterial>(null)
   const spot = useMemo(() => zoneSpot(zone.id), [zone.id])
   const radius = useRef(full ? NETWORK_RADIUS : DOME_RADIUS)
-  const hits = useRef({ next: 0.1, slot: 0 })
+  const hits = useRef({ next: 0.1, slot: 0, last: -1 })
   const tmp = useMemo(() => ({ q: new THREE.Quaternion(), centre: new THREE.Vector3(), toCam: new THREE.Vector3(), world: new THREE.Vector3(), t: new THREE.Vector3(), a: new THREE.Vector3() }), [])
   const tex = useMemo(() => labelTexture(zone.team), [zone.team])
   useEffect(() => () => tex.dispose(), [tex])
+  // DEV-TOOLS: the test panel's "fire a shot" button makes every shield take a hit right away
+  useEffect(() => {
+    const hit = () => { hits.current.next = 0 }
+    window.addEventListener('shield-test-hit', hit)
+    return () => window.removeEventListener('shield-test-hit', hit)
+  }, [])
 
   const uniforms = useMemo(() => {
     const up = Math.abs(spot.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)
@@ -204,17 +211,23 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
 
   useFrame((s, dt) => {
     const g = group.current
-    if (!g || !g.parent) return
+    // the material's own uniforms (what the renderer actually reads), not the object this component made
+    const U = mat.current?.uniforms as typeof uniforms | undefined
+    if (!g || !g.parent || !U) return
     const now = s.clock.elapsedTime
     const prog = zone.at ? Math.min(1, (Date.now() - zone.at) / 1000 / POWER_UP_S) : 1
-    uniforms.uTime.value = now
-    uniforms.uProgress.value = prog
+    const slow = (import.meta.env.DEV && (window as unknown as { __shieldSlow?: number }).__shieldSlow) || 1 // dev only: slow motion, to look at an effect
+    U.uTime.value = now / slow
+    // dev only: `__shieldHold = 0.2` freezes the latest hit at that age (seconds), to look at one moment of it
+    const hold = import.meta.env.DEV ? (window as unknown as { __shieldHold?: number }).__shieldHold : undefined
+    if (hold !== undefined && hits.current.last >= 0) U.uTime.value = hits.current.last + hold
+    U.uProgress.value = prog
     // widen to one joined network when the planet is fully held (and back again)
     const target = full ? NETWORK_RADIUS : DOME_RADIUS
     radius.current += (target - radius.current) * Math.min(1, dt * 2.2)
-    uniforms.uRadius.value = radius.current
-    uniforms.uHeight.value = 0.085 + 0.1 * (radius.current - DOME_RADIUS) // a thin skin over the ground; a wider dome stands a touch taller
-    uniforms.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
+    U.uRadius.value = radius.current
+    U.uHeight.value = 0.085 + 0.1 * (radius.current - DOME_RADIUS) // a thin skin over the ground; a wider dome stands a touch taller
+    U.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
 
     // shots hitting the shield: a burst of them while it powers up, then now and then
     const h = hits.current
@@ -224,9 +237,10 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
       tmp.a.set(Math.abs(spot.y) > 0.95 ? 1 : 0, Math.abs(spot.y) > 0.95 ? 0 : 1, 0)
       tmp.t.crossVectors(tmp.a, spot).normalize().applyAxisAngle(spot, ang)
       tmp.a.copy(spot).applyAxisAngle(tmp.t, rho)
-      ;[uniforms.uHit0, uniforms.uHit1, uniforms.uHit2][h.slot % 3].value.set(tmp.a.x, tmp.a.y, tmp.a.z, now)
+      ;[U.uHit0, U.uHit1, U.uHit2][h.slot % 3].value.set(tmp.a.x, tmp.a.y, tmp.a.z, now / slow)
       h.slot++
-      h.next = now + (prog < 1 ? 0.12 + Math.random() * 0.14 : 1.8 + Math.random() * 2.4)
+      h.last = now / slow
+      h.next = now + (prog < 1 ? 0.12 + Math.random() * 0.14 : 1.2 + Math.random() * 1.8)
     }
 
     // the label: visible while its spot faces the viewer, like the reticle's; it arrives as the dome finishes
@@ -239,9 +253,9 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
     if (label.current) {
       const edge = Math.min(1, Math.max(0, (facing - 0.1) / 0.35))
       const pop = Math.min(1, Math.max(0, (prog - 0.55) / 0.45))
-      const joined = uniforms.uFull.value // one joined network: the banner says it instead
+      const joined = U.uFull.value // one joined network: the banner says it instead
       ;(label.current.material as THREE.SpriteMaterial).opacity = edge * pop * (1 - joined) * arriveFade.value
-      label.current.position.copy(spot).multiplyScalar(PLANET_RADIUS * (1.04 + uniforms.uHeight.value * Math.min(1, prog * 1.4)))
+      label.current.position.copy(spot).multiplyScalar(PLANET_RADIUS * (1.04 + U.uHeight.value * Math.min(1, prog * 1.4)))
     }
   })
 
@@ -249,6 +263,7 @@ function Shield({ zone, full }: { zone: ShieldZone; full: boolean }) {
     <group ref={group}>
       <mesh geometry={SHIELD_GEOMETRY} renderOrder={9} frustumCulled={false}>
         <shaderMaterial
+          ref={mat}
           uniforms={uniforms}
           vertexShader={VERT}
           fragmentShader={FRAG}

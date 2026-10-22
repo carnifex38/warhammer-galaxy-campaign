@@ -355,6 +355,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
                     <button className="a" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'A'))}>All A</button>
                     <button className="b" onClick={() => planetTables.forEach((t) => setWinner(t.id, 'B'))}>All B</button>
                     <button onClick={() => planetTables.forEach((t) => setWinner(t.id, null))}>Clear</button>
+                    <button onClick={() => window.dispatchEvent(new Event('shield-test-hit'))}>Fire shot</button>
                   </div>
                 </div>
               )}
