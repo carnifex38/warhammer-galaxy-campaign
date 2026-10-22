@@ -393,9 +393,11 @@ export function PlanetLod({ name, era, radius, far = 7, near = 3.2, getFade }: {
     spin.current.rotation.y = turn.current
     spin.current.updateMatrixWorld()
     const u = m.uniforms
-    u.uArrive.value = k
+    u.uArrive.value = Math.min(1, k * 4) // solid almost at once (a half-faded dark planet would just look like a hole); it GROWS out of the dot instead
+    spin.current.scale.setScalar((radius / PLANET_RADIUS) * (0.3 + 0.7 * k))
     // lit from the upper left of the view, so the side facing the viewer is always the bright one (never a black disc)
-    u.uLight.value.set(-0.7, 0.4, 0.6).applyQuaternion(s.camera.quaternion)
+    u.uLight.value.set(-0.45, 0.35, 0.82).applyQuaternion(s.camera.quaternion)
+    u.uAmbient.value = 0.16 // a bright enough night side that no planet is ever a black disc
     u.uTime.value = s.clock.elapsedTime
     u.uModelRot.value.setFromMatrix4(spin.current.matrixWorld)
     if (baked) { u.tA.value = baked.a; u.tB.value = baked.b; u.tC.value = baked.c; u.tD.value = baked.d }
@@ -403,7 +405,7 @@ export function PlanetLod({ name, era, radius, far = 7, near = 3.2, getFade }: {
 
   return (
     <group ref={group} visible={false}>
-      <group ref={spin} scale={radius / PLANET_RADIUS}>
+      <group ref={spin}>
         <mesh geometry={PLANET_GEOMETRY} renderOrder={3}>
           <shaderMaterial
             ref={mat}
