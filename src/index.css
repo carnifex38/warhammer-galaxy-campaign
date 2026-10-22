@@ -731,6 +731,6 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .seat-result button.on { background: var(--gold); color: #1a1203; }
 .seat-won { margin: 0 0 8px; font-size: 0.78rem; color: var(--gold); }
 
-.badge.won { margin-left: 6px; border-color: currentColor; background: transparent; font-weight: 600; }
+.badge.won { border-color: currentColor; background: transparent; font-weight: 600; white-space: nowrap; }
 .badge.won.team-A { color: #6fd0ff; }
 .badge.won.team-B { color: #ff9a5c; }

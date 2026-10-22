@@ -387,7 +387,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
                       onFocus={() => setHoverZone(t.id)}
                       onBlur={() => setHoverZone(null)}
                     >
-                      <span>{t.name} <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em>{winnerOf(t.id) && <em className={`badge won team-${winnerOf(t.id)!.team}`}>Team {winnerOf(t.id)!.team} won</em>}</span>
+                      <span>{t.name} {winnerOf(t.id) ? <em className={`badge won team-${winnerOf(t.id)!.team}`}>Team {winnerOf(t.id)!.team} won</em> : <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em>}</span>
                       <small>{t.note}</small>
                     </button>
                     <button
@@ -404,8 +404,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
           {table && planet && (
             <div className="table-detail">
               <h3>{planet.name} · {table.name}</h3>
-              <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>
-              {winnerOf(table.id) && <span className={`badge won team-${winnerOf(table.id)!.team}`}>Team {winnerOf(table.id)!.team} won</span>}
+              {winnerOf(table.id) ? <span className={`badge won team-${winnerOf(table.id)!.team}`}>Team {winnerOf(table.id)!.team} won</span> : <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>}
               <div className="layout-placeholder">Battlezone layout image goes here</div>
               <p className="muted">{table.note}</p>
               <Seats tableId={table.id} where={`${planet.name} · ${table.name}`} auth={auth} claims={claims} onView={onViewList} />
