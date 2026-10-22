@@ -118,8 +118,8 @@ const FRAG = /* glsl */ `
     float fr = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
 
     // the bright thin edge where the bubble meets the ground, and the front of the spread while powering up
-    float edgeLine = exp(-sq((ang - e) / 0.075)) * (0.4 + 0.35 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
-    float edgeGlow = exp(-sq((ang - e) / 0.2)) * 0.2;
+    float edgeLine = exp(-sq((ang - e) / 0.075)) * (0.4 - 0.2 * uFull) * (0.82 + 0.36 * (0.5 + 0.5 * sin(uTime * 1.3)));
+    float edgeGlow = exp(-sq((ang - e) / 0.2)) * (0.2 - 0.1 * uFull);
     float front = exp(-sq((ang - e) / 0.07)) * (1.0 - prog) * 0.55;
 
     // faint energy veins drifting through the glass, and a soft sheen
@@ -138,7 +138,7 @@ const FRAG = /* glsl */ `
 
     // the glass itself is nearly clear: light is added on top of the planet, so anything much above a whisper washes it out
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
-    float rest = (0.012 + 0.04 * fr + fr * (0.5 + 0.25 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
+    float rest = (0.012 + 0.04 * fr + fr * (0.5 - 0.2 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + ripple * (0.08 + 0.15 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
     a *= uArrive;
     // mostly the team's colour; only the brightest sparks go toward white
@@ -433,7 +433,8 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
 
 /** The shields of every captured battlezone on a planet. `total`: how many battlezones it has. `majority`: a team holds most of them. */
 export function VoidShields({ zones, total, majority }: { zones: ShieldZone[]; total: number; majority?: PlanetShieldInfo | null }) {
-  const full = zones.length > 0 && zones.length === total && zones.every((z) => z.team === zones[0].team)
+  // the domes widen and join into one network once the planet is under one team's control (they are all that team's colour then)
+  const full = !!majority?.team || (zones.length > 0 && zones.length === total && zones.every((z) => z.team === zones[0].team))
   return (
     <>
       {zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} control={majority?.team ?? null} />)}
