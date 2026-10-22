@@ -7,7 +7,8 @@ import { sliced } from '../idle'
 import { SkyNebula } from './Nebula'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
-import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, markShaderReady } from './PlanetBody'
+import PlanetBody, { PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, markShaderReady, warmBake } from './PlanetBody'
+import { canBake } from './planetBake'
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
@@ -1144,14 +1145,19 @@ function Warmup() {
       for (let i = 0; i < WARMUP_PLANETS.length; i++) {
         const w = WARMUP_PLANETS[i]
         setLoad({ label: `Preparing ${w.label}` })
-        const mat = createWarmupMaterial(w.name, w.era)
-        keep.push(mat)
-        holder.material = mat
-        scene.add(holder)
         const c0 = performance.now()
-        try { await gl.compileAsync(scene, camera) } catch { /* compiled on demand instead */ }
-        scene.remove(holder)
-        markShaderReady(w.name, w.era)
+        if (canBake(gl)) {
+          // planets are drawn from baked textures, so what needs compiling is the (small) baking program
+          try { keep.push(await warmBake(gl, w.name, w.era)) } catch { /* compiled on demand instead */ }
+        } else {
+          const mat = createWarmupMaterial(w.name, w.era)
+          keep.push(mat)
+          holder.material = mat
+          scene.add(holder)
+          try { await gl.compileAsync(scene, camera) } catch { /* compiled on demand instead */ }
+          scene.remove(holder)
+          markShaderReady(w.name, w.era)
+        }
         if (performance.now() - c0 > 2500) {
           try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
           console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)

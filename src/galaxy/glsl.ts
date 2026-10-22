@@ -15,3 +15,13 @@ export const NOISE3 = /* glsl */ `
     return v;
   }
 `
+
+/**
+ * The same noise, but the octave loop runs to a uniform instead of a constant. A graphics driver unrolls a constant loop, so the
+ * planet shaders (dozens of these calls each) become enormous programs that take seconds to compile. With a real loop the program
+ * stays small. Slightly slower to run, which does not matter for the one-off baking of a planet's surface.
+ */
+export const NOISE3_LOOP = NOISE3.replace(
+  'for (int i = 0; i < 6; i++)',
+  'for (int i = 0; i < uOct; i++)',
+).replace('float hash3(', 'uniform int uOct;\n  float hash3(')
