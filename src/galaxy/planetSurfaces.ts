@@ -54,10 +54,24 @@ export function configureSurfaces(c: Config) {
   config = c
 }
 
-/** Called once the renderer exists. Also starts noticing when the player is moving around, so background baking can wait. */
+let busyHooked = false
+
+/**
+ * Called when a renderer exists. If it is a NEW one (the galaxy view was closed, for example by switching to the Host tab, and opened
+ * again, which makes a new canvas), everything baked for the old one is gone with its graphics memory: forget it, keep who is
+ * waiting for what, and bake again. Also starts noticing when the player is moving around, so background baking can wait.
+ */
 export function attachSurfaces(renderer: THREE.WebGLRenderer) {
-  if (gl) return
+  if (gl === renderer) return
+  if (gl) {
+    current = null
+    highOrder.length = 0
+    for (const e of entries.values()) { e.low = null; e.high = null }
+    bump()
+  }
   gl = renderer
+  if (busyHooked) return
+  busyHooked = true
   const busy = () => { lastBusy = performance.now() }
   for (const ev of ['pointermove', 'wheel', 'pointerdown', 'touchmove', 'keydown']) addEventListener(ev, busy, { passive: true })
 }
