@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { NOISE3 } from './glsl'
 import { PLANET_RADIUS, arriveFade } from './PlanetBody'
 import { zoneSpot } from './ZoneReticle'
+import { useShieldShape } from './shieldTest'
 
 // Void shields. A battlezone captured by a team gets a shield dome over its own spot on the planet (the same fixed spot its reticle and
 // explosions use), as in the lore: shields cover regions and fortress sites, never a whole world.
@@ -20,7 +21,9 @@ export interface ShieldZone { id: string; name: string; team: 'A' | 'B'; at: num
 const TEAM_TINT: Record<'A' | 'B', [number, number, number]> = { A: [0.2, 0.62, 1.0], B: [1.0, 0.4, 0.14] }
 const TEAM_TEXT: Record<'A' | 'B', string> = { A: '#6fd0ff', B: '#ff9a5c' }
 const DOME_RADIUS = 0.4 // how far a dome reaches over the surface from its spot (radians), about 23 degrees
-const NETWORK_RADIUS = 0.85 // when the planet is fully held: wide enough that the domes overlap
+const NETWORK_RADIUS = 0.85 // (the point at which the joined look is fully on)
+const JOIN_RADIUS = 2.4 // when a team controls the planet the domes keep growing until they cover it, and melt into the planet shield
+const fadeOut = (x: number, a: number, b: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return 1 - t * t * (3 - 2 * t) }
 const POWER_UP_S = 1.8
 const LIGHT = new THREE.Vector3(-0.8, 0.35, 0.55)
 
@@ -59,7 +62,7 @@ const FRAG = /* glsl */ `
   varying vec3 vN;
   varying vec3 vCW;
   uniform vec3 uCenter, uU, uV, uTint, uLight;
-  uniform float uRadius, uProgress, uTime, uArrive, uSeed, uFull;
+  uniform float uRadius, uProgress, uTime, uArrive, uSeed, uFull, uGain;
   uniform vec4 uHit0, uHit1, uHit2; // each: xyz = where a shot hit (on the sphere), w = when (-1 = none)
   ${NOISE3}
 
@@ -140,7 +143,7 @@ const FRAG = /* glsl */ `
     float pulse = 0.5 + 0.5 * sin(uTime * 1.3); // a slow, smooth breath
     float rest = (0.012 + 0.04 * fr + fr * (0.5 - 0.2 * uFull) + veins * (0.05 + 0.3 * fr) + sheen) * (0.78 + 0.44 * pulse);
     float a = (rest + ripple * (0.08 + 0.15 * hexLine) + flash * 0.55 + bolts * 0.33) * inside + (edgeLine + edgeGlow + front) * outer;
-    a *= uArrive;
+    a *= uArrive * uGain;
     // mostly the team's colour; only the brightest sparks go toward white
     vec3 col = mix(uTint, vec3(1.0), clamp(0.04 + (bolts + flash) * 0.7 + front * 0.3 + edgeLine * 0.08, 0.0, 0.6));
     gl_FragColor = vec4(col * a, a);
@@ -208,6 +211,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
       uHeight: { value: 0.085 },
       uProgress: { value: 1 },
       uFull: { value: 0 },
+      uGain: { value: 1 },
       uTime: { value: 0 },
       uArrive: arriveFade,
       uSeed: { value: (zone.id.length * 7.3) % 5 },
@@ -234,11 +238,12 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
     if (hold !== undefined && hits.current.last >= 0) U.uTime.value = hits.current.last + hold
     U.uProgress.value = prog
     // widen to one joined network when the planet is fully held (and back again)
-    const target = full ? NETWORK_RADIUS : DOME_RADIUS
-    radius.current += (target - radius.current) * Math.min(1, dt * 2.2)
+    const target = full ? JOIN_RADIUS : DOME_RADIUS
+    radius.current += (target - radius.current) * Math.min(1, dt * 1.1)
     U.uRadius.value = radius.current
     U.uHeight.value = 0.085 + 0.1 * (radius.current - DOME_RADIUS) // a thin skin over the ground; a wider dome stands a touch taller
     U.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
+    U.uGain.value = fadeOut(radius.current, 1.2, 2.1) // once it covers the planet it has become the planet shield's shape, and fades into it
 
     // shots hitting the shield: a burst of them while it powers up, then now and then
     const h = hits.current
@@ -433,13 +438,121 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
   )
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------
+// The sphere version of a zone shield: a real glass sphere sitting on the battlezone's spot, half sunk into the planet (the planet hides
+// the lower half). Same glass look as the planet shield. A dev switch (Shape) on the test panel changes between this and the domes.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+const UNIT_SPHERE = new THREE.SphereGeometry(1, 72, 56)
+const SPHERE_R = 0.13 // world units; the planet's radius is 0.62
+
+function SphereShield({ zone, control }: { zone: ShieldZone; control: 'A' | 'B' | null }) {
+  const group = useRef<THREE.Group>(null)
+  const mesh = useRef<THREE.Mesh>(null)
+  const mat = useRef<THREE.ShaderMaterial>(null)
+  const label = useRef<THREE.Sprite>(null)
+  const spot = useMemo(() => zoneSpot(zone.id), [zone.id])
+  const shownTeam = control ?? zone.team
+  const flipped = control !== null && control !== zone.team
+  const tex = useMemo(() => labelTexture(shownTeam, flipped ? zone.team : null), [shownTeam, flipped, zone.team])
+  useEffect(() => () => tex.dispose(), [tex])
+  const merge = useRef(control ? 1 : 0) // 0 = a sphere on its spot, 1 = it has become the planet shield
+  const hits = useRef({ next: 0.6, slot: 0 })
+  const tmp = useMemo(() => ({ q: new THREE.Quaternion(), centre: new THREE.Vector3(), toCam: new THREE.Vector3(), world: new THREE.Vector3(), tint: new THREE.Vector3(), v: new THREE.Vector3() }), [])
+  const uniforms = useMemo(() => ({
+    uTint: { value: new THREE.Vector3(...TEAM_TINT[zone.team]) },
+    uGain: { value: 1 },
+    uLight: { value: LIGHT },
+    uProgress: { value: 0 },
+    uTime: { value: 0 },
+    uArrive: arriveFade,
+    uHit0: { value: new THREE.Vector4(0, 0, 1, -1) },
+    uHit1: { value: new THREE.Vector4(0, 0, 1, -1) },
+    uHit2: { value: new THREE.Vector4(0, 0, 1, -1) },
+  }), [zone.team])
+  useEffect(() => {
+    const hit = () => { hits.current.next = 0 }
+    window.addEventListener('shield-test-hit', hit)
+    return () => window.removeEventListener('shield-test-hit', hit)
+  }, [])
+
+  useFrame((s, dt) => {
+    const g = group.current
+    const U = mat.current?.uniforms as typeof uniforms | undefined // the material's own copy of the uniforms (see Shield)
+    if (!g || !g.parent || !U || !mesh.current) return
+    const now = s.clock.elapsedTime
+    const prog = zone.at ? Math.min(1, (Date.now() - zone.at) / 1000 / POWER_UP_S) : 1
+    tmp.tint.set(...TEAM_TINT[shownTeam])
+    U.uTint.value.lerp(tmp.tint, 1 - Math.exp(-dt * 2.2)) // a flip of colour is a smooth change
+    U.uTime.value = now
+    U.uArrive.value = arriveFade.value
+    U.uProgress.value = prog
+    // when a team controls the planet the sphere slides to the planet's centre and swells to the planet shield's size, then fades into it
+    merge.current += ((control ? 1 : 0) - merge.current) * Math.min(1, dt * 1.1)
+    const m = merge.current * merge.current * (3 - 2 * merge.current)
+    const grow = 0.25 + 0.75 * (prog * prog * (3 - 2 * prog)) // it swells up out of the ground when it powers up
+    const rNow = (SPHERE_R + (PLANET_RADIUS * 1.1 - SPHERE_R) * m) * grow
+    mesh.current.scale.setScalar(rNow)
+    mesh.current.position.copy(spot).multiplyScalar(PLANET_RADIUS * (1 - m))
+    U.uGain.value = fadeOut(merge.current, 0.75, 1)
+
+    // now and then a hit on the outer half of the sphere
+    const h = hits.current
+    if (now >= h.next) {
+      tmp.v.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize()
+      if (tmp.v.dot(spot) < 0) tmp.v.negate()
+      ;[U.uHit0, U.uHit1, U.uHit2][h.slot % 3].value.set(tmp.v.x, tmp.v.y, tmp.v.z, now)
+      h.slot++
+      h.next = now + (prog < 1 ? 0.9 + Math.random() * 0.5 : 2.8 + Math.random() * 2.6)
+    }
+
+    // the label sits above the sphere while its spot faces the viewer
+    const parent = g.parent
+    parent.getWorldQuaternion(tmp.q)
+    parent.getWorldPosition(tmp.centre)
+    tmp.toCam.copy(s.camera.position).sub(tmp.centre).normalize()
+    tmp.world.copy(spot).applyQuaternion(tmp.q)
+    const facing = tmp.world.dot(tmp.toCam)
+    if (label.current) {
+      const edge = Math.min(1, Math.max(0, (facing - 0.1) / 0.35))
+      const pop = Math.min(1, Math.max(0, (prog - 0.55) / 0.45))
+      ;(label.current.material as THREE.SpriteMaterial).opacity = edge * pop * arriveFade.value
+      ;(label.current.material as THREE.SpriteMaterial).opacity *= 1 - merge.current // the planet shield's banner says it instead
+      label.current.position.copy(spot).multiplyScalar(PLANET_RADIUS + rNow + 0.03)
+    }
+  })
+
+  return (
+    <group ref={group}>
+      <mesh ref={mesh} geometry={UNIT_SPHERE} renderOrder={9} frustumCulled={false}>
+        <shaderMaterial
+          ref={mat}
+          uniforms={uniforms}
+          vertexShader={GLOBE_VERT}
+          fragmentShader={GLOBE_FRAG}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.FrontSide}
+        />
+      </mesh>
+      <sprite ref={label} scale={[0.62, 0.155, 1]} renderOrder={12}>
+        <spriteMaterial map={tex} transparent depthTest={false} depthWrite={false} opacity={0} userData={{ keepOpacity: true }} />
+      </sprite>
+    </group>
+  )
+}
+
 /** The shields of every captured battlezone on a planet. `total`: how many battlezones it has. `majority`: a team holds most of them. */
 export function VoidShields({ zones, total, majority }: { zones: ShieldZone[]; total: number; majority?: PlanetShieldInfo | null }) {
   // the domes widen and join into one network once the planet is under one team's control (they are all that team's colour then)
+  const shape = useShieldShape()
   const full = !!majority?.team || (zones.length > 0 && zones.length === total && zones.every((z) => z.team === zones[0].team))
   return (
     <>
-      {zones.map((z) => <Shield key={`${z.id}-${z.team}`} zone={z} full={full} control={majority?.team ?? null} />)}
+      {zones.map((z) => shape === 'sphere'
+        ? <SphereShield key={`s-${z.id}-${z.team}`} zone={z} control={majority?.team ?? null} />
+        : <Shield key={`${z.id}-${z.team}`} zone={z} full={full} control={majority?.team ?? null} />)}
       {majority && <PlanetShield info={majority} />}
     </>
   )

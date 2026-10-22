@@ -37,6 +37,24 @@ export function setWinner(zoneId: string, team: ShieldTeam | null) {
   listeners.forEach((l) => l())
 }
 
+/** How a zone shield is drawn in the test: a shallow dome on the ground, or a real glass sphere half sunk into it. */
+export type ShieldShape = 'dome' | 'sphere'
+const SHAPE_KEY = 'galaxy-dev-shield-shape'
+let shape: ShieldShape = (() => { try { return localStorage.getItem(SHAPE_KEY) === 'sphere' ? 'sphere' : 'dome' } catch { return 'dome' } })()
+
+export function setShieldShape(next: ShieldShape) {
+  shape = next
+  try { localStorage.setItem(SHAPE_KEY, next) } catch { /* not remembered */ }
+  listeners.forEach((l) => l())
+}
+
+export function useShieldShape(): ShieldShape {
+  return useSyncExternalStore(
+    (l) => { listeners.add(l); return () => { listeners.delete(l) } },
+    () => shape,
+  )
+}
+
 export function useWinners(): Record<string, Win> {
   return useSyncExternalStore(
     (l) => { listeners.add(l); return () => { listeners.delete(l) } },

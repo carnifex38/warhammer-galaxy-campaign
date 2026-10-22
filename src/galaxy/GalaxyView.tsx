@@ -7,7 +7,7 @@ import { isHulkId, openCount } from './data'
 import InfoPanel from './InfoPanel'
 import Seats from './Seats'
 import { DEV_TOOLS, type AuthApi } from '../auth'
-import { SHIELD_TEST_PLANETS, setWinner, useWinners } from './shieldTest'
+import { SHIELD_TEST_PLANETS, setShieldShape, setWinner, useShieldShape, useWinners } from './shieldTest'
 import type { ClaimsApi, Viewing } from '../claims'
 import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 
@@ -45,6 +45,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
 }) {
+  const shieldShape = useShieldShape()
   const winners = useWinners() // DEV-TOOLS: the void shield test (which team captured which battlezone)
   // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
   const viewOf = (p: Sector['planets'][number]) => {
@@ -371,6 +372,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
                     <button className="a" onClick={() => planetTables.forEach((t, i) => setWinner(t.id, i < planetTables.length - 1 ? 'A' : 'B'))}>3A 1B</button>
                     <button onClick={() => planetTables.forEach((t) => setWinner(t.id, null))}>Clear</button>
                     <button onClick={() => window.dispatchEvent(new Event('shield-test-hit'))}>Fire shot</button>
+                    <button onClick={() => setShieldShape(shieldShape === 'dome' ? 'sphere' : 'dome')}>Shape: {shieldShape}</button>
                   </div>
                 </div>
               )}
