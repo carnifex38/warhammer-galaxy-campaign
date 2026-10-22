@@ -125,13 +125,14 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
   const shieldZones = shieldOn ? planetTables.filter((t) => winners[t.id]).map((t) => ({ id: t.id, name: t.name, team: winners[t.id].team, at: winners[t.id].at })) : []
   // a team holds a MAJORITY of the planet's battlezones: a shield covers the whole planet (since its Nth capture, N = the majority)
   const majority = (() => {
-    if (!shieldOn || planetTables.length === 0) return null
-    for (const team of ['A', 'B'] as const) {
-      const mine = shieldZones.filter((z) => z.team === team).map((z) => z.at).sort((a, b) => a - b)
-      const need = Math.floor(planetTables.length / 2) + 1
-      if (mine.length >= need) return { team, at: mine[need - 1], count: mine.length }
-    }
-    return null
+    // decided only once EVERY battlezone has been picked: until then the planet shield stays neutral. The team with more of them controls
+    // the planet (a tie is not decided).
+    if (!shieldOn || planetTables.length === 0 || shieldZones.length < planetTables.length) return null
+    const a = shieldZones.filter((z) => z.team === 'A')
+    const b = shieldZones.filter((z) => z.team === 'B')
+    if (a.length === b.length) return null
+    const team: 'A' | 'B' = a.length > b.length ? 'A' : 'B'
+    return { team, at: Math.max(...shieldZones.map((z) => z.at)), count: Math.max(a.length, b.length) }
   })()
   const heldBy = shieldOn && shieldZones.length === planetTables.length && planetTables.length > 0 && shieldZones.every((z) => z.team === shieldZones[0].team) ? shieldZones[0].team : null
   // the battlezone the reticle points at: the one under the pointer, or (so it also shows on a phone) the one that is open
