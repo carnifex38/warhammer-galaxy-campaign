@@ -249,7 +249,7 @@ const HULK_NAME_LIST = [
   'Judgement of Carrion', 'Forsaken Bastion', 'Tomb of Vigilance',
   'Thorn of Ultima', 'Lament of Ships', 'Black Chalice',
 ]
-export const HULK_NAMES = new Set(HULK_NAME_LIST)
+const HULK_NAMES = new Set(HULK_NAME_LIST)
 export const isHulkId = (id: string) => id.startsWith('space-hulk-')
 export const isHulkName = (name: string) => HULK_NAMES.has(name)
 

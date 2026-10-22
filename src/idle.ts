@@ -2,7 +2,7 @@
 // and in slices a few milliseconds long, so typing, tapping and animation stay smooth (for example on the login screen).
 
 /** Run a function when the browser has nothing better to do (or after `timeout` ms at the latest). */
-export function whenIdle(fn: () => void, timeout = 2000) {
+function whenIdle(fn: () => void, timeout = 2000) {
   const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
   if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout })
   else window.setTimeout(fn, 200)
@@ -14,7 +14,7 @@ export const idle = (timeout = 2000) => new Promise<void>((resolve) => whenIdle(
 const channel = typeof MessageChannel === 'function' ? new MessageChannel() : null
 
 /** Give the browser a chance to draw a frame and handle input, then carry on. */
-export function yieldToMain(): Promise<void> {
+function yieldToMain(): Promise<void> {
   if (!channel) return new Promise((r) => setTimeout(r, 0))
   return new Promise((resolve) => {
     channel.port1.onmessage = () => resolve()

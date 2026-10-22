@@ -48,7 +48,7 @@ const bump = () => {
   }
 }
 
-export const surfaceKey = (name: string, era: string) => `${name}|${era}`
+const surfaceKey = (name: string, era: string) => `${name}|${era}`
 
 export function configureSurfaces(c: Config) {
   config = c

@@ -142,7 +142,7 @@ export const WARMUP_PLANETS: { label: string; name: string; era: Era }[] = [
 /** Which planet shaders the graphics driver has already compiled (by shader, not by planet: several planets share one). */
 const compiledShaders = new Set<number>()
 const shaderKey = (name: string, era: Era) => { const h = lookFor(name, era).hero; return h > 0 && HERO_BODIES[h] ? h : 0 }
-export const shaderReady = (name: string, era: Era) => compiledShaders.has(shaderKey(name, era))
+const shaderReady = (name: string, era: Era) => compiledShaders.has(shaderKey(name, era))
 export const markShaderReady = (name: string, era: Era) => { compiledShaders.add(shaderKey(name, era)) }
 const keptMaterials: THREE.Material[] = [] // held so a compiled program stays in the renderer's cache
 
@@ -167,9 +167,6 @@ export async function warmBake(gl: THREE.WebGLRenderer, name: string, era: Era):
   return b.programMaterial
 }
 
-/** Dev only: `?direct` draws with the full shader on every frame, as before baking, to compare the looks. */
-const DIRECT = import.meta.env.DEV && new URLSearchParams(location.search).has('direct')
-
 /** Built once and reused by every planet that is picked, so choosing one does not rebuild the sphere. */
 const PLANET_GEOMETRY = new THREE.SphereGeometry(PLANET_RADIUS, 96, 64)
 
@@ -185,7 +182,7 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
 
   const planetUniforms = useMemo(() => makePlanetUniforms(name, era), [name, era])
   const hero = lookFor(name, era).hero
-  const bakes = !DIRECT && canBake(gl)
+  const bakes = canBake(gl)
 
   // The planet is drawn from baked textures (see planetSurfaces.ts): the soft surface baked for every planet in the background, then
   // a sharper one baked once this planet is picked. Until there is any surface a plain placeholder globe is shown. A card that cannot
@@ -212,9 +209,6 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
       scene.add(holder)
       try { await gl.compileAsync(scene, camera) } catch { /* it will compile when first drawn instead */ }
       scene.remove(holder)
-      // dev only: `?shaderdelay=4000` pretends the compile took that many ms, to look at the placeholder
-      const pretend = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('shaderdelay')) : 0
-      if (pretend) await new Promise((r) => setTimeout(r, pretend))
       markShaderReady(name, era)
       if (live) setReady(true)
     })()

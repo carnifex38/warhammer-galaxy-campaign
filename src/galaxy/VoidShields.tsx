@@ -293,7 +293,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
 // ---------------------------------------------------------------------------------------------------------------------------
 
 /** `team`: who controls the planet (a majority of its battlezones), or null while nobody does (the shield is then neutral). */
-export interface PlanetShieldInfo { team: 'A' | 'B' | null; at: number; /** false while no battlezone has a shield: the planet shield is then not shown (it fades away) */ active: boolean }
+export interface PlanetShieldInfo { team: 'A' | 'B' | null; /** false while no battlezone has a shield: the planet shield is then not shown (it fades away) */ active: boolean }
 
 const NEUTRAL_TINT: [number, number, number] = [0.72, 0.82, 0.95]
 

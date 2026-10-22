@@ -138,15 +138,10 @@ export function newRoster(sys: System, name: string): Roster {
 type Holder = Sel | Force | Roster
 
 const holderParent = (h: Holder): Holder | null => (h.kind === 'roster' ? null : h.parent)
-export function forceOf(h: Holder): Force | null {
+function forceOf(h: Holder): Force | null {
   let c: Holder | null = h
   while (c && c.kind !== 'force') c = holderParent(c)
   return c as Force | null
-}
-export function rosterOf(h: Holder): Roster {
-  let c: Holder = h
-  while (c.kind !== 'roster') c = (c as Sel | Force).parent
-  return c
 }
 
 // ---------------------------------------------------------------------------------------------------------------

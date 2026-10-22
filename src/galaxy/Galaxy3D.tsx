@@ -1150,7 +1150,7 @@ function Warmup() {
       try { if (localStorage.getItem(slowKey)) slow = true } catch { /* not remembered */ }
       if (slow) {
         setLoad({ done: total, label: 'Ready' })
-        console.info('[galaxy] skipped the planet warm-up (slow graphics or no parallel compile)')
+        if (import.meta.env.DEV) console.info('[galaxy] skipped the planet warm-up (slow graphics or no parallel compile)')
         return
       }
 
@@ -1177,7 +1177,7 @@ function Warmup() {
         }
         if (performance.now() - c0 > 2500) {
           try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
-          console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
+          if (import.meta.env.DEV) console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
           slowed = true
           break
         }

@@ -241,7 +241,7 @@ export const HERO_HEAD = /* glsl */ `
 
 `
 
-export const HERO_BODY_TERRA = /* glsl */ `
+const HERO_BODY_TERRA = /* glsl */ `
       // ---------- TERRA ----------
       col = mix(vec3(0.5, 0.2, 0.11), vec3(0.84, 0.64, 0.4), smoothstep(0.4, 0.8, tone));
       col = mix(col, vec3(0.2, 0.2, 0.17), smoothstep(0.42, 0.3, h) * 0.8);   // dark basins
@@ -279,7 +279,7 @@ export const HERO_BODY_TERRA = /* glsl */ `
       rim = vec3(1.0, 0.72, 0.3);
 `
 
-export const HERO_BODY_MARS = /* glsl */ `
+const HERO_BODY_MARS = /* glsl */ `
       // ---------- MARS: the forge world ----------
       // bright orange plates cracked apart by dark seams
       col = mix(vec3(0.62, 0.26, 0.12), vec3(0.95, 0.52, 0.22), smoothstep(0.25, 0.7, tone));
@@ -334,7 +334,7 @@ export const HERO_BODY_MARS = /* glsl */ `
       rim = vec3(0.95, 0.5, 0.3);
 `
 
-export const HERO_BODY_MACRAGGE = /* glsl */ `
+const HERO_BODY_MACRAGGE = /* glsl */ `
       // ---------- MACRAGGE: Ultramar's capital ----------
       float sea = 0.5;
       float shore = smoothstep(sea - 0.012, sea + 0.012, h);
@@ -376,7 +376,7 @@ export const HERO_BODY_MACRAGGE = /* glsl */ `
       rim = vec3(0.35, 0.6, 1.0);
 `
 
-export const HERO_BODY_NECROMUNDA = /* glsl */ `
+const HERO_BODY_NECROMUNDA = /* glsl */ `
       // ---------- NECROMUNDA: the great hive world ----------
       cloud = smoothstep(0.3, 0.75, swirl * 0.9 + band * 0.2) * 0.8;
       cloudCol = vec3(0.62, 0.57, 0.3);
@@ -414,7 +414,7 @@ export const HERO_BODY_NECROMUNDA = /* glsl */ `
       glow += vec3(1.0, 0.52, 0.14) * (clamp(streets, 0.0, 1.5) * 0.5 + ldots * 0.9 + hive * 0.18) * (0.3 + 1.0 * night) * (1.0 - cloud * 0.6);
 `
 
-export const HERO_BODY_CADIA = /* glsl */ `
+const HERO_BODY_CADIA = /* glsl */ `
       // ---------- CADIA (30K): the fortress world, before its fall ----------
       float sea = 0.3;
       float shore = smoothstep(sea - 0.012, sea + 0.012, h);
@@ -458,7 +458,7 @@ export const HERO_BODY_CADIA = /* glsl */ `
       }
 `
 
-export const HERO_BODY_BAAL = /* glsl */ `
+const HERO_BODY_BAAL = /* glsl */ `
       // ---------- BAAL: the blood-red desert world ----------
       col = mix(vec3(0.46, 0.14, 0.08), vec3(0.78, 0.30, 0.16), smoothstep(0.25, 0.75, tone));
       float dunes = sin(p.y * 46.0 + fbm3d(p * 5.0 + uSeed) * 9.0) * 0.5 + 0.5;
@@ -477,7 +477,7 @@ export const HERO_BODY_BAAL = /* glsl */ `
       glow += vec3(1.0, 0.75, 0.4) * settle * night * 0.9;
 `
 
-export const HERO_BODY_FENRIS = /* glsl */ `
+const HERO_BODY_FENRIS = /* glsl */ `
       // ---------- FENRIS: the glacial storm world ----------
       float sea = 0.3;
       float shore = smoothstep(sea - 0.012, sea + 0.012, h);
@@ -523,7 +523,7 @@ export const HERO_BODY_FENRIS = /* glsl */ `
       }
 `
 
-export const HERO_BODY_PROSPERO30 = /* glsl */ `
+const HERO_BODY_PROSPERO30 = /* glsl */ `
       // ---------- PROSPERO (30K): the pristine world of golden cities ----------
       float sea = 0.42;
       float shore = smoothstep(sea - 0.012, sea + 0.012, h);
@@ -559,7 +559,7 @@ export const HERO_BODY_PROSPERO30 = /* glsl */ `
       }
 `
 
-export const HERO_BODY_PROSPERO40 = /* glsl */ `
+const HERO_BODY_PROSPERO40 = /* glsl */ `
       // ---------- PROSPERO (40K): the Planet of the Sorcerers, a ruin ----------
       col = mix(vec3(0.1, 0.09, 0.09), vec3(0.32, 0.28, 0.26), smoothstep(0.3, 0.75, tone));
       col *= 0.75 + 0.5 * fbm3d(p * 30.0 + uSeed);

@@ -246,7 +246,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
         playZones={planetTables.filter(isLive).map((t) => ({ id: t.id, name: t.name }))}
         shieldZones={shieldZones}
         shieldTotal={planetTables.length}
-        shieldMajority={majority ? { team: majority.team, at: majority.at, active: true } : null} // only once every zone is picked and one team has more
+        shieldMajority={majority ? { team: majority.team, active: true } : null} // only once every zone is picked and one team has more
         era={era}
         sectors={SECTORS}
         viewInset={infoPanel && wide ? 380 : 0}
