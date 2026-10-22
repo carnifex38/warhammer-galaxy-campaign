@@ -44,7 +44,9 @@ const VERT = /* glsl */ `
     float e = uRadius * (1.0 - pow(1.0 - prog, 3.0));
     float ang = acos(clamp(dot(dir, uCenter), -1.0, 1.0));
     float t = clamp(ang / max(e, 0.001), 0.0, 1.0);
-    float arch = sqrt(max(1.0 - t * t, 0.0));
+    // as the dome widens to cover the planet its rounded top flattens into an even skin, the same height as the planet shield
+    float flat = smoothstep(0.7, 2.0, uRadius);
+    float arch = mix(sqrt(max(1.0 - t * t, 0.0)), 1.0, flat);
     float inflate = smoothstep(0.0, 1.0, prog);
     vObj = dir;
     vN = normalize(mat3(modelMatrix) * dir);
@@ -241,7 +243,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
     const target = full ? JOIN_RADIUS : DOME_RADIUS
     radius.current += (target - radius.current) * Math.min(1, dt * 1.1)
     U.uRadius.value = radius.current
-    U.uHeight.value = 0.085 + 0.1 * (radius.current - DOME_RADIUS) // a thin skin over the ground; a wider dome stands a touch taller
+    U.uHeight.value = 0.085 + 0.015 * U.uFull.value // a thin skin over the ground, settling to the planet shield's height as it widens
     U.uFull.value = Math.min(1, Math.max(0, (radius.current - DOME_RADIUS) / (NETWORK_RADIUS - DOME_RADIUS)))
     U.uGain.value = fadeOut(radius.current, 1.2, 2.1) // once it covers the planet it has become the planet shield's shape, and fades into it
 
