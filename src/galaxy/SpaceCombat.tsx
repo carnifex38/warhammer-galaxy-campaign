@@ -92,7 +92,7 @@ const qWorld = new THREE.Quaternion()
 const qWant = new THREE.Quaternion()
 // the battle starts out facing the viewer, tipped so the near fleet sits low and the far fleet high: ships are seen side-on, tops showing
 const TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.6)
-const pWorld = new THREE.Vector3()
+const qInv = new THREE.Quaternion()
 const qRoll = new THREE.Quaternion()
 const desired = new THREE.Vector3()
 const dirNow = new THREE.Vector3()
@@ -202,19 +202,17 @@ export function windowGeometry() {
 
 export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   const place = useRef<THREE.Group>(null) // sits over the battlezone
-  const orient = useRef<THREE.Quaternion | null>(null)
+  const fixed = useRef<{ rel: THREE.Vector3; q: THREE.Quaternion } | null>(null) // where the battle holds still in space (set on the first frame)
   const root = useRef<THREE.Group>(null)
   const hulls = useRef<THREE.InstancedMesh>(null)
   const windows = useRef<THREE.InstancedMesh>(null)
   const flashSprites = useRef<(THREE.Sprite | null)[]>([])
   const riftCore = useRef<(THREE.Sprite | null)[]>([])
   const riftRing = useRef<(THREE.Sprite | null)[]>([])
-  // where the battle plays: at the planet's level, on the same side as the battlezone
+  // the battlezone this battle is fought over (its spot on the planet, which sets the side it first appears on)
   const frame = useMemo(() => {
     const up = zoneSpot(zoneId)
-    // level with the planet's middle, out to the side the battlezone is on (not above it)
-    const level = new THREE.Vector3(up.x, 0, up.z).normalize()
-    return { up, pos: level.multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT) }
+    return { up }
   }, [zoneId])
   const lightTarget = useMemo(() => new THREE.Object3D(), [])
 
@@ -281,24 +279,23 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
     if (!g) return
     const S = sim
     S.level += (1 - S.level) * Math.min(1, dt * 1.4)
-    // like the reticle, the battle fades out as its battlezone turns away from the viewer
+    // The battle stays where it first appeared: out at the planet's level, on the side its battlezone was on, turned to face the camera
+    // at that moment. The planet spins under it, so undo the planet's turn each frame to hold the battle still in space.
     const parent = place.current?.parent
-    let facing = 1
     if (parent) {
       parent.getWorldQuaternion(qWorld)
-      parent.getWorldPosition(pWorld)
-      tmpA.copy(state.camera.position).sub(pWorld).normalize()
-      tmpB.copy(frame.up).applyQuaternion(qWorld)
-      facing = smooth((tmpB.dot(tmpA) + 0.1) / 0.45)
-      // the battle is turned to face the camera once, when it first appears (in the planet's own frame, since it rides on the surface),
-      // and stays that way: after that the camera can go round it
-      if (!orient.current) {
-        qWant.copy(state.camera.quaternion).multiply(TILT)
-        orient.current = new THREE.Quaternion().copy(qWorld).invert().multiply(qWant)
+      if (!fixed.current) {
+        tmpA.copy(frame.up).applyQuaternion(qWorld)
+        tmpA.y = 0
+        if (tmpA.lengthSq() < 1e-4) tmpA.set(0, 0, 1)
+        tmpA.normalize().multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT)
+        fixed.current = { rel: tmpA.clone(), q: qWant.copy(state.camera.quaternion).multiply(TILT).clone() }
       }
-      place.current!.quaternion.copy(orient.current)
+      qInv.copy(qWorld).invert()
+      place.current!.position.copy(fixed.current.rel).applyQuaternion(qInv)
+      place.current!.quaternion.copy(qInv).multiply(fixed.current.q)
     }
-    const master = S.level * arriveFade.value * facing
+    const master = S.level * arriveFade.value
     g.visible = master > 0.01
     if (!g.visible) return
     const pace = 1
@@ -648,7 +645,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   const keep = { keepOpacity: true }
   const additive = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending } as const
   return (
-    <group ref={place} position={frame.pos}>
+    <group ref={place}>
     <group ref={root} scale={ARENA_SCALE} visible={false}>
       <primitive object={lightTarget} />
       <ambientLight intensity={0.9} color="#a89c90" />
