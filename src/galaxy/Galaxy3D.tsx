@@ -7,6 +7,7 @@ import { sliced } from '../idle'
 import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
 import { VoidShields, type PlanetShieldInfo, type ShieldZone } from './VoidShields'
+import SpaceCombat from './SpaceCombat'
 import PlanetBody, { PlanetLod, PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
 import { useOptions } from '../options'
@@ -975,7 +976,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
   p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
-  const { planetDisplay } = useOptions()
+  const { planetDisplay, spaceCombat } = useOptions()
   const look = lookNameFor(p.name, era)
   const roundWorld = !isHulkId(p.id) && look !== 'rock' && look !== 'shattered' && look !== 'exploded'
   return (
@@ -992,6 +993,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
           <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /><VoidShields zones={shields} total={shieldTotal} majority={majority} /></> : undefined} />
+          {roundWorld && spaceCombat && <SpaceCombat zones={held.length} />}
         </Arrive>
       ) : (
         <FadeWithBackdrop>

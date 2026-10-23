@@ -15,10 +15,12 @@ export interface Options {
   sectorHighlight: SectorHighlight
   /** How bright a sector lights up when you point at it (or at it in the list). */
   hoverHighlight: HoverHighlight
+  /** Fleets fighting over a planet while its battlezones are in play. */
+  spaceCombat: boolean
 }
 
 const KEY = 'galaxy-options'
-const DEFAULTS: Options = { planetDisplay: 'dots', hideStarfield: false, sectorHighlight: 'full', hoverHighlight: 'strong' }
+const DEFAULTS: Options = { planetDisplay: 'dots', hideStarfield: false, sectorHighlight: 'full', hoverHighlight: 'strong', spaceCombat: true }
 
 function load(): Options {
   try {
@@ -28,6 +30,7 @@ function load(): Options {
       hideStarfield: raw.hideStarfield === true,
       sectorHighlight: raw.sectorHighlight === 'reduced' || raw.sectorHighlight === 'minimal' ? raw.sectorHighlight : 'full',
       hoverHighlight: raw.hoverHighlight === 'soft' || raw.hoverHighlight === 'off' ? raw.hoverHighlight : 'strong',
+      spaceCombat: raw.spaceCombat !== false,
     }
   } catch {
     return DEFAULTS

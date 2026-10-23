@@ -69,6 +69,14 @@ export default function OptionsView() {
                   </button>
                 ))}
               </div>
+              <h3>Space combat</h3>
+              <label className="options-check">
+                <input type="checkbox" checked={o.spaceCombat} onChange={(e) => setOption('spaceCombat', e.target.checked)} />
+                <span>
+                  <strong>Fleets fight over a planet in play</strong>
+                  <em>Ships trade fire above a planet while its battlezones are in play. Turn it off to save a little performance.</em>
+                </span>
+              </label>
               <h3>Selecting a planet</h3>
               <label className="options-check">
                 <input type="checkbox" checked={o.hideStarfield} onChange={(e) => setOption('hideStarfield', e.target.checked)} />
