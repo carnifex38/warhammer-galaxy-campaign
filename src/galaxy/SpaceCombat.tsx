@@ -13,11 +13,11 @@ import { zoneSpot } from './ZoneReticle'
 // engines), pooled and drawn in a handful of batches, so it stays light. Each battle plays small, hovering over the battlezone the
 // players are on (it rides on the planet's surface like the targeting reticle), not around the whole planet.
 
-type Team = 'A' | 'B'
-type Class = 'flagship' | 'cruiser' | 'escort'
+export type Team = 'A' | 'B'
+export type Class = 'flagship' | 'cruiser' | 'escort'
 
-const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52') }
-const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
+export const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52') }
+export const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
 const HIDDEN = 9999
 // The battle is played out in a flat arena (X by Z, in arena units); the whole arena is then drawn small and hung over the battlezone.
 const BOUND_X = 3.2 // the fleets stay inside an ellipse this wide...
@@ -32,7 +32,7 @@ const DYING_S = 3.0
 const ARENA_SCALE = 0.105 // the whole battle is drawn this much smaller, so the ships are small beside the planet
 const ARENA_HEIGHT = 0.55 // how far out from the planet's surface the battle plays
 
-const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
+export const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
   flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.14, turn: 0.22, range: 2.4, radius: 0.36 },
   cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.18, turn: 0.34, range: 1.7, radius: 0.26 },
@@ -103,7 +103,7 @@ const side = new THREE.Vector3()
 const FORWARD = new THREE.Vector3(0, 0, 1)
 const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k) }
 
-function glowTexture() {
+export function glowTexture() {
   const cv = document.createElement('canvas')
   cv.width = cv.height = 64
   const ctx = cv.getContext('2d')!
@@ -161,7 +161,7 @@ const cone = (r: number, h: number, segs: number, rx: number, x: number, y: numb
   return g.translate(x, y, z)
 }
 
-function hullGeometry() {
+export function hullGeometry() {
   const dark: [number, number, number] = [0.3, 0.26, 0.23]
   const mid: [number, number, number] = [0.42, 0.36, 0.3]
   const gold: [number, number, number] = [0.62, 0.48, 0.24]
@@ -187,7 +187,7 @@ function hullGeometry() {
 }
 
 /** The glowing windows and gun-deck lights (white, so the instance colour sets each team's glow). */
-function windowGeometry() {
+export function windowGeometry() {
   const w: [number, number, number] = [1, 1, 1]
   const parts: Part[] = []
   for (const s of [-1, 1]) {

@@ -8,6 +8,7 @@ import { PlanetBackdrop, backdropLevel } from './PlanetBackdrop'
 import { ZoneReticle } from './ZoneReticle'
 import { VoidShields, type PlanetShieldInfo, type ShieldZone } from './VoidShields'
 import SpaceCombat from './SpaceCombat'
+import PatrolFleet from './PatrolFleet'
 import PlanetBody, { PlanetLod, PLANET_RADIUS, WARMUP_PLANETS, arriveFade, createWarmupMaterial, isBakedWorld, markShaderReady, warmBake } from './PlanetBody'
 import { canBake } from './planetBake'
 import { useOptions } from '../options'
@@ -993,6 +994,8 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
           <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /><VoidShields zones={shields} total={shieldTotal} majority={majority} />{spaceCombat && held.map((h) => <SpaceCombat key={h.id} zoneId={h.id} />)}</> : undefined} />
+          {/* a team that controls the planet keeps a few ships on patrol round it (4 once it holds every battlezone) */}
+          {roundWorld && spaceCombat && majority?.team && <PatrolFleet key={majority.team} team={majority.team} count={shieldTotal > 0 && shields.length >= shieldTotal ? 4 : 3} />}
         </Arrive>
       ) : (
         <FadeWithBackdrop>
