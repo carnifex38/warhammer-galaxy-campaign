@@ -100,6 +100,7 @@ export const LOOKS: Record<LookName, LookSpec> = {
 const LOOK_BY_PLANET: Record<string, LookName> = {
   // Solar
   Terra: 'terra', Mars: 'mars', Necromunda: 'necromunda', Cthonia: 'dead',
+  Voss: 'forge', Phaeton: 'forge',
   // Ocularis Malifica
   Medusa: 'volcanic',
   // Obscurus
@@ -107,10 +108,11 @@ const LOOK_BY_PLANET: Record<string, LookName> = {
   // Pacificus
   'Stygies VIII': 'forge', Gehenna: 'volcanic',
   // Tempestus
-  Graia: 'forge', Tallarn: 'desert', Barbarus: 'dead',
+  Graia: 'forge', Gryphonne: 'forge', Tallarn: 'desert', Barbarus: 'dead',
   // Ultima
   Baal: 'baal', Nostramo: 'dark', Olympia: 'forge', Chogoris: 'terran', Nocturne: 'volcanic',
   Nuceria: 'desert', Macragge: 'macragge', Ryza: 'forge',
+  Anvillus: 'forge', Sarum: 'forge', Tigrus: 'forge', Accatran: 'forge',
 }
 
 // Planets whose look changed between the Horus Heresy and the 41st millennium.
