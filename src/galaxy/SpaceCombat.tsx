@@ -2,48 +2,106 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PLANET_RADIUS, arriveFade } from './PlanetBody'
+import { zoneSpot } from './ZoneReticle'
 
-// Fleets fighting over a planet while its battlezones are in play. Simple low-poly ships (built in code, no model files) fly slow
-// orbits in opposite directions, so Team A's and Team B's lines keep passing each other. Escorts trade streams of tracer bolts, the
-// capital ships fire long lances (now and then at the planet itself), hits flash on the hulls, and ships that take enough hits
-// break up into a slow spray of burning debris. Every ship comes back later as reinforcements, so the battle goes on.
-// Everything is pooled and drawn in a few batches, so it stays light. `zones`: how many battlezones are in play (more = bigger fleets).
-
-const TEAM_COLOR = { A: new THREE.Color('#6fd0ff'), B: new THREE.Color('#ff8a4a') }
-const MAX_ESCORTS = 12 // per team
-const MAX_CAPITALS = 3 // per team
-const MAX_SHIPS = (MAX_ESCORTS + MAX_CAPITALS) * 2
-const MAX_BOLTS = 56
-const MAX_LANCES = 5
-const MAX_FLASHES = 18
-const MAX_DEBRIS = 160
-const HIDDEN = 9999
+// Two fleets of five ships fight over a planet whose battlezones are in play, like battleships trading broadsides. Every ship steers
+// for itself: it picks an enemy, closes to its preferred range, turns to bring its broadside to bear and sails past firing in rippling
+// volleys of tracer bolts, then swings round (its turn rate is limited, so the turns are wide and slow) and comes back for another pass.
+// Ships keep clear of each other, bank as they turn, and the flagship also fires a long lance now and then. Hits flash on the hull; a
+// destroyed ship burns, breaks up in a chain of explosions, and a few seconds later a replacement tears out of the warp at its fleet's
+// edge and joins the fight. Ships are simple shapes built in code (a stepped, spired, gun-decked hull with glowing windows and blue
+// engines), pooled and drawn in a handful of batches, so it stays light. Each battle plays small, hovering over the battlezone the
+// players are on (it rides on the planet's surface like the targeting reticle), not around the whole planet.
 
 type Team = 'A' | 'B'
+type Class = 'flagship' | 'cruiser' | 'escort'
+
+const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52') }
+const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
+const HIDDEN = 9999
+// The battle is played out in a flat arena (X by Z, in arena units); the whole arena is then drawn small and hung over the battlezone.
+const BOUND_X = 2.0 // the fleets stay inside an ellipse this wide...
+const BOUND_Z = 1.1 // ...and this deep
+const MAX_BOLTS = 90
+const MAX_LANCES = 4
+const MAX_FLASHES = 30
+const MAX_DEBRIS = 240
+const PORTS = 6 // gun ports along the broadside of each ship
+const WARP_S = 3.2
+const DYING_S = 3.0
+const ARENA_SCALE = 0.3 // the whole battle is drawn this much smaller, so the ships are small beside the planet
+const ARENA_HEIGHT = 0.2 // how high above the surface the battle hovers
+
+const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
+  // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
+  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.2, turn: 0.32, range: 1.5, radius: 0.36 },
+  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.27, turn: 0.5, range: 1.05, radius: 0.26 },
+  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.38, turn: 0.9, range: 0.8, radius: 0.16 },
+}
+// the five ships of a fleet and where each starts (as Team A; Team B is the mirror image on the other side)
+const LINEUP: { cls: Class; x: number; z: number }[] = [
+  { cls: 'flagship', x: -1.45, z: 0.1 },
+  { cls: 'cruiser', x: -1.75, z: -0.55 },
+  { cls: 'cruiser', x: -1.75, z: 0.7 },
+  { cls: 'escort', x: -1.35, z: -0.95 },
+  { cls: 'escort', x: -1.35, z: 0.95 },
+]
 
 interface Ship {
   team: Team
-  capital: boolean
-  index: number // within its team (ships with a higher index join only when more battlezones are in play)
-  u: THREE.Vector3 // the orbit's two axes
-  v: THREE.Vector3
-  r: number
-  w: number // orbital speed (rad/s), opposite signs for the two teams
-  phase: number
-  bob: number
+  cls: Class
+  scale: number
+  vmax: number
+  turnRate: number
+  range: number
+  radius: number
+  theta: number // heading: the bow points along (sin, 0, cos) of this angle
+  speed: number
+  roll: number // banking in the turns
+  dir: THREE.Vector3 // the way the bow points
+  target: number // the enemy it is fighting (index), or -1
+  strafe: number // which way it turns round its target: +1 / -1 (0 = not chosen yet)
+  retargetAt: number
+  spawn: THREE.Vector3 // where its replacement tears out of the warp
   hp: number
   maxHp: number
-  alive: boolean
-  respawnAt: number
-  scale: number
+  state: 'present' | 'dying' | 'gone' | 'warping'
+  t: number // time in the current state
+  hot: number
+  phase: number
   pos: THREE.Vector3
-  dir: THREE.Vector3
-  hot: number // hull glow from recent hits, 0..1
+  quat: THREE.Quaternion
+  stretch: number
+  volleyAt: number
+  salvo: { left: number; next: number; target: number; hitOdds: number } | null
+  lanceAt: number
+  nextBlast: number
+  wreckSpin: number
 }
 
-interface Bolt { on: boolean; from: THREE.Vector3; target: number; t: number; dur: number; team: Team }
-interface Lance { on: boolean; from: number; target: number; planet: boolean; aim: THREE.Vector3; t: number; dur: number; team: Team }
+interface Bolt { on: boolean; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; team: Team; hit: boolean; target: number }
+interface Lance { on: boolean; from: number; target: number; t: number; dur: number; team: Team }
 interface Flash { on: boolean; pos: THREE.Vector3; t: number; dur: number; size: number; color: THREE.Color }
+
+const rand = (a: number, b: number) => a + Math.random() * (b - a)
+const dummy = new THREE.Object3D()
+const tmpA = new THREE.Vector3()
+const tmpB = new THREE.Vector3()
+const colA = new THREE.Color()
+const qWorld = new THREE.Quaternion()
+const qWant = new THREE.Quaternion()
+// the battle faces the viewer, tipped so the near fleet sits low and the far fleet high: ships are seen side-on, tops showing
+const TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.6)
+const pWorld = new THREE.Vector3()
+const qRoll = new THREE.Quaternion()
+const desired = new THREE.Vector3()
+const dirNow = new THREE.Vector3()
+const los = new THREE.Vector3()
+const perp = new THREE.Vector3()
+const away2 = new THREE.Vector3()
+const side = new THREE.Vector3()
+const FORWARD = new THREE.Vector3(0, 0, 1)
+const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k) }
 
 function glowTexture() {
   const cv = document.createElement('canvas')
@@ -58,116 +116,160 @@ function glowTexture() {
   return new THREE.CanvasTexture(cv)
 }
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a)
-const dummy = new THREE.Object3D()
-const tmpA = new THREE.Vector3()
-const tmpB = new THREE.Vector3()
-const FORWARD = new THREE.Vector3(0, 0, 1)
-
-/** A low, arrowhead-shaped escort: a four-sided cone laid flat, nose along +Z. */
-function escortGeometry() {
-  const g = new THREE.ConeGeometry(0.5, 2, 4, 1)
-  g.rotateX(Math.PI / 2)
-  g.rotateZ(Math.PI / 4)
-  g.scale(1, 0.4, 1)
-  return g
+function ringTexture() {
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = 128
+  const ctx = cv.getContext('2d')!
+  const g = ctx.createRadialGradient(64, 64, 18, 64, 64, 62)
+  g.addColorStop(0, 'rgba(255,255,255,0)')
+  g.addColorStop(0.7, 'rgba(255,255,255,0.85)')
+  g.addColorStop(0.85, 'rgba(255,255,255,0.35)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, 128, 128)
+  return new THREE.CanvasTexture(cv)
 }
 
-/** A long, slab-sided capital ship with a blunt prow, nose along +Z. */
-function capitalGeometry() {
-  const hull = new THREE.BoxGeometry(0.7, 0.3, 2.6)
-  const prow = new THREE.ConeGeometry(0.42, 1.1, 4, 1)
-  prow.rotateX(Math.PI / 2)
-  prow.rotateZ(Math.PI / 4)
-  prow.scale(1, 0.55, 1)
-  prow.translate(0, 0, 1.85)
-  const bridge = new THREE.BoxGeometry(0.28, 0.3, 0.7)
-  bridge.translate(0, 0.25, -0.7)
-  const parts = [hull, prow, bridge].map((p) => p.toNonIndexed())
+// ---------- the ship: a gothic hull of stepped boxes, a spire and gun decks (bow along +Z) ----------
+
+interface Part { g: THREE.BufferGeometry; color: [number, number, number] }
+
+function merge(parts: Part[]) {
   const pos: number[] = []
   const nor: number[] = []
-  for (const p of parts) {
-    pos.push(...(p.attributes.position.array as Float32Array))
-    nor.push(...(p.attributes.normal.array as Float32Array))
+  const col: number[] = []
+  for (const { g, color } of parts) {
+    const ng = g.index ? g.toNonIndexed() : g
+    const p = ng.attributes.position.array as Float32Array
+    const n = ng.attributes.normal.array as Float32Array
+    for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]) }
+    for (let i = 0; i < p.length / 3; i++) col.push(...color)
   }
-  const g = new THREE.BufferGeometry()
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
-  return g
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
+  return out
 }
 
-export default function SpaceCombat({ zones }: { zones: number }) {
+const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z)
+const cone = (r: number, h: number, segs: number, rx: number, x: number, y: number, z: number, flat = 1) => {
+  const g = new THREE.ConeGeometry(r, h, segs, 1)
+  g.rotateX(rx)
+  g.rotateZ(Math.PI / 4)
+  g.scale(1, flat, 1)
+  return g.translate(x, y, z)
+}
+
+function hullGeometry() {
+  const dark: [number, number, number] = [0.3, 0.26, 0.23]
+  const mid: [number, number, number] = [0.42, 0.36, 0.3]
+  const gold: [number, number, number] = [0.62, 0.48, 0.24]
+  const parts: Part[] = [
+    { g: box(0.8, 0.42, 2.4, 0, 0, -0.1), color: dark },
+    { g: cone(0.5, 1.1, 4, Math.PI / 2, 0, 0, 1.65, 0.8), color: mid },
+    { g: new THREE.CylinderGeometry(0.05, 0.08, 0.7, 6).rotateX(Math.PI / 2).translate(0, 0, 2.3), color: gold },
+    { g: box(0.9, 0.5, 0.5, 0, 0, -1.45), color: mid },
+    { g: box(0.22, 0.2, 0.2, 0, 0, -1.75), color: dark },
+    { g: box(0.22, 0.2, 0.2, 0.28, 0, -1.75), color: dark },
+    { g: box(0.22, 0.2, 0.2, -0.28, 0, -1.75), color: dark },
+    { g: box(0.58, 0.24, 1.2, 0, 0.32, -0.3), color: mid },
+    { g: box(0.4, 0.22, 0.75, 0, 0.55, -0.5), color: dark },
+    { g: new THREE.ConeGeometry(0.13, 0.95, 5).translate(0, 1.1, -0.5), color: gold },
+    { g: new THREE.ConeGeometry(0.06, 0.5, 5).translate(0, 0.9, 0.2), color: gold },
+    { g: box(0.14, 0.5, 0.14, 0.3, 0.42, 0.05), color: mid },
+    { g: box(0.14, 0.5, 0.14, -0.3, 0.42, 0.05), color: mid },
+    { g: box(0.14, 0.22, 1.9, 0.47, 0, -0.1), color: mid },
+    { g: box(0.14, 0.22, 1.9, -0.47, 0, -0.1), color: mid },
+  ]
+  for (const z of [0.7, 0.2, -0.3, -0.8]) for (const s of [-1, 1]) parts.push({ g: box(0.2, 0.1, 0.22, 0.33 * s, 0.26, z), color: dark })
+  return merge(parts)
+}
+
+/** The glowing windows and gun-deck lights (white, so the instance colour sets each team's glow). */
+function windowGeometry() {
+  const w: [number, number, number] = [1, 1, 1]
+  const parts: Part[] = []
+  for (const s of [-1, 1]) {
+    parts.push({ g: box(0.02, 0.035, 1.7, 0.545 * s, 0.05, -0.1), color: w })
+    parts.push({ g: box(0.02, 0.035, 1.7, 0.545 * s, -0.05, -0.1), color: w })
+    parts.push({ g: box(0.02, 0.03, 0.9, 0.41 * s, 0.34, -0.3), color: w })
+  }
+  parts.push({ g: box(0.3, 0.025, 0.5, 0, 0.67, -0.5), color: w })
+  parts.push({ g: box(0.3, 0.025, 0.35, 0, 0.2, 1.0), color: w })
+  return merge(parts)
+}
+
+export default function SpaceCombat({ zoneId }: { zoneId: string }) {
+  const place = useRef<THREE.Group>(null) // sits over the battlezone, bow-to-stern lanes lying along the surface
   const root = useRef<THREE.Group>(null)
-  const escorts = useRef<THREE.InstancedMesh>(null)
-  const capitals = useRef<THREE.InstancedMesh>(null)
-  const engines = useRef<THREE.Points>(null)
-  const bolts = useRef<THREE.Points>(null)
-  const debris = useRef<THREE.Points>(null)
-  const lances = useRef<THREE.LineSegments>(null)
+  const hulls = useRef<THREE.InstancedMesh>(null)
+  const windows = useRef<THREE.InstancedMesh>(null)
   const flashSprites = useRef<(THREE.Sprite | null)[]>([])
-  const zonesRef = useRef(zones)
-  zonesRef.current = zones
+  const riftCore = useRef<(THREE.Sprite | null)[]>([])
+  const riftRing = useRef<(THREE.Sprite | null)[]>([])
+  // where the battle hovers: over the battlezone's spot on the surface
+  const frame = useMemo(() => {
+    const up = zoneSpot(zoneId)
+    return { up, pos: up.clone().multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT) }
+  }, [zoneId])
+  const lightTarget = useMemo(() => new THREE.Object3D(), [])
 
   const glow = useMemo(glowTexture, [])
-  const escortGeo = useMemo(escortGeometry, [])
-  const capitalGeo = useMemo(capitalGeometry, [])
-  useEffect(() => () => { glow.dispose(); escortGeo.dispose(); capitalGeo.dispose() }, [glow, escortGeo, capitalGeo])
+  const ring = useMemo(ringTexture, [])
+  const hullGeo = useMemo(hullGeometry, [])
+  const windowGeo = useMemo(windowGeometry, [])
+  useEffect(() => () => { glow.dispose(); ring.dispose(); hullGeo.dispose(); windowGeo.dispose() }, [glow, ring, hullGeo, windowGeo])
 
   const sim = useMemo(() => {
     const ships: Ship[] = []
     for (const team of ['A', 'B'] as Team[]) {
-      const dirSign = team === 'A' ? 1 : -1
-      for (let i = 0; i < MAX_ESCORTS + MAX_CAPITALS; i++) {
-        const capital = i >= MAX_ESCORTS
-        // each ship gets its own tilted orbit plane
-        const n = new THREE.Vector3(rand(-1.4, 1.4), rand(0.4, 1), rand(-1.4, 1.4)).normalize()
-        const u = new THREE.Vector3().crossVectors(n, new THREE.Vector3(0, 0, 1)).normalize()
-        const v = new THREE.Vector3().crossVectors(n, u).normalize()
+      LINEUP.forEach((slot) => {
+        const cls = CLASSES[slot.cls]
+        const sign = team === 'A' ? 1 : -1 // Team A starts on the left, heading right; Team B the other way round
         ships.push({
-          team, capital, index: capital ? i - MAX_ESCORTS : i, u, v,
-          r: capital ? rand(1.2, 1.6) : rand(0.95, 1.5),
-          w: dirSign * (capital ? rand(0.06, 0.1) : rand(0.12, 0.22)),
-          phase: rand(0, Math.PI * 2), bob: rand(0, 6), hp: 0, maxHp: capital ? 9 : 3, alive: true, respawnAt: 0, scale: 0,
-          pos: new THREE.Vector3(), dir: new THREE.Vector3(0, 0, 1), hot: 0,
+          team, cls: slot.cls, scale: cls.scale,
+          vmax: cls.vmax, turnRate: cls.turn, range: cls.range, radius: cls.radius,
+          theta: sign * Math.PI / 2 + rand(-0.2, 0.2), speed: cls.vmax * 0.8, roll: 0, dir: new THREE.Vector3(sign, 0, 0),
+          target: -1, strafe: 0, retargetAt: 0, spawn: new THREE.Vector3(),
+          hp: cls.hp, maxHp: cls.hp, state: 'present', t: 0, hot: 0, phase: rand(0, 6.28),
+          pos: new THREE.Vector3(sign * slot.x, 0, slot.z * sign), quat: new THREE.Quaternion(), stretch: 1,
+          volleyAt: rand(0.5, cls.volley), salvo: null, lanceAt: rand(5, 11), nextBlast: 0, wreckSpin: rand(-0.4, 0.4),
         })
-      }
+      })
     }
-    for (const s of ships) s.hp = s.maxHp
-    const boltList: Bolt[] = Array.from({ length: MAX_BOLTS }, () => ({ on: false, from: new THREE.Vector3(), target: 0, t: 0, dur: 0.4, team: 'A' as Team }))
-    const lanceList: Lance[] = Array.from({ length: MAX_LANCES }, () => ({ on: false, from: 0, target: 0, planet: false, aim: new THREE.Vector3(), t: 0, dur: 0.7, team: 'A' as Team }))
-    const flashList: Flash[] = Array.from({ length: MAX_FLASHES }, () => ({ on: false, pos: new THREE.Vector3(), t: 0, dur: 0.5, size: 0.2, color: new THREE.Color() }))
-    const debrisPos = new Float32Array(MAX_DEBRIS * 3).fill(HIDDEN)
-    const debrisCol = new Float32Array(MAX_DEBRIS * 3)
-    const debrisVel = new Float32Array(MAX_DEBRIS * 3)
-    const debrisLife = new Float32Array(MAX_DEBRIS)
-    return { ships, boltList, lanceList, flashList, debrisPos, debrisCol, debrisVel, debrisLife, nextDebris: 0, fireClock: 0, lanceClock: 0, level: 0, t0: 0, bombClock: 0 }
+    return {
+      ships,
+      bolts: Array.from({ length: MAX_BOLTS }, () => ({ on: false, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, dur: 1, team: 'A' as Team, hit: false, target: 0 })) as Bolt[],
+      lances: Array.from({ length: MAX_LANCES }, () => ({ on: false, from: 0, target: 0, t: 0, dur: 1, team: 'A' as Team })) as Lance[],
+      flashes: Array.from({ length: MAX_FLASHES }, () => ({ on: false, pos: new THREE.Vector3(), t: 0, dur: 1, size: 0.2, color: new THREE.Color() })) as Flash[],
+      debrisPos: new Float32Array(MAX_DEBRIS * 3).fill(HIDDEN),
+      debrisCol: new Float32Array(MAX_DEBRIS * 3),
+      debrisVel: new Float32Array(MAX_DEBRIS * 3),
+      debrisLife: new Float32Array(MAX_DEBRIS),
+      nextDebris: 0,
+      level: 0,
+    }
   }, [])
 
-  const engineGeo = useMemo(() => {
+  const mk = (verts: number) => {
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_SHIPS * 3).fill(HIDDEN), 3))
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_SHIPS * 3), 3))
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts * 3).fill(HIDDEN), 3))
+    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(verts * 3), 3))
     return g
-  }, [])
-  const boltGeo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_BOLTS * 3).fill(HIDDEN), 3))
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_BOLTS * 3), 3))
-    return g
-  }, [])
+  }
+  const boltLines = useMemo(() => mk(MAX_BOLTS * 2), [])
+  const boltHeads = useMemo(() => mk(MAX_BOLTS), [])
+  const lanceGeo = useMemo(() => mk(MAX_LANCES * 2), [])
+  const exhaustLines = useMemo(() => mk(sim.ships.length * 3 * 2), [sim])
+  const exhaustGlow = useMemo(() => mk(sim.ships.length * 3), [sim])
   const debrisGeo = useMemo(() => {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(sim.debrisPos, 3))
     g.setAttribute('color', new THREE.BufferAttribute(sim.debrisCol, 3))
     return g
   }, [sim])
-  const lanceGeo = useMemo(() => {
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_LANCES * 6).fill(HIDDEN), 3))
-    g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_LANCES * 6), 3))
-    return g
-  }, [])
-  useEffect(() => () => { engineGeo.dispose(); boltGeo.dispose(); debrisGeo.dispose(); lanceGeo.dispose() }, [engineGeo, boltGeo, debrisGeo, lanceGeo])
+  useEffect(() => () => { boltLines.dispose(); boltHeads.dispose(); lanceGeo.dispose(); exhaustLines.dispose(); exhaustGlow.dispose(); debrisGeo.dispose() }, [boltLines, boltHeads, lanceGeo, exhaustLines, exhaustGlow, debrisGeo])
 
   useFrame((state, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
@@ -175,184 +277,337 @@ export default function SpaceCombat({ zones }: { zones: number }) {
     const g = root.current
     if (!g) return
     const S = sim
-    const active = zonesRef.current > 0
-    S.level += ((active ? 1 : 0) - S.level) * Math.min(1, dt * 1.6)
-    const master = S.level * arriveFade.value
+    S.level += (1 - S.level) * Math.min(1, dt * 1.4)
+    // like the reticle, the battle fades out as its battlezone turns away from the viewer
+    const parent = place.current?.parent
+    let facing = 1
+    if (parent) {
+      parent.getWorldQuaternion(qWorld)
+      parent.getWorldPosition(pWorld)
+      tmpA.copy(state.camera.position).sub(pWorld).normalize()
+      tmpB.copy(frame.up).applyQuaternion(qWorld)
+      facing = smooth((tmpB.dot(tmpA) + 0.1) / 0.45)
+      // turn the battle to face the camera (in the planet's own frame, since it rides on the surface)
+      qWant.copy(state.camera.quaternion).multiply(TILT)
+      place.current!.quaternion.copy(qWorld).invert().multiply(qWant)
+    }
+    const master = S.level * arriveFade.value * facing
     g.visible = master > 0.01
     if (!g.visible) return
+    const pace = 1
 
-    const n = Math.max(1, zonesRef.current)
-    const escortsOn = Math.min(MAX_ESCORTS, 3 + 2 * n)
-    const capitalsOn = Math.min(MAX_CAPITALS, 1 + Math.floor(n / 2))
+    const startFlash = (pos: THREE.Vector3, size: number, dur: number, color: THREE.Color) => {
+      const f = S.flashes.find((x) => !x.on) ?? S.flashes[0]
+      f.on = true; f.pos.copy(pos); f.size = size; f.dur = dur; f.t = 0; f.color.copy(color)
+    }
+    const burst = (pos: THREE.Vector3, count: number, speed: number) => {
+      for (let k = 0; k < count; k++) {
+        const i = S.nextDebris++ % MAX_DEBRIS
+        S.debrisPos.set([pos.x, pos.y, pos.z], i * 3)
+        S.debrisVel.set([rand(-1, 1) * speed, rand(-1, 1) * speed, rand(-1, 1) * speed], i * 3)
+        S.debrisLife[i] = rand(1.5, 3.4)
+      }
+    }
+    const isShip = (s: Ship) => s.state === 'present'
+    const enemiesOf = (team: Team) => S.ships.map((s, i) => ({ s, i })).filter(({ s }) => s.team !== team && isShip(s) && s.t > 1.2)
+    const wound = (tgt: Ship, dmg: number) => {
+      tgt.hp -= dmg
+      tgt.hot = 1
+      if (tgt.hp <= 0) { tgt.state = 'dying'; tgt.t = 0; tgt.nextBlast = 0; tgt.salvo = null }
+    }
 
-    // ---- move the ships ----
-    const alive: Record<Team, number[]> = { A: [], B: [] }
-    S.ships.forEach((s, i) => {
-      const enabled = s.index < (s.capital ? capitalsOn : escortsOn)
-      if (!s.alive && now >= s.respawnAt) { s.alive = true; s.hp = s.maxHp }
-      const want = enabled && s.alive ? 1 : 0
-      s.scale += (want - s.scale) * Math.min(1, dt * (want ? 0.9 : 6))
-      const th = s.phase + now * s.w
-      const rr = s.r + 0.06 * Math.sin(now * 0.4 + s.bob)
-      s.pos.set(0, 0, 0).addScaledVector(s.u, Math.cos(th) * rr).addScaledVector(s.v, Math.sin(th) * rr)
-      s.dir.set(0, 0, 0).addScaledVector(s.u, -Math.sin(th) * Math.sign(s.w)).addScaledVector(s.v, Math.cos(th) * Math.sign(s.w)).normalize()
-      s.hot = Math.max(0, s.hot - dt * 2.5)
-      if (enabled && s.alive && s.scale > 0.6) alive[s.team].push(i)
+    // ---- ships: each one decides for itself ----
+    const angDiff = (a: number, b: number) => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d }
+    S.ships.forEach((s) => {
+      s.t += dt
+      s.hot = Math.max(0, s.hot - dt * 2)
+      s.stretch = 1
+      const bob = Math.sin(now * 0.3 + s.phase * 2) * 0.03
+      let steered = 0 // how fast it turned this frame (rad/s), for banking
+
+      if (s.state === 'present') {
+        // 1. choose (or keep) an enemy to fight: usually a near one, with some chance so the fleet does not all pile on one ship;
+        //    flagships prefer the big ships. It sticks with its choice for a good while.
+        let tg = s.target >= 0 ? S.ships[s.target] : null
+        if (!tg || !isShip(tg) || now > s.retargetAt) {
+          const foes = enemiesOf(s.team)
+          if (foes.length) {
+            let total = 0
+            const w = foes.map(({ s: f }) => { const k = (1 / (f.pos.distanceTo(s.pos) + 0.4)) * (s.cls === 'flagship' && f.cls !== 'escort' ? 2 : 1); total += k; return k })
+            let pick = Math.random() * total
+            let ix = 0
+            while (ix < foes.length - 1 && (pick -= w[ix]) > 0) ix++
+            s.target = foes[ix].i
+          } else s.target = -1
+          s.retargetAt = now + rand(9, 16)
+          s.strafe = 0
+          tg = s.target >= 0 ? S.ships[s.target] : null
+        }
+
+        // 2. decide where to head: close to its range, then run past the enemy broadside-on; keep clear of every other ship and the arena's edge
+        desired.set(0, 0, 0)
+        dirNow.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+        let d = 9
+        let abeam = 1
+        if (tg) {
+          los.copy(tg.pos).sub(s.pos); los.y = 0
+          d = los.length() || 1e-3
+          los.divideScalar(d)
+          perp.set(los.z, 0, -los.x)
+          if (s.strafe === 0) s.strafe = perp.dot(dirNow) >= 0 ? 1 : -1 // whichever way needs the smaller turn
+          const seek = smooth((d - s.range * 1.05) / (s.range * 0.9)) // far away: turn in toward it
+          const away = smooth((s.range * 0.75 - d) / (s.range * 0.45)) // too close: open the range
+          desired.addScaledVector(los, seek * 1.6 - away * 1.4)
+          desired.addScaledVector(perp, s.strafe * (1 - 0.5 * seek))
+          abeam = Math.abs(dirNow.dot(los))
+        } else {
+          desired.set(-s.pos.x, 0, -s.pos.z).normalize()
+        }
+        for (const o of S.ships) {
+          if (o === s || o.state === 'gone') continue
+          away2.set(s.pos.x - o.pos.x, 0, s.pos.z - o.pos.z)
+          const dist = away2.length() || 1e-3
+          const keep = (s.radius + o.radius) * 1.35
+          if (dist < keep * 2.2) desired.addScaledVector(away2, ((1 - dist / (keep * 2.2)) ** 2 * 3.2) / dist)
+          if (dist < s.radius + o.radius) s.pos.addScaledVector(away2, ((s.radius + o.radius - dist) * 0.5) / dist) // never overlap
+        }
+        const er = Math.hypot(s.pos.x / BOUND_X, s.pos.z / BOUND_Z)
+        if (er > 0.72) desired.addScaledVector(away2.set(-s.pos.x, 0, -s.pos.z).normalize(), smooth((er - 0.72) / 0.4) * 3)
+        desired.addScaledVector(perp.set(dirNow.z, 0, -dirNow.x), Math.sin(now * 0.4 + s.phase) * 0.12) // a little wander
+
+        // 3. steer: a limited turn rate, and slower when turning hard
+        if (desired.lengthSq() > 1e-6) {
+          const dth = angDiff(s.theta, Math.atan2(desired.x, desired.z))
+          const step = Math.max(-s.turnRate * dt, Math.min(s.turnRate * dt, dth))
+          s.theta += step
+          steered = step / Math.max(dt, 1e-4)
+          const want = s.vmax * (0.55 + 0.45 * Math.cos(Math.min(Math.abs(dth), Math.PI / 2)))
+          s.speed += (want - s.speed) * Math.min(1, dt * 1.2)
+        }
+        s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+        s.pos.addScaledVector(s.dir, s.speed * dt)
+        s.pos.y = bob
+
+        // 4. fire: the broadside guns when the enemy is abeam and in range, the lance when the flagship has a clear shot
+        if (tg && s.t > 1.2) {
+          if (!s.salvo && d < 2.7 && abeam < 0.45) {
+            s.volleyAt -= dt * pace
+            if (s.volleyAt <= 0) {
+              s.salvo = { left: PORTS, next: 0, target: s.target, hitOdds: rand(0.45, 0.7) }
+              s.volleyAt = CLASSES[s.cls].volley * rand(0.7, 1.4)
+            }
+          }
+          if (s.cls === 'flagship') {
+            s.lanceAt -= dt * pace
+            if (s.lanceAt <= 0 && !s.salvo && d < 3) {
+              const l = S.lances.find((x) => !x.on)
+              if (l) { l.on = true; l.team = s.team; l.from = S.ships.indexOf(s); l.target = s.target; l.t = 0; l.dur = rand(1.4, 2.0) }
+              s.lanceAt = rand(9, 15)
+            }
+          }
+        }
+        if (s.salvo) {
+          s.salvo.next -= dt
+          while (s.salvo && s.salvo.next <= 0) {
+            const idx = PORTS - s.salvo.left
+            const b = S.bolts.find((x) => !x.on)
+            const tgt = S.ships[s.salvo.target]
+            if (b && isShip(tgt)) {
+              b.on = true; b.team = s.team; b.t = 0; b.target = s.salvo.target
+              // the muzzle sits along the broadside facing the enemy
+              side.set(s.dir.z, 0, -s.dir.x)
+              los.copy(tgt.pos).sub(s.pos)
+              if (side.dot(los) < 0) side.negate()
+              const along = (0.7 - idx * 0.3) * 1.2 * s.scale * (s.cls === 'escort' ? 0.8 : 1)
+              b.from.copy(s.pos).addScaledVector(s.dir, along).addScaledVector(side, 0.5 * s.scale * 1.15)
+              b.from.y += 0.03 * s.scale
+              b.hit = Math.random() < s.salvo.hitOdds
+              // it hits the side of the target that faces it
+              side.set(tgt.dir.z, 0, -tgt.dir.x)
+              if (side.dot(los) > 0) side.negate()
+              b.to.copy(tgt.pos).addScaledVector(tgt.dir, rand(-0.9, 0.9) * tgt.scale * 2).addScaledVector(side, 0.45 * tgt.scale * 1.2)
+              b.to.y += rand(-0.1, 0.3) * tgt.scale
+              if (!b.hit) { tmpA.copy(b.to).sub(b.from).normalize(); b.to.addScaledVector(tmpA, 0.5); b.to.y += rand(-0.18, 0.18) } // sails past
+              b.dur = b.from.distanceTo(b.to) / rand(2.0, 2.6)
+            }
+            s.salvo.left--
+            s.salvo.next = 0.09
+            if (s.salvo.left <= 0) s.salvo = null
+          }
+        }
+        s.roll += (Math.max(-0.5, Math.min(0.5, -steered * 0.9)) - s.roll) * Math.min(1, dt * 3)
+      } else if (s.state === 'dying') {
+        // burning and breaking up: a chain of blasts along the hull, the wreck slowing and listing, then one last big one
+        s.nextBlast -= dt
+        s.speed *= 1 - dt * 0.4
+        s.pos.addScaledVector(s.dir, s.speed * dt)
+        s.pos.y -= dt * 0.03
+        s.roll = s.wreckSpin * s.t
+        if (s.nextBlast <= 0) {
+          s.nextBlast = rand(0.12, 0.3)
+          tmpB.set(rand(-0.3, 0.3), rand(-0.1, 0.3), rand(-1, 1) * 1.4).multiplyScalar(s.scale).applyQuaternion(s.quat).add(s.pos)
+          startFlash(tmpB, s.scale * rand(1.2, 2.4), rand(0.5, 0.9), colA.set('#ffb060'))
+          burst(tmpB, 3, 0.07)
+        }
+        if (s.t >= DYING_S) {
+          s.state = 'gone'
+          s.t = 0
+          startFlash(s.pos, s.scale * 7, 1.6, colA.set('#ffd9a0'))
+          burst(s.pos, s.cls === 'flagship' ? 46 : 24, 0.16)
+        }
+      } else if (s.state === 'gone') {
+        if (s.t > 2.5) {
+          // reinforcements: a rift opens at the edge of the fleet's side of the arena and the new ship slides out of it toward the fight
+          const sign = s.team === 'A' ? 1 : -1
+          s.spawn.set(sign * -(BOUND_X * 0.8 + rand(-0.15, 0.1)), 0, rand(-BOUND_Z * 0.6, BOUND_Z * 0.6))
+          s.theta = sign * Math.PI / 2
+          s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+          s.pos.copy(s.spawn)
+          s.speed = s.vmax * 0.6; s.roll = 0
+          s.state = 'warping'; s.t = 0; s.hp = s.maxHp; s.salvo = null; s.target = -1; s.volleyAt = rand(1.5, 3); s.lanceAt = rand(6, 12)
+        }
+      } else if (s.state === 'warping') {
+        // a rift tears open, the ship slides out of it, and the rift closes behind it
+        const k = s.t / WARP_S
+        const out = smooth((k - 0.3) / 0.55)
+        s.pos.copy(s.spawn).addScaledVector(s.dir, out * 0.75)
+        s.stretch = 1 + (1 - out) * 2.2
+        if (k >= 1) { s.state = 'present'; s.t = 0 }
+      }
+      s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+      s.quat.setFromUnitVectors(FORWARD, s.dir).multiply(qRoll.setFromAxisAngle(FORWARD, s.roll))
     })
 
-    // ---- draw the ships and their engines ----
-    const eng = engineGeo.attributes.position as THREE.BufferAttribute
-    const engCol = engineGeo.attributes.color as THREE.BufferAttribute
+    // ---- hulls, windows, engines ----
+    const eg = exhaustLines.attributes.position as THREE.BufferAttribute
+    const ec = exhaustLines.attributes.color as THREE.BufferAttribute
+    const gp = exhaustGlow.attributes.position as THREE.BufferAttribute
+    const gc = exhaustGlow.attributes.color as THREE.BufferAttribute
+    const hm = hulls.current
+    const wm = windows.current
     S.ships.forEach((s, i) => {
-      const mesh = s.capital ? capitals.current : escorts.current
-      if (!mesh) return
-      const slot = s.capital ? (s.team === 'A' ? 0 : MAX_CAPITALS) + s.index : (s.team === 'A' ? 0 : MAX_ESCORTS) + s.index
+      const visible = s.state === 'present' || s.state === 'dying' || s.state === 'warping'
+      const warpIn = s.state === 'warping' ? smooth((s.t / WARP_S - 0.28) / 0.35) : 1
+      const sc = visible ? Math.max(s.scale * warpIn, 0.0001) : 0.0001
       dummy.position.copy(s.pos)
-      dummy.quaternion.setFromUnitVectors(FORWARD, s.dir)
-      const size = (s.capital ? 0.075 : 0.055) * s.scale
-      dummy.scale.setScalar(Math.max(size, 0.0001))
+      dummy.quaternion.copy(s.quat)
+      dummy.scale.set(sc, sc, sc * s.stretch)
       dummy.updateMatrix()
-      mesh.setMatrixAt(slot, dummy.matrix)
-      const c = TEAM_COLOR[s.team]
-      tmpA.set(c.r, c.g, c.b).multiplyScalar(0.22 + s.hot * 1.4)
-      mesh.setColorAt(slot, new THREE.Color(0.8 + tmpA.x, 0.82 + tmpA.y, 0.86 + tmpA.z)) // grey hulls, tinted by the team and by hits
-      // the engine glow sits at the tail
-      tmpB.copy(s.pos).addScaledVector(s.dir, -(s.capital ? 0.2 : 0.1) * s.scale)
-      eng.setXYZ(i, tmpB.x, tmpB.y, tmpB.z)
-      const k = s.scale * master
-      engCol.setXYZ(i, c.r * k, c.g * k, c.b * k)
+      hm?.setMatrixAt(i, dummy.matrix)
+      wm?.setMatrixAt(i, dummy.matrix)
+      const hurt = s.state === 'present' ? 1 - s.hp / s.maxHp : 1
+      const flare = s.state === 'warping' ? 1 + (1 - warpIn) * 2 : 1
+      const hc = HULL_TINT[s.team]
+      const heat = s.hot * 0.5 + (s.state === 'dying' ? 0.7 : 0)
+      hm?.setColorAt(i, colA.setRGB(hc.r + heat, hc.g + heat * 0.4, hc.b + heat * 0.1))
+      const tc = TEAM_COLOR[s.team]
+      const lit = (0.5 + hurt * 0.5 * (0.6 + 0.4 * Math.sin(now * 14 + i))) * flare * (s.state === 'dying' ? 0.4 + 0.6 * Math.random() : 1)
+      wm?.setColorAt(i, colA.setRGB(tc.r * lit * 1.6, tc.g * lit * 1.6, tc.b * lit * 1.6))
+      // three engine nozzles at the stern, each with a bright core and a streak behind
+      for (let e = 0; e < 3; e++) {
+        const idx = i * 3 + e
+        const off = (e - 1) * 0.28 * sc
+        tmpA.set(off, 0, -1.85 * sc).applyQuaternion(s.quat).add(s.pos)
+        const burn = visible && s.state !== 'dying' ? (s.state === 'warping' ? 1.5 : 1) : 0
+        const len = (0.35 + 0.1 * Math.sin(now * 20 + idx)) * sc * 4.5 * burn
+        tmpB.set(0, 0, -1).applyQuaternion(s.quat).multiplyScalar(len).add(tmpA)
+        eg.setXYZ(idx * 2, tmpA.x, tmpA.y, tmpA.z)
+        eg.setXYZ(idx * 2 + 1, tmpB.x, tmpB.y, tmpB.z)
+        const k = master * burn
+        ec.setXYZ(idx * 2, 0.5 * k, 0.8 * k, 1.5 * k)
+        ec.setXYZ(idx * 2 + 1, 0, 0, 0)
+        gp.setXYZ(idx, tmpA.x, tmpA.y, tmpA.z)
+        gc.setXYZ(idx, 0.55 * k, 0.85 * k, 1.6 * k)
+      }
     })
-    for (const m of [escorts.current, capitals.current]) {
+    for (const m of [hm, wm]) {
       if (!m) continue
       m.instanceMatrix.needsUpdate = true
       if (m.instanceColor) m.instanceColor.needsUpdate = true
     }
-    eng.needsUpdate = true
-    engCol.needsUpdate = true
+    eg.needsUpdate = true; ec.needsUpdate = true; gp.needsUpdate = true; gc.needsUpdate = true
 
-    // ---- weapons: tracer bolts between escorts, lances from the capitals ----
-    S.fireClock += dt * (5 + 4 * n)
-    while (S.fireClock >= 1) {
-      S.fireClock -= 1
-      const team: Team = Math.random() < 0.5 ? 'A' : 'B'
-      const foes = alive[team === 'A' ? 'B' : 'A']
-      const mine = alive[team]
-      if (!foes.length || !mine.length) continue
-      const b = S.boltList.find((x) => !x.on)
-      if (!b) break
-      const from = S.ships[mine[Math.floor(Math.random() * mine.length)]]
-      b.on = true
-      b.team = team
-      b.from.copy(from.pos)
-      b.target = foes[Math.floor(Math.random() * foes.length)]
-      b.t = 0
-      b.dur = rand(0.45, 0.9)
-    }
-    S.lanceClock += dt * (0.5 + 0.25 * n)
-    S.bombClock += dt
-    while (S.lanceClock >= 1) {
-      S.lanceClock -= 1
-      const team: Team = Math.random() < 0.5 ? 'A' : 'B'
-      const caps = alive[team].filter((i) => S.ships[i].capital)
-      const foes = alive[team === 'A' ? 'B' : 'A']
-      const l = S.lanceList.find((x) => !x.on)
-      if (!l || !caps.length) continue
-      l.on = true
-      l.team = team
-      l.from = caps[Math.floor(Math.random() * caps.length)]
-      // now and then a capital ship fires on the planet instead of a ship
-      l.planet = (S.bombClock > 9 || !foes.length) && Math.random() < 0.6
-      if (l.planet) {
-        S.bombClock = 0
-        // a point on the planet's surface under the ship, nudged a little to either side
-        l.aim.copy(S.ships[l.from].pos).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), rand(-0.5, 0.5)).setLength(PLANET_RADIUS * 1.01)
-      } else l.target = foes[Math.floor(Math.random() * foes.length)]
-      l.t = 0
-      l.dur = rand(0.8, 1.3)
-    }
+    // ---- warp rifts ----
+    S.ships.forEach((s, i) => {
+      const core = riftCore.current[i]
+      const rg = riftRing.current[i]
+      if (!core || !rg) return
+      if (s.state !== 'warping') { core.visible = false; rg.visible = false; return }
+      const k = s.t / WARP_S
+      const open = smooth(k / 0.25) * (1 - smooth((k - 0.7) / 0.3))
+      const flick = 0.8 + 0.2 * Math.sin(now * 31 + i * 5) * Math.sin(now * 17 + i)
+      core.visible = rg.visible = true
+      core.position.copy(s.spawn)
+      rg.position.copy(s.spawn)
+      core.scale.setScalar(s.scale * (6 + 6 * open) * flick)
+      rg.scale.setScalar(s.scale * (5 + 12 * smooth(k / 0.6)))
+      ;(core.material as THREE.SpriteMaterial).opacity = open * master * 0.9
+      ;(rg.material as THREE.SpriteMaterial).opacity = (1 - smooth(k / 0.8)) * master * 0.8
+    })
 
-    const startFlash = (pos: THREE.Vector3, size: number, dur: number, color: THREE.Color) => {
-      const f = S.flashList.find((x) => !x.on) ?? S.flashList[0]
-      f.on = true; f.pos.copy(pos); f.size = size; f.dur = dur; f.t = 0; f.color.copy(color)
-    }
-    const hit = (idx: number, team: Team, dmg: number, big: boolean) => {
-      const s = S.ships[idx]
-      if (!s.alive) return
-      s.hp -= dmg
-      s.hot = 1
-      startFlash(s.pos, big ? 0.34 : 0.16, big ? 0.7 : 0.35, TEAM_COLOR[team])
-      if (s.hp <= 0) {
-        s.alive = false
-        s.respawnAt = now + rand(7, 13)
-        startFlash(s.pos, s.capital ? 0.9 : 0.45, s.capital ? 1.6 : 1.0, new THREE.Color('#ffb060'))
-        const count = s.capital ? 26 : 10
-        for (let k = 0; k < count; k++) {
-          const i = S.nextDebris++ % MAX_DEBRIS
-          S.debrisPos.set([s.pos.x, s.pos.y, s.pos.z], i * 3)
-          S.debrisVel.set([rand(-1, 1) * 0.09 + s.dir.x * 0.05, rand(-1, 1) * 0.09 + s.dir.y * 0.05, rand(-1, 1) * 0.09 + s.dir.z * 0.05], i * 3)
-          S.debrisLife[i] = rand(1.6, 3.2)
-        }
-      }
-    }
-
-    // bolts
-    const bp = boltGeo.attributes.position as THREE.BufferAttribute
-    const bc = boltGeo.attributes.color as THREE.BufferAttribute
-    S.boltList.forEach((b, i) => {
-      if (!b.on) { bp.setXYZ(i, HIDDEN, HIDDEN, HIDDEN); return }
+    // ---- bolts ----
+    const bl = boltLines.attributes.position as THREE.BufferAttribute
+    const blc = boltLines.attributes.color as THREE.BufferAttribute
+    const bh = boltHeads.attributes.position as THREE.BufferAttribute
+    const bhc = boltHeads.attributes.color as THREE.BufferAttribute
+    S.bolts.forEach((b, i) => {
+      if (!b.on) { bl.setXYZ(i * 2, HIDDEN, HIDDEN, HIDDEN); bl.setXYZ(i * 2 + 1, HIDDEN, HIDDEN, HIDDEN); bh.setXYZ(i, HIDDEN, HIDDEN, HIDDEN); return }
       b.t += dt / b.dur
-      const tgt = S.ships[b.target]
       if (b.t >= 1) {
         b.on = false
-        // most shots glance off the shields; only some wound
-        if (tgt.alive && tgt.scale > 0.3) {
-          if (Math.random() < 0.07) hit(b.target, b.team, 1, false)
-          else { tgt.hot = Math.max(tgt.hot, 0.5); startFlash(tgt.pos, 0.07, 0.25, TEAM_COLOR[b.team]) }
+        const tgt = S.ships[b.target]
+        if (b.hit && isShip(tgt)) {
+          startFlash(b.to, tgt.scale * 1.6, 0.4, TEAM_COLOR[b.team])
+          wound(tgt, 0.28)
+          if (tgt.state === 'present' && tgt.hp < tgt.maxHp * 0.4 && Math.random() < 0.3) burst(b.to, 2, 0.05)
         }
-        bp.setXYZ(i, HIDDEN, HIDDEN, HIDDEN)
+        bl.setXYZ(i * 2, HIDDEN, HIDDEN, HIDDEN); bl.setXYZ(i * 2 + 1, HIDDEN, HIDDEN, HIDDEN); bh.setXYZ(i, HIDDEN, HIDDEN, HIDDEN)
         return
       }
-      tmpA.lerpVectors(b.from, tgt.pos, b.t)
-      bp.setXYZ(i, tmpA.x, tmpA.y, tmpA.z)
+      tmpA.lerpVectors(b.from, b.to, b.t)
+      tmpB.copy(b.to).sub(b.from).normalize().multiplyScalar(-0.17).add(tmpA)
+      bl.setXYZ(i * 2, tmpA.x, tmpA.y, tmpA.z)
+      bl.setXYZ(i * 2 + 1, tmpB.x, tmpB.y, tmpB.z)
       const c = TEAM_COLOR[b.team]
-      bc.setXYZ(i, c.r * master * 1.5, c.g * master * 1.5, c.b * master * 1.5)
+      const k = master * 2
+      blc.setXYZ(i * 2, c.r * k, c.g * k, c.b * k)
+      blc.setXYZ(i * 2 + 1, 0, 0, 0)
+      bh.setXYZ(i, tmpA.x, tmpA.y, tmpA.z)
+      bhc.setXYZ(i, c.r * k, c.g * k, c.b * k)
     })
-    bp.needsUpdate = true
-    bc.needsUpdate = true
+    bl.needsUpdate = true; blc.needsUpdate = true; bh.needsUpdate = true; bhc.needsUpdate = true
 
-    // lances
+    // ---- lances ----
     const lp = lanceGeo.attributes.position as THREE.BufferAttribute
     const lc = lanceGeo.attributes.color as THREE.BufferAttribute
-    S.lanceList.forEach((l, i) => {
+    S.lances.forEach((l, i) => {
       if (!l.on) { lp.setXYZ(i * 2, HIDDEN, HIDDEN, HIDDEN); lp.setXYZ(i * 2 + 1, HIDDEN, HIDDEN, HIDDEN); return }
       l.t += dt / l.dur
       const src = S.ships[l.from]
-      if (l.t >= 1 || !src.alive) {
+      const tgt = S.ships[l.target]
+      if (l.t >= 1 || !isShip(src) || !isShip(tgt)) {
         l.on = false
-        if (l.t >= 1) {
-          if (l.planet) startFlash(l.aim, 0.7, 3.2, new THREE.Color('#ff7a30')) // a glowing scar blooms where the lance struck the surface
-          else if (S.ships[l.target].alive) {
-            if (Math.random() < 0.4) hit(l.target, l.team, 3, true)
-            else startFlash(S.ships[l.target].pos, 0.22, 0.5, TEAM_COLOR[l.team]) // a near miss
-          }
+        if (l.t >= 1 && isShip(tgt)) {
+          startFlash(tgt.pos, tgt.scale * 5, 0.9, colA.set('#ffe2b0'))
+          burst(tgt.pos, 8, 0.1)
+          wound(tgt, 3)
         }
         lp.setXYZ(i * 2, HIDDEN, HIDDEN, HIDDEN); lp.setXYZ(i * 2 + 1, HIDDEN, HIDDEN, HIDDEN)
         return
       }
-      const end = l.planet ? l.aim : S.ships[l.target].pos
-      lp.setXYZ(i * 2, src.pos.x, src.pos.y, src.pos.z)
-      lp.setXYZ(i * 2 + 1, end.x, end.y, end.z)
-      // the beam builds, holds and dies away
-      const k = Math.sin(Math.min(1, l.t) * Math.PI) * (0.85 + 0.15 * Math.sin(now * 40)) * master
+      tmpA.copy(src.pos).addScaledVector(src.dir, 0.55 * src.scale * 2.4)
+      lp.setXYZ(i * 2, tmpA.x, tmpA.y, tmpA.z)
+      lp.setXYZ(i * 2 + 1, tgt.pos.x, tgt.pos.y, tgt.pos.z)
+      // the beam charges, holds and dies away
+      const k = Math.sin(Math.min(1, l.t) * Math.PI) ** 0.6 * (0.85 + 0.15 * Math.sin(now * 40)) * master
       const c = TEAM_COLOR[l.team]
-      lc.setXYZ(i * 2, c.r * k * 2, c.g * k * 2, c.b * k * 2)
-      lc.setXYZ(i * 2 + 1, c.r * k * 2, c.g * k * 2, c.b * k * 2)
+      lc.setXYZ(i * 2, (c.r + 0.5) * k * 2, (c.g + 0.5) * k * 2, (c.b + 0.5) * k * 2)
+      lc.setXYZ(i * 2 + 1, (c.r + 0.5) * k * 2, (c.g + 0.5) * k * 2, (c.b + 0.5) * k * 2)
     })
-    lp.needsUpdate = true
-    lc.needsUpdate = true
+    lp.needsUpdate = true; lc.needsUpdate = true
 
-    // flashes
-    S.flashList.forEach((f, i) => {
+    // ---- flashes ----
+    S.flashes.forEach((f, i) => {
       const sp = flashSprites.current[i]
       if (!sp) return
       if (!f.on) { sp.visible = false; return }
@@ -360,14 +615,13 @@ export default function SpaceCombat({ zones }: { zones: number }) {
       if (f.t >= 1) { f.on = false; sp.visible = false; return }
       sp.visible = true
       sp.position.copy(f.pos)
-      const grow = 0.4 + 0.6 * Math.min(1, f.t * 3)
-      sp.scale.setScalar(f.size * grow * 2)
+      sp.scale.setScalar(f.size * (0.4 + 0.6 * Math.min(1, f.t * 3)) * 2)
       const m = sp.material as THREE.SpriteMaterial
       m.color.copy(f.color)
       m.opacity = (1 - f.t) * (1 - f.t) * master
     })
 
-    // debris: slow, burning, fading
+    // ---- debris ----
     const dp = debrisGeo.attributes.position as THREE.BufferAttribute
     const dc = debrisGeo.attributes.color as THREE.BufferAttribute
     for (let i = 0; i < MAX_DEBRIS; i++) {
@@ -376,43 +630,62 @@ export default function SpaceCombat({ zones }: { zones: number }) {
       if (S.debrisLife[i] <= 0) { S.debrisPos.set([HIDDEN, HIDDEN, HIDDEN], i * 3); continue }
       for (let k = 0; k < 3; k++) S.debrisPos[i * 3 + k] += S.debrisVel[i * 3 + k] * dt
       const heat = Math.min(1, S.debrisLife[i] / 1.4)
-      S.debrisCol[i * 3] = 1.2 * heat * master
-      S.debrisCol[i * 3 + 1] = 0.5 * heat * heat * master
+      S.debrisCol[i * 3] = 1.3 * heat * master
+      S.debrisCol[i * 3 + 1] = 0.55 * heat * heat * master
       S.debrisCol[i * 3 + 2] = 0.12 * heat * heat * heat * master
     }
-    dp.needsUpdate = true
-    dc.needsUpdate = true
+    dp.needsUpdate = true; dc.needsUpdate = true
   })
 
-  // materials carry userData.keepOpacity so the planet's arrival fade does not overwrite what the fleet is doing
+  // materials carry userData.keepOpacity so the planet's arrival fade does not overwrite what the fleets are doing
   const keep = { keepOpacity: true }
+  const additive = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending } as const
   return (
-    <group ref={root} visible={false}>
-      <ambientLight intensity={1.1} color="#9aa6c8" />
-      <directionalLight position={[-4, 1.4, 2.2]} intensity={2.6} color="#ffe6c4" />
-      <instancedMesh ref={escorts} args={[escortGeo, undefined, MAX_ESCORTS * 2]} frustumCulled={false} renderOrder={7}>
-        <meshStandardMaterial roughness={0.6} metalness={0.3} flatShading emissive="#2a3040" userData={keep} />
+    <group ref={place} position={frame.pos}>
+    <group ref={root} scale={ARENA_SCALE} visible={false}>
+      <primitive object={lightTarget} />
+      <ambientLight intensity={0.9} color="#a89c90" />
+      <directionalLight position={[-4, 1.4, 2.2]} target={lightTarget} intensity={2.4} color="#ffe2bc" />
+      <instancedMesh ref={hulls} args={[hullGeo, undefined, sim.ships.length]} frustumCulled={false} renderOrder={7}>
+        <meshStandardMaterial vertexColors roughness={0.55} metalness={0.55} flatShading userData={keep} />
       </instancedMesh>
-      <instancedMesh ref={capitals} args={[capitalGeo, undefined, MAX_CAPITALS * 2]} frustumCulled={false} renderOrder={7}>
-        <meshStandardMaterial roughness={0.65} metalness={0.3} flatShading emissive="#2a3040" userData={keep} />
+      <instancedMesh ref={windows} args={[windowGeo, undefined, sim.ships.length]} frustumCulled={false} renderOrder={7}>
+        <meshBasicMaterial vertexColors toneMapped={false} userData={keep} />
       </instancedMesh>
-      <points ref={engines} geometry={engineGeo} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.13} sizeAttenuation vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} userData={keep} />
-      </points>
-      <points ref={bolts} geometry={boltGeo} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.12} sizeAttenuation vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} userData={keep} />
-      </points>
-      <lineSegments ref={lances} geometry={lanceGeo} frustumCulled={false} renderOrder={8}>
-        <lineBasicMaterial vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} userData={keep} />
+      <lineSegments geometry={exhaustLines} frustumCulled={false} renderOrder={8}>
+        <lineBasicMaterial vertexColors {...additive} userData={keep} />
       </lineSegments>
-      <points ref={debris} geometry={debrisGeo} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.04} sizeAttenuation vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} userData={keep} />
+      <points geometry={exhaustGlow} frustumCulled={false} renderOrder={8}>
+        <pointsMaterial map={glow} size={0.1 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
+      </points>
+      <lineSegments geometry={boltLines} frustumCulled={false} renderOrder={8}>
+        <lineBasicMaterial vertexColors {...additive} userData={keep} />
+      </lineSegments>
+      <points geometry={boltHeads} frustumCulled={false} renderOrder={8}>
+        <pointsMaterial map={glow} size={0.09 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
+      </points>
+      <lineSegments geometry={lanceGeo} frustumCulled={false} renderOrder={8}>
+        <lineBasicMaterial vertexColors {...additive} userData={keep} />
+      </lineSegments>
+      <points geometry={debrisGeo} frustumCulled={false} renderOrder={8}>
+        <pointsMaterial map={glow} size={0.045 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
       </points>
       {Array.from({ length: MAX_FLASHES }, (_, i) => (
-        <sprite key={i} ref={(s) => { flashSprites.current[i] = s }} visible={false} renderOrder={9}>
-          <spriteMaterial map={glow} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0} userData={keep} />
+        <sprite key={`f${i}`} ref={(s) => { flashSprites.current[i] = s }} visible={false} renderOrder={9}>
+          <spriteMaterial map={glow} {...additive} opacity={0} userData={keep} />
         </sprite>
       ))}
+      {sim.ships.map((_, i) => (
+        <group key={`r${i}`}>
+          <sprite ref={(s) => { riftCore.current[i] = s }} visible={false} renderOrder={9}>
+            <spriteMaterial map={glow} color="#b79bff" {...additive} opacity={0} userData={keep} />
+          </sprite>
+          <sprite ref={(s) => { riftRing.current[i] = s }} visible={false} renderOrder={9}>
+            <spriteMaterial map={ring} color="#7fb6ff" {...additive} opacity={0} userData={keep} />
+          </sprite>
+        </group>
+      ))}
+    </group>
     </group>
   )
 }

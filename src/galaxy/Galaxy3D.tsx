@@ -992,8 +992,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
       </mesh>
       {selected ? (
         <Arrive position={[0, PLANET_FOCUS_Y - 0.12, 0]}>
-          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /><VoidShields zones={shields} total={shieldTotal} majority={majority} /></> : undefined} />
-          {roundWorld && spaceCombat && <SpaceCombat zones={held.length} />}
+          <PlanetBody name={p.name} era={era} position={[0, 0, 0]} surface={roundWorld ? <>{held.filter((h) => h.id !== zone?.id).map((h) => <ZoneReticle key={h.id} zone={h} held />)}<ZoneReticle zone={zone} /><VoidShields zones={shields} total={shieldTotal} majority={majority} />{spaceCombat && held.map((h) => <SpaceCombat key={h.id} zoneId={h.id} />)}</> : undefined} />
         </Arrive>
       ) : (
         <FadeWithBackdrop>
