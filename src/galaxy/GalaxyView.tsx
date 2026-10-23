@@ -1,3 +1,5 @@
+import PlanetEvents from '../PlanetEvents'
+import type { CalendarApi } from '../calendar'
 import { useEffect, useRef, useState } from 'react'
 import Galaxy3D, { type PlanetInfo } from './Galaxy3D'
 import type { Era } from './planetLooks'
@@ -36,10 +38,13 @@ function devStart(sectors: Sector[]) {
 /** Where the player was in the galaxy (kept by the app so it can come back after reading a list). */
 export interface GalaxySelection { sector: string | null; planet: string | null; table: string | null }
 
-export default function GalaxyView({ events, auth, claims, onViewList, getInitial, onSelect }: {
+export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent, onViewList, getInitial, onSelect }: {
   events: EventApi
   auth: AuthApi
   claims: ClaimsApi
+  calendar: CalendarApi
+  /** Open a calendar event (chosen from this planet's planned events). */
+  onOpenEvent: (eventId: string) => void
   onViewList: (v: Viewing) => void
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
@@ -378,6 +383,8 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
               </ul>
             </>
           )}
+
+          {planet && !table && <PlanetEvents events={calendar.events} planetId={planet.id} myId={calendar.myId} onOpen={onOpenEvent} />}
 
           {table && planet && (
             <div className="table-detail">

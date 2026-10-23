@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { dayKey, MAX_EVENT_PLANETS, type CalendarApi, type CalendarEvent, type EventDraft } from './calendar'
 import { usePortrait } from './planetPortrait'
@@ -49,17 +50,20 @@ function Portrait({ planet, era, size = 64 }: { planet: Planet; era: Era; size?:
   )
 }
 
-export default function CalendarView({ auth, calendar, events, onOpenPlanet }: {
+export default function CalendarView({ auth, calendar, events, onOpenPlanet, focusId, onFocusUsed }: {
   auth: AuthApi
   calendar: CalendarApi
   events: EventApi
   onOpenPlanet: (sectorId: string, planetId: string) => void
+  /** An event to open straight away (chosen from a planet's screen in the galaxy). */
+  focusId?: string | null
+  onFocusUsed?: () => void
 }) {
   const isGm = auth.session?.role === 'gm'
   const [era] = useState(currentEra)
   const [today] = useState(() => dayKey(new Date()))
   const [month, setMonth] = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1) })
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(focusId ?? null)
   const [focusDay, setFocusDay] = useState<string | null>(null)
   const [editing, setEditing] = useState<'new' | string | null>(null)
   const [error, setError] = useState('')
@@ -80,6 +84,14 @@ export default function CalendarView({ auth, calendar, events, onOpenPlanet }: {
   const monthKey = dayKey(month).slice(0, 7)
   const inMonth = calendar.events.filter((e) => e.date.startsWith(monthKey) && (!focusDay || e.date === focusDay))
   const selected = calendar.events.find((e) => e.id === selectedId) ?? null
+
+  // opened from a planet's screen: show that event's month, and say the request has been used
+  const focused = focusId ? calendar.events.find((e) => e.id === focusId) : undefined
+  useEffect(() => {
+    if (!focusId) return
+    if (focused) { setMonth(new Date(parseDay(focused.date).getFullYear(), parseDay(focused.date).getMonth(), 1)); onFocusUsed?.() }
+    else if (calendar.events.length) onFocusUsed?.() // the event is gone
+  }, [focusId, focused, calendar.events.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const guard = async (run: () => Promise<void>) => {
     setError('')
@@ -192,6 +204,8 @@ export default function CalendarView({ auth, calendar, events, onOpenPlanet }: {
                 onSignUp={(planetId) => guard(() => calendar.signUp(selected.id, planetId))}
                 onLeave={() => guard(() => calendar.leave(selected.id))}
                 onKick={(profileId) => guard(() => calendar.removePlayer(selected.id, profileId))}
+                loadPlayers={calendar.gmPlayers}
+                onAssign={(planetId, profileId) => guard(() => calendar.assignPlayer(selected.id, planetId, profileId))}
               />
             )}
           </aside>
@@ -203,7 +217,7 @@ export default function CalendarView({ auth, calendar, events, onOpenPlanet }: {
 
 // ---------------------------------------------------------------------------------------------------------------- one event
 
-function Detail({ event, found, era, today, isGm, myId, onClose, onOpenPlanet, onEdit, onDelete, onSignUp, onLeave, onKick }: {
+function Detail({ event, found, era, today, isGm, myId, onClose, onOpenPlanet, onEdit, onDelete, onSignUp, onLeave, onKick, loadPlayers, onAssign }: {
   event: CalendarEvent
   found: Map<string, Found>
   era: Era
@@ -217,6 +231,8 @@ function Detail({ event, found, era, today, isGm, myId, onClose, onOpenPlanet, o
   onSignUp: (planetId: string) => void
   onLeave: () => void
   onKick: (profileId: string) => void
+  loadPlayers: () => Promise<ProfileSummary[]>
+  onAssign: (planetId: string, profileId: string) => void | Promise<void>
 }) {
   const past = event.date < today
   const shown = event.planets.filter((p) => found.has(p.planetId))
@@ -264,6 +280,7 @@ function Detail({ event, found, era, today, isGm, myId, onClose, onOpenPlanet, o
                     ))}
                   </ul>
                 )}
+                {isGm && <AddPlayer taken={p.players.map((x) => x.profileId)} loadPlayers={loadPlayers} onAssign={(profileId) => onAssign(p.planetId, profileId)} />}
               </div>
             </li>
           )
@@ -342,5 +359,29 @@ function Editor({ initial, found, sectors, defaultDate, onCancel, onSave }: {
         <button type="button" className="ghost" onClick={onCancel}>Cancel</button>
       </div>
     </form>
+  )
+}
+
+/** The gamemaster signs a player up for a planet: the players are loaded the first time it is opened. */
+function AddPlayer({ taken, loadPlayers, onAssign }: { taken: string[]; loadPlayers: () => Promise<ProfileSummary[]>; onAssign: (profileId: string) => void | Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const [players, setPlayers] = useState<ProfileSummary[] | null>(null)
+  const [pick, setPick] = useState('')
+
+  const show = () => {
+    setOpen(true)
+    if (!players) void loadPlayers().then(setPlayers).catch(() => setPlayers([]))
+  }
+  if (!open) return <button className="ghost cal-add-player" onClick={show}>+ Add player</button>
+  const choices = (players ?? []).filter((x) => !taken.includes(x.id))
+  return (
+    <span className="cal-add-player-row">
+      <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Player to add">
+        <option value="">{players === null ? 'Loading players…' : choices.length ? 'Choose a player…' : 'No more players'}</option>
+        {choices.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+      </select>
+      <button disabled={!pick} onClick={() => { void onAssign(pick); setPick(''); setOpen(false) }}>Add</button>
+      <button className="ghost" onClick={() => { setOpen(false); setPick('') }}>Cancel</button>
+    </span>
   )
 }

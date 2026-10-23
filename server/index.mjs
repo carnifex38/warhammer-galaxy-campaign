@@ -492,17 +492,21 @@ async function calendarApi(req, res, path) {
       calendarChanged()
       return json(res, 200, { events: calendarView() })
     }
-    if (!who.profile) return json(res, 401, { error: 'Sign in with a profile to sign up.' })
-    if (m === 'POST') { // sign up for a planet (one per event: signing up elsewhere moves you)
+    if (m === 'POST') { // sign up for a planet (one per event: signing up elsewhere moves you). The gamemaster can sign up any player.
       const body = await readBody(req).catch(() => null)
+      const forOther = who.gm && typeof body?.profileId === 'string'
+      const profileId = forOther ? body.profileId : who.profile?.id
+      if (!profileId) return json(res, 401, { error: 'Sign in with a profile to sign up.' })
+      if (forOther && !profiles[profileId]) return json(res, 400, { error: 'No such player.' })
       const target = ev.planets.find((pl) => pl.planetId === body?.planetId)
       if (!target) return json(res, 400, { error: 'That planet is not part of this event.' })
-      for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== who.profile.id)
-      target.signups.push(who.profile.id)
+      for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== profileId)
+      target.signups.push(profileId)
       calendarChanged()
       return json(res, 200, { events: calendarView() })
     }
     if (m === 'DELETE') { // leave, any time
+      if (!who.profile) return json(res, 401, { error: 'Sign in with a profile to sign up.' })
       for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== who.profile.id)
       calendarChanged()
       return json(res, 200, { events: calendarView() })

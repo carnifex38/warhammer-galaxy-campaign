@@ -863,3 +863,23 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
   .cal-empty strong { display: block; margin-bottom: 4px; color: var(--text); }
   .cal-empty p { margin: 0; font-size: 0.9rem; }
 }
+
+/* the gamemaster signs players up */
+.cal-add-player { min-height: 32px; font-size: 0.8rem; padding: 0 12px; }
+.cal-add-player-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cal-add-player-row select { min-height: 36px; max-width: 100%; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: #0d1124; color: var(--text); font: inherit; }
+.cal-add-player-row button { min-height: 36px; }
+.cal-add-player-row button:not(.ghost) { padding: 0 14px; border: 1px solid var(--gold); border-radius: 8px; background: var(--gold); color: #1a1203; font-weight: 700; cursor: pointer; }
+
+/* a planet's screen in the galaxy: the events planned on it, and who is going */
+.planet-events { margin-top: 16px; }
+.planet-events h4 { margin: 0 0 8px; font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.planet-events ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.planet-events button { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: var(--text); cursor: pointer; }
+.planet-events button:hover { border-color: var(--gold); }
+.pe-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pe-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe-text em { font-style: normal; font-size: 0.82rem; color: var(--muted); }
+.pe-players { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.pe-players i { font-style: normal; padding: 2px 9px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 0.78rem; }
+.pe-players i.me { background: rgba(214, 169, 74, 0.22); color: var(--gold); }

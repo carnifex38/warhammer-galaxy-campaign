@@ -47,6 +47,8 @@ export default function App() {
   const events = useEventConfig(role === 'gm', auth.session?.token)
   const claims = useClaims(auth)
   const calendar = useCalendar(auth)
+  // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
+  const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
   const [viewing, setViewing] = useState<Viewing | null>(null)
   const galaxySel = useRef<GalaxySelection | undefined>(undefined)
@@ -101,6 +103,8 @@ export default function App() {
               events={events}
               auth={auth}
               claims={claims}
+              calendar={calendar}
+              onOpenEvent={(id) => { setCalendarFocus(id); setTab('calendar') }}
               getInitial={() => galaxySel.current}
               onSelect={(s) => { galaxySel.current = s }}
               onViewList={(v) => { setViewing(v); setTab('lists') }}
@@ -114,6 +118,8 @@ export default function App() {
               auth={auth}
               calendar={calendar}
               events={events}
+              focusId={calendarFocus}
+              onFocusUsed={() => setCalendarFocus(null)}
               onOpenPlanet={(sector, planet) => { galaxySel.current = { sector, planet, table: null }; setTab('galaxy') }}
             />
           </Suspense>

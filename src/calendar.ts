@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { watchState } from './api'
+import { listProfiles, watchState, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { local } from './localProfiles' // DEV-TOOLS
 
@@ -111,6 +111,17 @@ export function useCalendar(auth: AuthApi) {
       if (!profileToken) throw new Error('Sign in with a profile to sign up.')
       after(await call(`/api/calendar/${id}/signup`, { method: 'POST', body: JSON.stringify({ planetId }) }, profileToken))
     },
+    /** Gamemaster: sign any player up for a planet (moving them if they were on another in the same event). */
+    assignPlayer: async (id: string, planetId: string, profileId: string) => {
+      if (dev) {
+        const p = await local.get(profileId)
+        writeDev(readDev().map((e) => (e.id === id ? { ...e, planets: e.planets.map((pl) => ({ ...pl, players: [...pl.players.filter((x) => x.profileId !== profileId), ...(pl.planetId === planetId ? [{ profileId, name: p.name }] : [])] })) } : e)))
+        after(); return
+      }
+      after(await call(`/api/calendar/${id}/signup`, { method: 'POST', body: JSON.stringify({ planetId, profileId }) }, gmToken))
+    },
+    /** Gamemaster: the players who can be signed up. */
+    gmPlayers: async (): Promise<ProfileSummary[]> => (dev ? local.list() : listProfiles(gmToken ?? '')),
     /** Take yourself off an event. */
     leave: async (id: string) => {
       if (dev) {
