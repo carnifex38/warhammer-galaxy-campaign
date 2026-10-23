@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DEV_TOOLS, type AuthApi, type Role } from './auth'
+import { setStutterWindow, useStutterWindow } from './perf'
 
 // DEV TOOLS: a shortcut for building and testing. It lets the team step in as the gamemaster, a dummy player or a guest
 // without a password, from the top-right corner of the login screen, and flip between them from the top bar.
@@ -41,6 +42,7 @@ export function DevPanel({ auth }: { auth: AuthApi }) {
 
 /** A small switch in the top bar, shown only while signed in through the dev tools: flip roles without logging out. */
 export function DevSwitch({ auth }: { auth: AuthApi }) {
+  const stutter = useStutterWindow()
   if (!DEV_TOOLS || !auth.session?.dev) return null
   return (
     <div className="dev-switch" role="group" aria-label="Switch developer role">
@@ -50,6 +52,7 @@ export function DevSwitch({ auth }: { auth: AuthApi }) {
           {c.role === 'gm' ? 'GM' : c.role === 'player' ? 'Player' : 'Guest'}
         </button>
       ))}
+      <button className={stutter ? 'on' : ''} aria-pressed={stutter} onClick={() => setStutterWindow(!stutter)} title="Show or hide the stutter window">Stutter</button>
     </div>
   )
 }
