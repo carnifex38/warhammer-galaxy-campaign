@@ -164,7 +164,7 @@ export const SECTORS: Sector[] = [
     [570, 90],
     [
       p4('Goth', 893, 381),
-      p4('Fenris', 730, 561),
+      p5('Fenris', 790, 608),
       p4('Isstvan', 978, 85),
       p4('Lucius', 778, 298, true),
       p4('Abyss', 732, 92),
