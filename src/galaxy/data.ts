@@ -127,8 +127,6 @@ const ULTIMA_R = 1130
 
 export const SECTORS: Sector[] = [
   sector('solar', 'Segmentum Solar', '#ffe3a3', arc(SOLAR_R, 0, 360), [0, 0], [
-    p4('Nikaea', 780, 775),
-    p4('Lorin Alpha', 783, 641),
     p4('Terra', 632, 700),
     p4('Seraphina', 545, 606),
     p4('Voss', 493, 668, true),
@@ -136,7 +134,6 @@ export const SECTORS: Sector[] = [
     p4('Cthonia', 576, 764),
     p4('Phaeton', 518, 810, true),
     p4('Necromunda', 685, 857),
-    p4('Shedim', 717, 815),
     p5('Mars', 740, 770, true),
   ]),
 
@@ -154,7 +151,6 @@ export const SECTORS: Sector[] = [
     [570, 90],
     [
       p4('Goth', 893, 381),
-      p4('Neo-geddon', 1112, 15),
       p4('Fenris', 730, 561),
       p4('Isstvan', 978, 85),
       p4('Lucius', 778, 298, true),
@@ -163,7 +159,6 @@ export const SECTORS: Sector[] = [
       p4('Rangda', 408, 72),
       p4('Opuscalus Noctis', 217, 185),
       p4('Hellion', 304, 344),
-      p4('Sarcosa', 278, 461),
     ],
   ),
 
@@ -188,44 +183,22 @@ export const SECTORS: Sector[] = [
   ]),
 
   sector('ultima', 'Segmentum Ultima', '#2fb7a8', ring(SOLAR_R, ULTIMA_R, -45, 46), [640, 0], [
-    p4('Incalpeta Terminus', 1355, 1319),
-    p4('Bale', 1319, 1197),
-    p4('Neverlight', 1325, 1143),
     p4('Nocturne', 1070, 983),
     p4('Macragge', 1482, 1154),
-    p4('Saran Luxor', 1693, 1248),
-    p4('Vayber', 1226, 995),
-    p4('Calth', 1503, 1104),
     p4('Chemos', 968, 840),
     p4('Accatran', 1320, 950, true),
     p4('Nuceria', 1760, 1096),
     p4('Chogoris', 1146, 856),
-    p4('Orpheus Prime', 1680, 879),
     p4('Ryza', 878, 752, true),
     p4('Tigrus', 1528, 851, true),
-    p4('Sulis', 1257, 792),
-    p4('Impetus', 1458, 808),
-    p4('Constantium', 1892, 852),
-    p4('Davin', 970, 746),
-    p4('Laeran', 1646, 806),
-    p4('Signus Prime', 1800, 694),
     p4('Olympia', 1313, 671),
     p4('Sarum', 984, 698, true),
     p4('Prospero', 862, 702),
-    p4('Konig Secundus', 1617, 630),
-    p4('Lastrati', 1078, 661),
-    p4('Memlok', 1646, 530),
     p4('Anvillus', 1170, 618, true),
     p4('Desperation', 1783, 420),
-    p4('Chondax', 952, 621),
     p4('Nostramo', 1562, 279),
-    p4('Honourum', 1342, 397),
-    p4('Angehs', 1395, 302),
     p4('Baal', 1128, 453),
-    p4('Kayvas Belt', 950, 535),
     p4('Quai Jinn', 1441, 135),
-    p4('Lamrys', 1043, 406),
-    p4('Bodi', 965, 449),
   ]),
 ]
 
