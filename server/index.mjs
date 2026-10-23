@@ -3,7 +3,7 @@
 //   GM_PASSWORD  required. The gamemaster password (checked here, never sent to browsers).
 //   PORT         default 3000
 //   HOST         default 0.0.0.0
-//   DATA_DIR     default ./data   (state.json, profiles.json and claims.json live here)
+//   DATA_DIR     default ./data   (state.json, profiles.json, claims.json and calendar.json live here)
 //   DIST_DIR     default ./dist
 import { createServer } from 'node:http'
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
@@ -229,6 +229,7 @@ function persistClaims() {
 const changed = () => { persistClaims(); version++; broadcast() }
 
 function dropSeatsOf(profileId) {
+  dropSignupsOf(profileId)
   let any = false
   for (const t of Object.values(claims)) {
     const n = t.seats.length
@@ -381,6 +382,136 @@ async function claimsApi(req, res, path) {
   return null
 }
 
+// ---- calendar -----------------------------------------------------------------------------------------------------
+// The gamemaster schedules events: a date, a name, and the planets that will be fought over (each with how many players are wanted).
+// Players with a profile sign up for one planet per event; everyone can read the calendar. Signed-up players are shown by name.
+const CALENDAR_FILE = join(DATA_DIR, 'calendar.json')
+/** [{ id, name, date: 'YYYY-MM-DD', notes, planets: [{ planetId, target, signups: [profileId] }] }] */
+let calendar = []
+try { if (existsSync(CALENDAR_FILE)) calendar = JSON.parse(readFileSync(CALENDAR_FILE, 'utf8')) } catch (e) { console.error('Could not read calendar.json, starting empty:', e.message) }
+
+const MAX_EVENTS = 500
+const MAX_PLANETS_PER_EVENT = 24
+const calendarChanged = () => {
+  const tmp = CALENDAR_FILE + '.tmp'
+  writeFileSync(tmp, JSON.stringify(calendar))
+  renameSync(tmp, CALENDAR_FILE)
+  version++
+  broadcast()
+}
+
+const validDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d)
+const cleanLine = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '')
+const cleanNotes = (v) => (typeof v === 'string' ? v.replace(/\r/g, '').trim().slice(0, 600) : '')
+
+/** The planets of an event from what the gamemaster sent: valid ids, no repeats, a sensible player target; sign-ups carry over. */
+function parsePlanets(list, previous = []) {
+  if (!Array.isArray(list) || list.length > MAX_PLANETS_PER_EVENT) return null
+  const out = []
+  for (const x of list) {
+    if (!isObj(x) || typeof x.planetId !== 'string' || !/^[a-z0-9-]{1,80}$/.test(x.planetId)) return null
+    if (out.some((o) => o.planetId === x.planetId)) continue
+    const target = Number.isInteger(x.target) ? Math.min(99, Math.max(0, x.target)) : 0
+    out.push({ planetId: x.planetId, target, signups: previous.find((o) => o.planetId === x.planetId)?.signups ?? [] })
+  }
+  return out
+}
+
+/** The calendar as everyone may see it: signed-up players by name. */
+function calendarView() {
+  return calendar
+    .map((e) => ({
+      id: e.id, name: e.name, date: e.date, notes: e.notes,
+      planets: e.planets.map((pl) => ({ planetId: pl.planetId, target: pl.target, players: pl.signups.map((id) => ({ profileId: id, name: profiles[id]?.name ?? 'Unknown' })) })),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+}
+
+/** A deleted profile drops out of every event it had signed up for. */
+function dropSignupsOf(profileId) {
+  let any = false
+  for (const e of calendar) for (const pl of e.planets) {
+    const n = pl.signups.length
+    pl.signups = pl.signups.filter((id) => id !== profileId)
+    if (pl.signups.length !== n) any = true
+  }
+  if (any) calendarChanged()
+}
+
+async function calendarApi(req, res, path) {
+  const m = req.method
+  if (path === '/api/calendar' && m === 'GET') return json(res, 200, { events: calendarView() })
+
+  if (path === '/api/calendar' && m === 'POST') { // gamemaster: schedule an event
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    const body = await readBody(req).catch(() => null)
+    const name = cleanLine(body?.name, 60)
+    const planets = parsePlanets(body?.planets)
+    if (!name) return json(res, 400, { error: 'Give the event a name.' })
+    if (!validDate(body?.date)) return json(res, 400, { error: 'Pick a date.' })
+    if (!planets) return json(res, 400, { error: 'Those planets are not valid.' })
+    if (calendar.length >= MAX_EVENTS) return json(res, 507, { error: 'Too many events.' })
+    calendar.push({ id: randomBytes(6).toString('hex'), name, date: body.date, notes: cleanNotes(body?.notes), planets })
+    calendarChanged()
+    return json(res, 200, { events: calendarView() })
+  }
+
+  const one = /^\/api\/calendar\/([a-f0-9]{12})$/.exec(path)
+  if (one) {
+    const ev = calendar.find((e) => e.id === one[1])
+    if (!ev) return json(res, 404, { error: 'No such event.' })
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    if (m === 'PUT') { // edit
+      const body = await readBody(req).catch(() => null)
+      const name = cleanLine(body?.name, 60)
+      const planets = parsePlanets(body?.planets, ev.planets)
+      if (!name) return json(res, 400, { error: 'Give the event a name.' })
+      if (!validDate(body?.date)) return json(res, 400, { error: 'Pick a date.' })
+      if (!planets) return json(res, 400, { error: 'Those planets are not valid.' })
+      Object.assign(ev, { name, date: body.date, notes: cleanNotes(body?.notes), planets })
+      calendarChanged()
+      return json(res, 200, { events: calendarView() })
+    }
+    if (m === 'DELETE') {
+      calendar = calendar.filter((e) => e !== ev)
+      calendarChanged()
+      return json(res, 200, { events: calendarView() })
+    }
+    return null
+  }
+
+  const signup = /^\/api\/calendar\/([a-f0-9]{12})\/signup(?:\/([a-f0-9]{16}))?$/.exec(path)
+  if (signup) {
+    const ev = calendar.find((e) => e.id === signup[1])
+    if (!ev) return json(res, 404, { error: 'No such event.' })
+    const who = askedBy(req)
+    if (signup[2]) { // gamemaster: remove someone from the sign-ups
+      if (m !== 'DELETE') return null
+      if (!who.gm) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+      for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== signup[2])
+      calendarChanged()
+      return json(res, 200, { events: calendarView() })
+    }
+    if (!who.profile) return json(res, 401, { error: 'Sign in with a profile to sign up.' })
+    if (m === 'POST') { // sign up for a planet (one per event: signing up elsewhere moves you)
+      const body = await readBody(req).catch(() => null)
+      const target = ev.planets.find((pl) => pl.planetId === body?.planetId)
+      if (!target) return json(res, 400, { error: 'That planet is not part of this event.' })
+      for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== who.profile.id)
+      target.signups.push(who.profile.id)
+      calendarChanged()
+      return json(res, 200, { events: calendarView() })
+    }
+    if (m === 'DELETE') { // leave, any time
+      for (const pl of ev.planets) pl.signups = pl.signups.filter((id) => id !== who.profile.id)
+      calendarChanged()
+      return json(res, 200, { events: calendarView() })
+    }
+    return null
+  }
+  return null
+}
+
 // ---- live updates (server-sent events) ---------------------------------------------------------------------------
 const streams = new Set()
 const broadcast = () => { for (const res of streams) res.write(`data: ${version}\n\n`) }
@@ -445,6 +576,12 @@ async function api(req, res, path) {
 
   if (path === '/api/claims' || path.startsWith('/api/claims/')) {
     const r = await claimsApi(req, res, path)
+    if (r !== null) return r
+    return json(res, 405, { error: 'Method not allowed.' })
+  }
+
+  if (path === '/api/calendar' || path.startsWith('/api/calendar/')) {
+    const r = await calendarApi(req, res, path)
     if (r !== null) return r
     return json(res, 405, { error: 'Method not allowed.' })
   }

@@ -5,6 +5,7 @@ import { DevSwitch } from './devTools' // DEV-TOOLS
 import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
 import { useClaims, type Viewing } from './claims'
+import { useCalendar } from './calendar'
 import type { GalaxySelection } from './galaxy/GalaxyView'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
@@ -12,15 +13,16 @@ const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
 const HostView = lazy(() => import('./galaxy/HostView'))
 const ArmyLists = lazy(() => import('./ArmyLists'))
 const OptionsView = lazy(() => import('./OptionsView'))
+const CalendarView = lazy(() => import('./CalendarView'))
 
-type TabId = 'galaxy' | 'lists' | 'event' | 'host' | 'options'
+type TabId = 'galaxy' | 'lists' | 'calendar' | 'host' | 'options'
 
-const TABS: { id: TabId; label: string; icon: string; blurb: string; roles: Role[] }[] = [
-  { id: 'galaxy', label: 'Galaxy', icon: '✦', blurb: 'Interactive galaxy map: sectors, planets and battlezones.', roles: ['guest', 'player', 'gm'] },
-  { id: 'lists', label: 'Army Lists', icon: '☰', blurb: 'Build and view 40k and 30k armies.', roles: ['player', 'gm'] },
-  { id: 'event', label: 'Event', icon: '\u2691', blurb: 'Join an event and see your battlezone assignment.', roles: ['player', 'gm'] },
-  { id: 'host', label: 'Host', icon: '\u2699', blurb: 'Set up the event.', roles: ['gm'] },
-  { id: 'options', label: 'Options', icon: '◐', blurb: 'Graphics, UI and display settings.', roles: ['guest', 'player', 'gm'] },
+const TABS: { id: TabId; label: string; icon: string; roles: Role[] }[] = [
+  { id: 'galaxy', label: 'Galaxy', icon: '✦', roles: ['guest', 'player', 'gm'] },
+  { id: 'lists', label: 'Army Lists', icon: '☰', roles: ['player', 'gm'] },
+  { id: 'calendar', label: 'Calendar', icon: '\u25a6', roles: ['guest', 'player', 'gm'] },
+  { id: 'host', label: 'Host', icon: '\u2699', roles: ['gm'] },
+  { id: 'options', label: 'Options', icon: '◐', roles: ['guest', 'player', 'gm'] },
 ]
 
 function useOnline() {
@@ -44,6 +46,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('galaxy')
   const events = useEventConfig(role === 'gm', auth.session?.token)
   const claims = useClaims(auth)
+  const calendar = useCalendar(auth)
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
   const [viewing, setViewing] = useState<Viewing | null>(null)
   const galaxySel = useRef<GalaxySelection | undefined>(undefined)
@@ -104,6 +107,17 @@ export default function App() {
             />
           </Suspense>
         </main>
+      ) : activeId === 'calendar' ? (
+        <main className="content">
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <CalendarView
+              auth={auth}
+              calendar={calendar}
+              events={events}
+              onOpenPlanet={(sector, planet) => { galaxySel.current = { sector, planet, table: null }; setTab('galaxy') }}
+            />
+          </Suspense>
+        </main>
       ) : activeId === 'host' ? (
         <main className="content">
           <Suspense fallback={<p className="muted">Loading…</p>}>
@@ -116,7 +130,7 @@ export default function App() {
             <OptionsView />
           </Suspense>
         </main>
-      ) : activeId === 'lists' ? (
+      ) : (
         <main className="content">
           <h2>{current.label}</h2>
           <Suspense fallback={<p className="muted">Loading…</p>}>
@@ -128,12 +142,6 @@ export default function App() {
               onBackToZone={() => { setViewing(null); setTab('galaxy') }}
             />
           </Suspense>
-        </main>
-      ) : (
-        <main className="content">
-          <h2>{current.label}</h2>
-          <p>{current.blurb}</p>
-          <p className="muted">Coming soon.</p>
         </main>
       )}
     </div>

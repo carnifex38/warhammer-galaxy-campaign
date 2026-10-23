@@ -39,7 +39,7 @@ function heroFragment(hero: number): string {
 }
 
 /** Which fragment shader draws a planet with this hero id. */
-function fragmentFor(hero: number): string {
+export function fragmentFor(hero: number): string {
   return withArriveFade(hero > 0 && HERO_BODIES[hero] ? heroFragment(hero) : REAL_FRAG)
 }
 
@@ -67,7 +67,7 @@ const PLACEHOLDER_FRAG = withArriveFade(/* glsl */ `
   }
 `)
 
-const ATMO_VERT = /* glsl */ `
+export const ATMO_VERT = /* glsl */ `
   varying vec3 vN;
   void main() {
     vN = normalize(normalMatrix * normal);
@@ -75,7 +75,7 @@ const ATMO_VERT = /* glsl */ `
   }
 `
 
-const ATMO_FRAG = withArriveFade(/* glsl */ `
+export const ATMO_FRAG = withArriveFade(/* glsl */ `
   uniform vec3 uAtmo;
   uniform float uStrength;
   varying vec3 vN;
@@ -85,7 +85,7 @@ const ATMO_FRAG = withArriveFade(/* glsl */ `
   }
 `)
 
-function makePlanetUniforms(name: string, era: Era) {
+export function makePlanetUniforms(name: string, era: Era) {
   const look = lookFor(name, era)
   return {
     uTime: { value: 0 },
