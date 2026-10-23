@@ -99,6 +99,7 @@ const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k 
 
 export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   const place = useRef<THREE.Group>(null) // holds the battle still in space
+  const still = useRef({ q: new THREE.Quaternion(), p: new THREE.Vector3(), still: 0, since: 0 }) // how long the camera has held still, before the battle takes its place
   const fixed = useRef<{ rel: THREE.Vector3; q: THREE.Quaternion } | null>(null) // where the battle holds still in space (set on the first frame)
   const root = useRef<THREE.Group>(null)
   const hulls = useRef<THREE.InstancedMesh>(null)
@@ -178,8 +179,12 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
     if (!parent) return
     parent.getWorldQuaternion(qWorld)
     if (!fixed.current) {
-      // wait until the planet has finished arriving, so the camera is where it will stay when the battle takes its angle from it
-      if (arriveFade.value < 0.5) { g.visible = false; return }
+      // Wait until the planet has arrived AND the camera has stopped flying in, so the battle takes its angle from where the camera
+      // will stay (a battle fixed while the camera was still on its way ends up edge-on). It gives up waiting after a few seconds.
+      const w = still.current
+      if (w.since === 0) { w.since = now; w.q.copy(state.camera.quaternion); w.p.copy(state.camera.position) }
+      if (state.camera.quaternion.angleTo(w.q) > 0.0015 || state.camera.position.distanceTo(w.p) > 0.004) { w.q.copy(state.camera.quaternion); w.p.copy(state.camera.position); w.still = 0 } else w.still += dt
+      if (arriveFade.value < 0.5 || (w.still < 0.5 && now - w.since < 6)) { g.visible = false; return }
       tmpA.copy(spot).applyQuaternion(qWorld)
       tmpA.y = 0
       if (tmpA.lengthSq() < 1e-4) tmpA.set(0, 0, 1)
