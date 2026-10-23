@@ -95,15 +95,15 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
       for (let e = 0; e < 3; e++) {
         const idx = i * 3 + e
         tmpB.set((e - 1) * 0.28 * sc, 0, -1.85 * sc).applyQuaternion(dummy.quaternion).add(tmpA)
-        const len = (0.35 + 0.1 * Math.sin(now * 20 + idx)) * sc * 4.5
+        const len = (0.3 + 0.02 * Math.sin(now * 2.5 + idx)) * sc * 1.8
         tmpC.copy(dirV).multiplyScalar(-len) // the exhaust streams out behind the ship
         eg.setXYZ(idx * 2, tmpB.x, tmpB.y, tmpB.z)
         eg.setXYZ(idx * 2 + 1, tmpB.x + tmpC.x, tmpB.y + tmpC.y, tmpB.z + tmpC.z)
         const f = master * smooth(k)
-        ec.setXYZ(idx * 2, 0.5 * f, 0.8 * f, 1.5 * f)
+        ec.setXYZ(idx * 2, 0.3 * f, 0.5 * f, 0.9 * f)
         ec.setXYZ(idx * 2 + 1, 0, 0, 0)
         gp.setXYZ(idx, tmpB.x, tmpB.y, tmpB.z)
-        gc.setXYZ(idx, 0.55 * f, 0.85 * f, 1.6 * f)
+        gc.setXYZ(idx, 0.3 * f, 0.5 * f, 0.95 * f)
       }
     })
     hm.instanceMatrix.needsUpdate = true
@@ -131,7 +131,7 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
         <lineBasicMaterial vertexColors {...additive} userData={keep} />
       </lineSegments>
       <points geometry={exhaust.glow} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.02} sizeAttenuation vertexColors {...additive} userData={keep} />
+        <pointsMaterial map={glow} size={0.009} sizeAttenuation vertexColors {...additive} userData={keep} />
       </points>
     </group>
   )

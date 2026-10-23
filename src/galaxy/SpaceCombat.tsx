@@ -513,15 +513,15 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         const off = (e - 1) * 0.28 * sc
         tmpA.set(off, 0, -1.85 * sc).applyQuaternion(s.quat).add(s.pos)
         const burn = visible && s.state !== 'dying' ? (s.state === 'warping' ? 1.5 : 1) : 0
-        const len = (0.35 + 0.1 * Math.sin(now * 20 + idx)) * sc * 4.5 * burn
+        const len = (0.3 + 0.02 * Math.sin(now * 2.5 + idx)) * sc * 1.8 * burn
         tmpB.set(0, 0, -1).applyQuaternion(s.quat).multiplyScalar(len).add(tmpA)
         eg.setXYZ(idx * 2, tmpA.x, tmpA.y, tmpA.z)
         eg.setXYZ(idx * 2 + 1, tmpB.x, tmpB.y, tmpB.z)
         const k = master * burn
-        ec.setXYZ(idx * 2, 0.5 * k, 0.8 * k, 1.5 * k)
+        ec.setXYZ(idx * 2, 0.3 * k, 0.5 * k, 0.9 * k)
         ec.setXYZ(idx * 2 + 1, 0, 0, 0)
         gp.setXYZ(idx, tmpA.x, tmpA.y, tmpA.z)
-        gc.setXYZ(idx, 0.55 * k, 0.85 * k, 1.6 * k)
+        gc.setXYZ(idx, 0.3 * k, 0.5 * k, 0.95 * k)
       }
     })
     for (const m of [hm, wm]) {
@@ -660,7 +660,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         <lineBasicMaterial vertexColors {...additive} userData={keep} />
       </lineSegments>
       <points geometry={exhaustGlow} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.1 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
+        <pointsMaterial map={glow} size={0.045 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
       </points>
       <lineSegments geometry={boltLines} frustumCulled={false} renderOrder={8}>
         <lineBasicMaterial vertexColors {...additive} userData={keep} />
