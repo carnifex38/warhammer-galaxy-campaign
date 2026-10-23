@@ -8,7 +8,7 @@ export type Era = '40k' | '30k'
 
 export type LookName =
   | 'terran' | 'ocean' | 'desert' | 'forge' | 'ice' | 'jungle' | 'hive'
-  | 'volcanic' | 'dead' | 'shattered' | 'dark' | 'terra' | 'mars' | 'macragge' | 'necromunda' | 'cadia' | 'baal' | 'fenris' | 'prospero' | 'prosperoRuin' | 'caliban' | 'rock' | 'whiteDesert' | 'calth' | 'calthRuin'
+  | 'volcanic' | 'dead' | 'shattered' | 'dark' | 'terra' | 'mars' | 'macragge' | 'necromunda' | 'cadia' | 'baal' | 'fenris' | 'prospero' | 'prosperoRuin' | 'caliban' | 'rock' | 'whiteDesert' | 'calth' | 'calthRuin' | 'bombarded' | 'seismic' | 'viral' | 'exploded'
 
 export interface LookSpec {
   /** ocean colours (deep, shallow) */
@@ -99,6 +99,14 @@ export const LOOKS: Record<LookName, LookSpec> = {
   calth: { ...base, sea: 0.4, deep: '#0a2a5c', shallow: '#2a78a8', landA: '#3a7a3c', landB: '#8a9a5a', atmo: '#7ab8ff', atmoStrength: 1, ice: 0.7, cloud: 0.55, city: 0.55, scale: 1.7, craters: 0.1 },
   // Calth in 40K: the atmosphere stripped away, barren blue-grey rock with lights only underground
   calthRuin: { ...base, landA: '#3a4458', landB: '#7c8aa6', cloudCol: '#8a9ab8', atmo: '#4a78d8', atmoStrength: 0.3, cloud: 0.05, city: 0.15, scale: 2.4, craters: 0.9 },
+  // Exterminatus by orbital bombardment (Desperation, Bodi): charred ground, huge glowing impact scars, ash (own shader)
+  bombarded: { ...base, landA: '#30281f', landB: '#5a4a3a', cloudCol: '#443b35', atmo: '#ff7a40', atmoStrength: 0.5, cloud: 0.5, scale: 2.2, craters: 0.6, hero: 10 },
+  // Chemos, cracked by seismic charges: a plated crust with glowing rifts (own shader)
+  seismic: { ...base, landA: '#2a2420', landB: '#4a3f38', cloudCol: '#4d3526', atmo: '#ff8a40', atmoStrength: 0.5, cloud: 0.3, scale: 2.2, craters: 0.3, hero: 11 },
+  // Isstvan III after the Life-Eater virus: black sludge, dead cities, sick green haze, firestorms (own shader)
+  viral: { ...base, landA: '#14180e', landB: '#4a4c38', cloudCol: '#667338', atmo: '#9acc4c', atmoStrength: 0.8, cloud: 0.7, scale: 2, craters: 0.1, hero: 12 },
+  // a world blown apart (Nostramo, Colchis): drawn as its own model of drifting wreckage
+  exploded: { ...base, landA: '#3a3836', landB: '#6a6460', atmo: '#8a8a9a', atmoStrength: 0.1 },
   // the forge world: rust-red desert under a thin dusty haze (drawn by its own shader in the realistic look)
   mars: { ...base, landA: '#6b2e1d', landB: '#c8693a', cloudCol: '#d9a070', atmo: '#ff8a5a', atmoStrength: 0.7, cloud: 0.2, city: 0.6, scale: 2.2, craters: 0.9, hero: 2 },
 }
@@ -131,10 +139,13 @@ const LOOK_BY_PLANET: Record<string, LookName> = {
 const LOOK_BY_ERA: Record<Era, Record<string, LookName>> = {
   '40k': {
     Caliban: 'rock', Cadia: 'shattered', Prospero: 'prosperoRuin', Calth: 'calthRuin',
-    // blown apart (a field of debris): Nostramo, Chemos, Colchis, Barbarus, Cthonia, Desperation
-    Nostramo: 'shattered', Chemos: 'shattered', Colchis: 'shattered', Barbarus: 'shattered', Cthonia: 'shattered', Desperation: 'shattered',
-    // dead or purged, still there
-    Isstvan: 'dead', Gryphonne: 'dead', Nuceria: 'dead', Bodi: 'dead', Tallarn: 'desert',
+    // blown apart (the lore says the planet burst): wreckage round a molten core
+    Nostramo: 'exploded', Colchis: 'exploded',
+    // still there, but ruined: cracked by seismic charges, bombarded, virus-bombed, devoured, purged
+    Chemos: 'seismic', Desperation: 'bombarded', Bodi: 'bombarded', Isstvan: 'viral',
+    Gryphonne: 'dead', Nuceria: 'dead', Tallarn: 'desert',
+    // (no lore says how these were ruined; they are shown as dead, cratered worlds)
+    Cthonia: 'dead', Barbarus: 'dead',
   },
   // In 30K these are still whole. The lore for a few is thin (marked ?), so the look is a guess at what they were before.
   '30k': {

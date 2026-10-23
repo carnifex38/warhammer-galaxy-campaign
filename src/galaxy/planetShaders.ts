@@ -581,6 +581,70 @@ const HERO_BODY_PROSPERO40 = /* glsl */ `
       glow += vec3(0.7, 0.25, 1.0) * vein * (0.4 + 0.9 * night) * (1.0 - cloud * 0.6);
 `
 
+const HERO_BODY_BOMBARDED = /* glsl */ `
+      // ---------- BOMBARDED: Exterminatus by orbital bombardment. Charred ground pocked with huge impact scars, their rims still molten ----------
+      col = mix(vec3(0.07, 0.06, 0.06), vec3(0.3, 0.25, 0.22), smoothstep(0.3, 0.75, tone));
+      col *= 0.7 + 0.6 * fbm3d(p * 30.0 + uSeed);
+      float scar = 0.0;
+      float meltRim = 0.0;
+      {
+        vec3 bx = p * 4.5 + uSeed * 1.7;
+        vec3 bip = floor(bx);
+        vec3 bfp = fract(bx);
+        for (int n = 0; n < uCells; n++) { int i = n % 3 - 1; int j = (n / 3) % 3 - 1; int l = n / 9 - 1;
+          vec3 g = vec3(float(i), float(j), float(l));
+          vec3 c = vec3(hash3(bip + g), hash3(bip + g + 19.1), hash3(bip + g + 37.7));
+          float present = step(0.3, hash3(bip + g + 53.3));
+          float r = 0.2 + 0.28 * hash3(bip + g + 71.9);
+          float d = length(g + c - bfp) / r;
+          scar += present * (1.0 - smoothstep(0.0, 1.0, d));
+          meltRim += present * exp(-pow((d - 0.9) * 6.0, 2.0)) * (1.0 - smoothstep(1.0, 1.2, d));
+        }
+      }
+      scar = clamp(scar, 0.0, 1.0);
+      col = mix(col, vec3(0.025, 0.02, 0.02) + 0.04 * fbm3d(p * 18.0 + uSeed), scar * 0.85); // glassed, blackened floors
+      float flare = fbm3d(p * 9.0 + uSeed + 13.0);
+      glow += vec3(1.0, 0.36, 0.07) * clamp(meltRim, 0.0, 1.0) * (0.25 + 0.9 * flare) * (0.5 + 0.9 * night);
+      // fires still burning in the ruins
+      glow += vec3(1.0, 0.45, 0.12) * smoothstep(0.7, 0.8, fbm3d(p * 12.0 + uSeed + 31.0)) * (0.2 + 0.8 * night);
+      cloud = smoothstep(0.45, 0.8, swirl * 0.9 + band * 0.15) * 0.55;
+      cloudCol = vec3(0.26, 0.23, 0.21);
+      rim = vec3(0.9, 0.4, 0.22);
+`
+
+const HERO_BODY_SEISMIC = /* glsl */ `
+      // ---------- SEISMIC: the crust broken into plates by deep rifts still glowing from the macro-charges ----------
+      col = mix(vec3(0.07, 0.06, 0.06), vec3(0.24, 0.2, 0.18), smoothstep(0.3, 0.75, tone));
+      col *= 0.7 + 0.6 * fbm3d(p * 24.0 + uSeed);
+      float rift1 = pow(clamp(1.0 - abs(fbm3d(p * 3.0 + uSeed + 21.0) - 0.5) * 6.0, 0.0, 1.0), 2.0);
+      float rift2 = pow(clamp(1.0 - abs(fbm3d(p * 6.5 + uSeed + 41.0) - 0.5) * 9.0, 0.0, 1.0), 3.0);
+      float rifts = clamp(rift1 + rift2 * 0.7, 0.0, 1.0);
+      col *= 1.0 - 0.55 * smoothstep(0.0, 0.6, rifts); // plates darken toward the rifts
+      glow += mix(vec3(1.0, 0.3, 0.05), vec3(1.0, 0.8, 0.45), rift1 * rift1) * rifts * (0.5 + 0.9 * night + 0.25 * sin(uTime * 0.7 + p.x * 9.0));
+      cloud = smoothstep(0.5, 0.85, swirl * 0.85 + band * 0.2) * 0.35;
+      cloudCol = vec3(0.3, 0.2, 0.15);
+      rim = vec3(1.0, 0.5, 0.25);
+`
+
+const HERO_BODY_VIRAL = /* glsl */ `
+      // ---------- VIRAL: Isstvan III after the Life-Eater virus. Everything living rotted to black sludge under a sick green haze, dead cities, firestorms ----------
+      col = mix(vec3(0.03, 0.045, 0.025), vec3(0.28, 0.29, 0.22), smoothstep(0.3, 0.8, tone));
+      col *= 0.7 + 0.6 * fbm3d(p * 28.0 + uSeed);
+      float sludge = smoothstep(0.45, 0.65, fbm3d(p * 4.5 + uSeed + 7.0));
+      col = mix(col, vec3(0.02, 0.03, 0.015), sludge * 0.7);
+      // the pale ruined grids of dead hive cities
+      vec3 vgp = p * 24.0 + uSeed;
+      float vst = max(exp(-pow((fract(vgp.x) - 0.5) * 12.0, 2.0)), exp(-pow((fract(vgp.z) - 0.5) * 12.0, 2.0)));
+      float vcity = smoothstep(0.5, 0.65, fbm3d(p * 3.0 + uSeed + 11.0));
+      col = mix(col, vec3(0.34, 0.35, 0.28), vst * vcity * 0.55);
+      // the gas ignited into patches of firestorm
+      float fires = smoothstep(0.68, 0.78, fbm3d(p * 6.0 + uSeed + 31.0));
+      glow += vec3(1.0, 0.42, 0.1) * fires * (0.35 + 0.9 * night);
+      cloud = smoothstep(0.35, 0.75, swirl * 0.9 + band * 0.1) * 0.7;
+      cloudCol = vec3(0.4, 0.46, 0.22);
+      rim = vec3(0.6, 0.8, 0.3);
+`
+
 export const HERO_TAIL = /* glsl */ `
 
     float diff = max(dot(Nb, L), 0.0);
@@ -605,4 +669,5 @@ export const HERO_TAIL = /* glsl */ `
 export const HERO_BODIES: Record<number, string> = {
   1: HERO_BODY_TERRA, 2: HERO_BODY_MARS, 3: HERO_BODY_MACRAGGE, 4: HERO_BODY_NECROMUNDA, 5: HERO_BODY_CADIA,
   6: HERO_BODY_BAAL, 7: HERO_BODY_FENRIS, 8: HERO_BODY_PROSPERO30, 9: HERO_BODY_PROSPERO40,
+  10: HERO_BODY_BOMBARDED, 11: HERO_BODY_SEISMIC, 12: HERO_BODY_VIRAL,
 }

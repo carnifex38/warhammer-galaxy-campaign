@@ -977,7 +977,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
   const { planetDisplay } = useOptions()
   const look = lookNameFor(p.name, era)
-  const roundWorld = !isHulkId(p.id) && look !== 'rock' && look !== 'shattered'
+  const roundWorld = !isHulkId(p.id) && look !== 'rock' && look !== 'shattered' && look !== 'exploded'
   return (
     <group position={[p.x, 0.12, p.z]}>
       {/* big invisible target so fingers can hit it */}

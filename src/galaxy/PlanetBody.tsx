@@ -14,6 +14,7 @@ import MacraggeOrbit from './MacraggeOrbit'
 import MarsShipyard from './MarsShipyard'
 import NecromundaSpires from './NecromundaSpires'
 import ShatteredField from './ShatteredField'
+import BrokenWorld, { type BrokenStyle } from './BrokenWorld'
 import { lookFor, lookNameFor, seedFor, type Era } from './planetLooks'
 
 /** Dev only: `?freeze` stops the planet turning, so a feature can be checked. */
@@ -122,7 +123,7 @@ configureSurfaces({ makeUniforms: (name, era) => makePlanetUniforms(name, era as
 export function isBakedWorld(name: string, era: Era): boolean {
   if (isHulkName(name)) return false
   const k = lookNameFor(name, era)
-  return k !== 'rock' && k !== 'shattered'
+  return k !== 'rock' && k !== 'shattered' && k !== 'exploded'
 }
 
 /** One planet from each kind of shader, used to compile everything in the background at startup. */
@@ -136,6 +137,9 @@ export const WARMUP_PLANETS: { label: string; name: string; era: Era }[] = [
   { label: 'Fenris', name: 'Fenris', era: '40k' },
   { label: 'Prospero', name: 'Prospero', era: '30k' },
   { label: 'Prospero (ruin)', name: 'Prospero', era: '40k' },
+  { label: 'Desperation', name: 'Desperation', era: '40k' },
+  { label: 'Chemos', name: 'Chemos', era: '40k' },
+  { label: 'Isstvan', name: 'Isstvan', era: '40k' },
   { label: 'other worlds', name: 'Tallarn', era: '40k' },
 ]
 
@@ -337,6 +341,15 @@ function SpherePlanet({ name, era, position, surface }: { name: string; era: Era
  * The close-up of a selected planet. Most planets are a detailed, slowly spinning sphere drawn by shaders
  * (its look depends on the planet's name and the era); destroyed worlds are a swirling field of debris.
  */
+/** The colours of each blown-apart world's wreckage. */
+const DEFAULT_BROKEN: BrokenStyle = { rock: ['#2e2c2c', '#46423f', '#625c56'], heat: '#ff7a30', haze: [120, 100, 90] }
+const BROKEN_STYLES: Record<string, BrokenStyle> = {
+  // Nostramo: cold blue-black rock, the dim remnant of a city-world
+  Nostramo: { rock: ['#1c2030', '#2c3448', '#46506a', '#5d6a88'], heat: '#ff5a2a', haze: [70, 85, 130] },
+  // Colchis: pale ochre rock, a white-hot remnant
+  Colchis: { rock: ['#4a3d2c', '#6e5a3e', '#907a54', '#b09a70'], heat: '#ffb050', haze: [170, 140, 90] },
+}
+
 /** A number from a name, so each hulk gets its own shape. */
 const nameSeed = (name: string) => [...name].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7)
 
@@ -344,6 +357,13 @@ const nameSeed = (name: string) => [...name].reduce((h, c) => (Math.imul(h, 31) 
 export default function PlanetBody({ name, era, position, surface }: { name: string; era: Era; position: [number, number, number]; surface?: ReactNode }) {
   if (isHulkName(name)) return <SpaceHulk position={position} seed={nameSeed(name)} />
   if (lookNameFor(name, era) === 'rock') return <TheRock position={position} />
+  if (lookNameFor(name, era) === 'exploded') {
+    return (
+      <group position={position}>
+        <BrokenWorld seed={seedFor(name)} style={BROKEN_STYLES[name] ?? DEFAULT_BROKEN} />
+      </group>
+    )
+  }
   if (lookNameFor(name, era) === 'shattered') {
     return (
       <group position={position}>
