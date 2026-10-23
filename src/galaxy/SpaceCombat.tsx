@@ -34,9 +34,9 @@ const ARENA_HEIGHT = 0.55 // how far out from the planet's surface the battle pl
 
 export const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
-  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.14, turn: 0.22, range: 2.4, radius: 0.36 },
-  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.18, turn: 0.34, range: 1.7, radius: 0.26 },
-  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.26, turn: 0.6, range: 1.3, radius: 0.16 },
+  flagship: { scale: 0.11, hp: 26, volley: 4.2, vmax: 0.14, turn: 0.22, range: 2.4, radius: 0.25 },
+  cruiser: { scale: 0.08, hp: 15, volley: 3.4, vmax: 0.18, turn: 0.34, range: 1.7, radius: 0.18 },
+  escort: { scale: 0.05, hp: 8, volley: 2.6, vmax: 0.26, turn: 0.6, range: 1.3, radius: 0.11 },
 }
 // the five ships of a fleet and where each starts (as Team A; Team B is the mirror image on the other side)
 const LINEUP: { cls: Class; x: number; z: number }[] = [
@@ -569,7 +569,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         return
       }
       tmpA.lerpVectors(b.from, b.to, b.t)
-      tmpB.copy(b.to).sub(b.from).normalize().multiplyScalar(-0.17).add(tmpA)
+      tmpB.copy(b.to).sub(b.from).normalize().multiplyScalar(-0.1).add(tmpA)
       bl.setXYZ(i * 2, tmpA.x, tmpA.y, tmpA.z)
       bl.setXYZ(i * 2 + 1, tmpB.x, tmpB.y, tmpB.z)
       const c = TEAM_COLOR[b.team]
@@ -666,7 +666,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         <lineBasicMaterial vertexColors {...additive} userData={keep} />
       </lineSegments>
       <points geometry={boltHeads} frustumCulled={false} renderOrder={8}>
-        <pointsMaterial map={glow} size={0.09 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
+        <pointsMaterial map={glow} size={0.05 * ARENA_SCALE} sizeAttenuation vertexColors {...additive} userData={keep} />
       </points>
       <lineSegments geometry={lanceGeo} frustumCulled={false} renderOrder={8}>
         <lineBasicMaterial vertexColors {...additive} userData={keep} />

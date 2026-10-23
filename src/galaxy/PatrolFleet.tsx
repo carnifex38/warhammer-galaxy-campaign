@@ -8,7 +8,7 @@ import { CLASSES, HULL_TINT, TEAM_COLOR, glowTexture, hullGeometry, windowGeomet
 // round the planet, each on its own tilted orbit and at its own height, with engines burning. They fade in when the planet is won
 // and out when it is lost. Same ships as the battle (see SpaceCombat), just small and unhurried.
 
-const SHIP_SCALE = 0.26 // how much smaller than the battle's own scale: a patrol ship is a small thing beside the planet
+const SHIP_SCALE = 0.19 // how much smaller than the battle's own scale: a patrol ship is a small thing beside the planet
 const MAX = 4
 const LINEUP: Class[] = ['cruiser', 'escort', 'escort', 'escort']
 
