@@ -21,6 +21,7 @@ export const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c
 const HIDDEN = 9999
 // The battle is played out in a flat arena (X by Z, in arena units); the whole arena is then drawn small and hung over the battlezone.
 const BOUND_X = 3.2 // the fleets stay inside an ellipse this wide...
+const BOUND_Y = 1.15 // the fleets also fly up and down inside this height (battles are not flat)
 const BOUND_Z = 1.5 // ...and this deep
 const MAX_BOLTS = 90
 const MAX_LANCES = 4
@@ -55,7 +56,9 @@ interface Ship {
   turnRate: number
   range: number
   radius: number
-  theta: number // heading: the bow points along (sin, 0, cos) of this angle
+  theta: number // heading (yaw): which way round the bow points
+  pitch: number // nose up or down
+  layer: number // the height band it likes to fly in, so the two fleets are not on one level
   speed: number
   roll: number // banking in the turns
   dir: THREE.Vector3 // the way the bow points
@@ -101,6 +104,7 @@ const perp = new THREE.Vector3()
 const away2 = new THREE.Vector3()
 const side = new THREE.Vector3()
 const FORWARD = new THREE.Vector3(0, 0, 1)
+const UP = new THREE.Vector3(0, 1, 0)
 const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k) }
 
 export function glowTexture() {
@@ -231,10 +235,10 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         ships.push({
           team, cls: slot.cls, scale: cls.scale,
           vmax: cls.vmax, turnRate: cls.turn, range: cls.range, radius: cls.radius,
-          theta: sign * Math.PI / 2 + rand(-0.2, 0.2), speed: cls.vmax * 0.8, roll: 0, dir: new THREE.Vector3(sign, 0, 0),
+          theta: sign * Math.PI / 2 + rand(-0.2, 0.2), pitch: 0, layer: rand(-0.8, 0.8), speed: cls.vmax * 0.8, roll: 0, dir: new THREE.Vector3(sign, 0, 0),
           target: -1, strafe: 0, retargetAt: 0, spawn: new THREE.Vector3(),
           hp: cls.hp, maxHp: cls.hp, state: 'present', t: 0, hot: 0, phase: rand(0, 6.28),
-          pos: new THREE.Vector3(sign * slot.x, 0, slot.z * sign), quat: new THREE.Quaternion(), stretch: 1,
+          pos: new THREE.Vector3(sign * slot.x, rand(-0.7, 0.7), slot.z * sign), quat: new THREE.Quaternion(), stretch: 1,
           volleyAt: rand(0.5, cls.volley), salvo: null, lanceAt: rand(5, 11), nextBlast: 0, wreckSpin: rand(-0.4, 0.4),
         })
       })
@@ -345,38 +349,53 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
           } else s.target = -1
           s.retargetAt = now + rand(9, 16)
           s.strafe = 0
+          s.layer = rand(-0.9, 0.9)
           tg = s.target >= 0 ? S.ships[s.target] : null
         }
 
-        // 2. decide where to head: close to its range, then run past the enemy broadside-on; keep clear of every other ship and the arena's edge
+        // 2. decide where to head: close to its range, then run past the enemy broadside-on; keep clear of every other ship and the arena's edge.
+        //    Height too: it climbs or dives toward its target's level (plus its own band, so passes cross above and below), keeping clear in 3D.
         desired.set(0, 0, 0)
-        dirNow.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+        dirNow.set(Math.sin(s.theta) * Math.cos(s.pitch), Math.sin(s.pitch), Math.cos(s.theta) * Math.cos(s.pitch))
         let d = 9
         let abeam = 1
+        let yWant = s.layer + Math.sin(now * 0.13 + s.phase) * 0.35
         if (tg) {
-          los.copy(tg.pos).sub(s.pos); los.y = 0
+          los.copy(tg.pos).sub(s.pos)
           d = los.length() || 1e-3
-          los.divideScalar(d)
+          yWant = tg.pos.y + s.layer * 0.9
+          abeam = Math.abs(dirNow.dot(los)) / d
+          los.y = 0
+          const dh = los.length() || 1e-3
+          los.divideScalar(dh)
           perp.set(los.z, 0, -los.x)
           if (s.strafe === 0) s.strafe = perp.dot(dirNow) >= 0 ? 1 : -1 // whichever way needs the smaller turn
           const seek = smooth((d - s.range * 1.05) / (s.range * 0.9)) // far away: turn in toward it
           const away = smooth((s.range * 0.75 - d) / (s.range * 0.45)) // too close: open the range
           desired.addScaledVector(los, seek * 1.6 - away * 1.4)
           desired.addScaledVector(perp, s.strafe * (1 - 0.5 * seek))
-          abeam = Math.abs(dirNow.dot(los))
         } else {
           desired.set(-s.pos.x, 0, -s.pos.z).normalize()
         }
         for (const o of S.ships) {
           if (o === s || o.state === 'gone') continue
-          away2.set(s.pos.x - o.pos.x, 0, s.pos.z - o.pos.z)
+          away2.set(s.pos.x - o.pos.x, s.pos.y - o.pos.y, s.pos.z - o.pos.z)
           const dist = away2.length() || 1e-3
           const keep = (s.radius + o.radius) * 1.35
-          if (dist < keep * 2.2) desired.addScaledVector(away2, ((1 - dist / (keep * 2.2)) ** 2 * 3.2) / dist)
+          if (dist < keep * 2.2) {
+            const push = ((1 - dist / (keep * 2.2)) ** 2 * 3.2) / dist
+            desired.x += away2.x * push
+            desired.z += away2.z * push
+            yWant += away2.y * push * 0.6 // and over or under it, not only round it
+          }
           if (dist < s.radius + o.radius) s.pos.addScaledVector(away2, ((s.radius + o.radius - dist) * 0.5) / dist) // never overlap
         }
-        const er = Math.hypot(s.pos.x / BOUND_X, s.pos.z / BOUND_Z)
-        if (er > 0.72) desired.addScaledVector(away2.set(-s.pos.x, 0, -s.pos.z).normalize(), smooth((er - 0.72) / 0.4) * 3)
+        const er = Math.hypot(s.pos.x / BOUND_X, s.pos.y / BOUND_Y, s.pos.z / BOUND_Z)
+        if (er > 0.72) {
+          const back = smooth((er - 0.72) / 0.4)
+          desired.addScaledVector(away2.set(-s.pos.x, 0, -s.pos.z).normalize(), back * 3)
+          yWant -= s.pos.y * back * 1.5
+        }
         desired.addScaledVector(perp.set(dirNow.z, 0, -dirNow.x), Math.sin(now * 0.4 + s.phase) * 0.12) // a little wander
 
         // 3. steer: a limited turn rate, and slower when turning hard
@@ -388,9 +407,12 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
           const want = s.vmax * (0.55 + 0.45 * Math.cos(Math.min(Math.abs(dth), Math.PI / 2)))
           s.speed += (want - s.speed) * Math.min(1, dt * 1.2)
         }
-        s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+        // climb or dive toward the height it wants (a gentle pitch, limited like the turn)
+        const pWant = Math.max(-0.5, Math.min(0.5, (yWant - s.pos.y) * 0.9))
+        s.pitch += Math.max(-0.3 * dt, Math.min(0.3 * dt, pWant - s.pitch))
+        s.dir.set(Math.sin(s.theta) * Math.cos(s.pitch), Math.sin(s.pitch), Math.cos(s.theta) * Math.cos(s.pitch))
         s.pos.addScaledVector(s.dir, s.speed * dt)
-        s.pos.y = bob
+        s.pos.y += bob * dt * 2
 
         // 4. fire: the broadside guns when the enemy is abeam and in range, the lance when the flagship has a clear shot
         if (tg && s.t > 1.2) {
@@ -419,7 +441,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
             if (b && isShip(tgt)) {
               b.on = true; b.team = s.team; b.t = 0; b.target = s.salvo.target
               // the muzzle sits along the broadside facing the enemy
-              side.set(s.dir.z, 0, -s.dir.x)
+              side.crossVectors(s.dir, UP).normalize()
               los.copy(tgt.pos).sub(s.pos)
               if (side.dot(los) < 0) side.negate()
               const along = (0.7 - idx * 0.3) * 1.2 * s.scale * (s.cls === 'escort' ? 0.8 : 1)
@@ -427,7 +449,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
               b.from.y += 0.03 * s.scale
               b.hit = Math.random() < s.salvo.hitOdds
               // it hits the side of the target that faces it
-              side.set(tgt.dir.z, 0, -tgt.dir.x)
+              side.crossVectors(tgt.dir, UP).normalize()
               if (side.dot(los) > 0) side.negate()
               b.to.copy(tgt.pos).addScaledVector(tgt.dir, rand(-0.9, 0.9) * tgt.scale * 2).addScaledVector(side, 0.45 * tgt.scale * 1.2)
               b.to.y += rand(-0.1, 0.3) * tgt.scale
@@ -444,8 +466,9 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         // burning and breaking up: a chain of blasts along the hull, the wreck slowing and listing, then one last big one
         s.nextBlast -= dt
         s.speed *= 1 - dt * 0.4
+        s.pitch += (-0.35 - s.pitch) * Math.min(1, dt * 0.6) // the nose drops
+        s.dir.set(Math.sin(s.theta) * Math.cos(s.pitch), Math.sin(s.pitch), Math.cos(s.theta) * Math.cos(s.pitch))
         s.pos.addScaledVector(s.dir, s.speed * dt)
-        s.pos.y -= dt * 0.03
         s.roll = s.wreckSpin * s.t
         if (s.nextBlast <= 0) {
           s.nextBlast = rand(0.12, 0.3)
@@ -463,8 +486,9 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         if (s.t > 2.5) {
           // reinforcements: a rift opens at the edge of the fleet's side of the arena and the new ship slides out of it toward the fight
           const sign = s.team === 'A' ? 1 : -1
-          s.spawn.set(sign * -(BOUND_X * 0.8 + rand(-0.15, 0.1)), 0, rand(-BOUND_Z * 0.6, BOUND_Z * 0.6))
+          s.spawn.set(sign * -(BOUND_X * 0.8 + rand(-0.15, 0.1)), rand(-BOUND_Y * 0.6, BOUND_Y * 0.6), rand(-BOUND_Z * 0.6, BOUND_Z * 0.6))
           s.theta = sign * Math.PI / 2
+          s.pitch = 0
           s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
           s.pos.copy(s.spawn)
           s.speed = s.vmax * 0.6; s.roll = 0
@@ -478,7 +502,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         s.stretch = 1 + (1 - out) * 2.2
         if (k >= 1) { s.state = 'present'; s.t = 0 }
       }
-      s.dir.set(Math.sin(s.theta), 0, Math.cos(s.theta))
+      s.dir.set(Math.sin(s.theta) * Math.cos(s.pitch), Math.sin(s.pitch), Math.cos(s.theta) * Math.cos(s.pitch))
       s.quat.setFromUnitVectors(FORWARD, s.dir).multiply(qRoll.setFromAxisAngle(FORWARD, s.roll))
     })
 
