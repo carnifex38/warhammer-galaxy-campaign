@@ -29,14 +29,14 @@ const MAX_DEBRIS = 240
 const PORTS = 6 // gun ports along the broadside of each ship
 const WARP_S = 3.2
 const DYING_S = 3.0
-const ARENA_SCALE = 0.3 // the whole battle is drawn this much smaller, so the ships are small beside the planet
-const ARENA_HEIGHT = 0.2 // how high above the surface the battle hovers
+const ARENA_SCALE = 0.22 // the whole battle is drawn this much smaller, so the ships are small beside the planet
+const ARENA_HEIGHT = 0.55 // how high above the surface the battle hovers
 
 const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
-  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.2, turn: 0.32, range: 1.5, radius: 0.36 },
-  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.27, turn: 0.5, range: 1.05, radius: 0.26 },
-  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.38, turn: 0.9, range: 0.8, radius: 0.16 },
+  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.12, turn: 0.22, range: 1.5, radius: 0.36 },
+  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.16, turn: 0.34, range: 1.05, radius: 0.26 },
+  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.23, turn: 0.6, range: 0.8, radius: 0.16 },
 }
 // the five ships of a fleet and where each starts (as Team A; Team B is the mirror image on the other side)
 const LINEUP: { cls: Class; x: number; z: number }[] = [
