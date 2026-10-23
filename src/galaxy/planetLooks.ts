@@ -8,7 +8,7 @@ export type Era = '40k' | '30k'
 
 export type LookName =
   | 'terran' | 'ocean' | 'desert' | 'forge' | 'ice' | 'jungle' | 'hive'
-  | 'volcanic' | 'dead' | 'shattered' | 'dark' | 'terra' | 'mars' | 'macragge' | 'necromunda' | 'cadia' | 'baal' | 'fenris' | 'prospero' | 'prosperoRuin' | 'caliban' | 'rock'
+  | 'volcanic' | 'dead' | 'shattered' | 'dark' | 'terra' | 'mars' | 'macragge' | 'necromunda' | 'cadia' | 'baal' | 'fenris' | 'prospero' | 'prosperoRuin' | 'caliban' | 'rock' | 'whiteDesert' | 'calth' | 'calthRuin'
 
 export interface LookSpec {
   /** ocean colours (deep, shallow) */
@@ -93,6 +93,12 @@ export const LOOKS: Record<LookName, LookSpec> = {
   caliban: { ...base, sea: 0.12, deep: '#07130f', shallow: '#12261d', landA: '#1d2d20', landB: '#506049', cloudCol: '#7d8884', atmo: '#4f7fa8', atmoStrength: 0.5, cloud: 0.6, lava: 0.2, scale: 2.6, craters: 0.1, ambient: 0.09 },
   // Caliban in 40K is The Rock (drawn as its own model); these only colour the map
   rock: { ...base, landA: '#4a4a50', landB: '#7a7a86', atmo: '#8a9ab8', atmoStrength: 0.1 },
+  // Chondax, the White World: bone-white sands under three suns, barely any air
+  whiteDesert: { ...base, landA: '#cfc6b4', landB: '#f4efe4', cloudCol: '#fbf7ee', atmo: '#fff0d0', atmoStrength: 0.5, cloud: 0.05, scale: 1.4, craters: 0.35 },
+  // Calth in 30K: a green, temperate agri-world with industry to rival Macragge, under a blue-white sun
+  calth: { ...base, sea: 0.4, deep: '#0a2a5c', shallow: '#2a78a8', landA: '#3a7a3c', landB: '#8a9a5a', atmo: '#7ab8ff', atmoStrength: 1, ice: 0.7, cloud: 0.55, city: 0.55, scale: 1.7, craters: 0.1 },
+  // Calth in 40K: the atmosphere stripped away, barren blue-grey rock with lights only underground
+  calthRuin: { ...base, landA: '#3a4458', landB: '#7c8aa6', cloudCol: '#8a9ab8', atmo: '#4a78d8', atmoStrength: 0.3, cloud: 0.05, city: 0.15, scale: 2.4, craters: 0.9 },
   // the forge world: rust-red desert under a thin dusty haze (drawn by its own shader in the realistic look)
   mars: { ...base, landA: '#6b2e1d', landB: '#c8693a', cloudCol: '#d9a070', atmo: '#ff8a5a', atmoStrength: 0.7, cloud: 0.2, city: 0.6, scale: 2.2, craters: 0.9, hero: 2 },
 }
@@ -113,12 +119,18 @@ const LOOK_BY_PLANET: Record<string, LookName> = {
   Baal: 'baal', Nostramo: 'dark', Olympia: 'forge', Chogoris: 'terran', Nocturne: 'volcanic',
   Nuceria: 'desert', Macragge: 'macragge', Ryza: 'forge',
   Anvillus: 'forge', Sarum: 'forge', Tigrus: 'forge', Accatran: 'forge',
+  // The planets below came with the Horus Heresy map. Where the lore gives a look (Chondax, Bodi, Davin, Honourum, Memlok, Nikaea,
+  // Neo-geddon) it follows that; the rest have no lore and are free choices, so change them if you like.
+  Chondax: 'whiteDesert', Bodi: 'volcanic', Davin: 'jungle', Honourum: 'dead', Memlok: 'volcanic', Nikaea: 'terran', 'Neo-geddon': 'dead',
+  Laeran: 'ice', 'Konig Secundus': 'desert', Lastrati: 'dark', Angehs: 'ocean', 'Kayvas Belt': 'dead', Lamrys: 'terran',
+  'Incalpeta Terminus': 'ice', Bale: 'volcanic', Neverlight: 'dark', 'Saran Luxor': 'desert', Vayber: 'jungle', 'Orpheus Prime': 'hive',
+  Sulis: 'terran', Impetus: 'volcanic', Constantium: 'ocean', 'Signus Prime': 'volcanic', 'Lorin Alpha': 'ocean', Shedim: 'dead', Sarcosa: 'jungle',
 }
 
 // Planets whose look changed between the Horus Heresy and the 41st millennium.
 const LOOK_BY_ERA: Record<Era, Record<string, LookName>> = {
-  '40k': { Caliban: 'rock', Cadia: 'shattered', Prospero: 'prosperoRuin' },
-  '30k': { Caliban: 'caliban', Cadia: 'cadia', Prospero: 'prospero' },
+  '40k': { Caliban: 'rock', Cadia: 'shattered', Prospero: 'prosperoRuin', Calth: 'calthRuin' },
+  '30k': { Caliban: 'caliban', Cadia: 'cadia', Prospero: 'prospero', Calth: 'calth' },
 }
 
 const FALLBACK: LookName[] = ['terran', 'desert', 'ice', 'jungle', 'volcanic', 'dead', 'ocean', 'dark', 'hive']
@@ -140,8 +152,35 @@ export function lookNameFor(planetName: string, era: Era): LookName {
   return FALLBACK[h % FALLBACK.length]
 }
 
+/** Small changes to a planet's colours on top of its look, so planets that share a look still look different from each other. */
+const LOOK_TWEAKS: Record<string, Partial<LookSpec>> = {
+  Voss: { landA: '#4a2a22', landB: '#a8683f', city: 0.7 },
+  Phaeton: { landA: '#3c2a22', landB: '#9a7048', atmo: '#d89060', city: 0.65 },
+  Anvillus: { landA: '#3a1a14', landB: '#8f3a22', city: 0.85, atmo: '#e86a44' },
+  Sarum: { landA: '#2c1e2c', landB: '#6a4468', atmo: '#a86ad0', city: 0.55 }, // a Dark Mechanicum world: bruised purple
+  Tigrus: { landA: '#3a2c1c', landB: '#7a6a3a', atmo: '#c8a050', city: 0.4 }, // once an Ork world, now reclaimed
+  Accatran: { landA: '#2a1812', landB: '#6a3a28', ambient: 0.07, city: 0.9, atmo: '#c85a38' }, // its rulers live deep underground
+  Davin: { landA: '#4a5a2a', landB: '#a8a040', cloudCol: '#e6e0a0', atmo: '#d8d070', cloud: 0.8 }, // the swamp moon's yellow haze
+  Honourum: { landA: '#2e2a28', landB: '#6a5a4c', atmo: '#9a6a4a', crack: 0.2 },
+  Memlok: { atmo: '#a050e0', lava: 0.85, landA: '#2e2036', landB: '#5a3a6a' }, // warped by Horus's agents
+  Nikaea: { cloud: 0.3, city: 0.15, craters: 0.05 },
+  Bodi: { landA: '#3a2a22', landB: '#8a6a48', city: 0.3 },
+  Neverlight: { ambient: 0.05, landA: '#222a3c', landB: '#424e6c' },
+  'Signus Prime': { lava: 0.5, atmo: '#ff3030', landA: '#2a1210', landB: '#5a2a24' },
+  Sulis: { landA: '#4a8a3a', landB: '#c0a860', atmo: '#ffe090' },
+  Vayber: { landA: '#2a4a3a', landB: '#6a8a4a', atmo: '#8ad8c0' },
+  Impetus: { lava: 0.9, landA: '#241814', landB: '#4a3228' },
+}
+const lookCache = new Map<string, LookSpec>()
+
 export function lookFor(planetName: string, era: Era): LookSpec {
-  return LOOKS[lookNameFor(planetName, era)]
+  const name = lookNameFor(planetName, era)
+  const tweak = LOOK_TWEAKS[planetName]
+  if (!tweak) return LOOKS[name]
+  const key = `${name}|${planetName}`
+  let l = lookCache.get(key)
+  if (!l) { l = { ...LOOKS[name], ...tweak }; lookCache.set(key, l) }
+  return l
 }
 
 /** A stable per-planet number so two planets with the same look still have different continents. */
