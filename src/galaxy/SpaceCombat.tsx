@@ -29,7 +29,7 @@ const MAX_DEBRIS = 240
 const PORTS = 6 // gun ports along the broadside of each ship
 const WARP_S = 3.2
 const DYING_S = 3.0
-const ARENA_SCALE = 0.22 // the whole battle is drawn this much smaller, so the ships are small beside the planet
+const ARENA_SCALE = 0.15 // the whole battle is drawn this much smaller, so the ships are small beside the planet
 const ARENA_HEIGHT = 0.55 // how high above the surface the battle hovers
 
 const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
