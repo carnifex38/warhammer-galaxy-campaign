@@ -22,6 +22,8 @@ export interface Planet {
   name: string
   x: number
   z: number
+  /** A forge world (the gear icon on the Horus Heresy map). */
+  forge: boolean
   tables: GameTable[]
 }
 
@@ -73,9 +75,9 @@ function ring(r0: number, r1: number, a0: number, a1: number): [number, number][
 
 const NOTES = ['Ruins and cover', 'Open plains', 'Industrial sprawl', 'Forest and hills']
 
-type PlanetSpec = [name: string, px: number, py: number]
-const p5 = (name: string, x: number, y: number): PlanetSpec => [name, x, y]
-const p4 = (name: string, x: number, y: number): PlanetSpec => [name, ...fromMap4(x, y)]
+type PlanetSpec = [name: string, px: number, py: number, forge: boolean]
+const p5 = (name: string, x: number, y: number, forge = false): PlanetSpec => [name, x, y, forge]
+const p4 = (name: string, x: number, y: number, forge = false): PlanetSpec => [name, ...fromMap4(x, y), forge]
 
 export const DEFAULT_TABLES = 4
 
@@ -92,10 +94,10 @@ export function makeTables(planetId: string, _planetName: string, count: number)
   }))
 }
 
-function planet([name, px, py]: PlanetSpec): Planet {
+function planet([name, px, py, forge]: PlanetSpec): Planet {
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
   const { x, z } = toWorld(px, py)
-  return { id, name, x, z, tables: makeTables(id, name, DEFAULT_TABLES) }
+  return { id, name, x, z, forge, tables: makeTables(id, name, DEFAULT_TABLES) }
 }
 
 function sector(
@@ -125,17 +127,23 @@ const ULTIMA_R = 1130
 
 export const SECTORS: Sector[] = [
   sector('solar', 'Segmentum Solar', '#ffe3a3', arc(SOLAR_R, 0, 360), [0, 0], [
-    p5('Terra', 672, 797),
-    p5('Mars', 740, 770),
-    p4('Cthonia', 545, 763),
-    p4('Olmec', 487, 722),
-    p4('Necromunda', 655, 858),
+    p4('Nikaea', 780, 775),
+    p4('Lorin Alpha', 783, 641),
+    p4('Terra', 632, 700),
+    p4('Seraphina', 545, 606),
+    p4('Voss', 493, 668, true),
+    p4('Olmec', 487, 723),
+    p4('Cthonia', 576, 764),
+    p4('Phaeton', 518, 810, true),
+    p4('Necromunda', 685, 857),
+    p4('Shedim', 717, 815),
+    p5('Mars', 740, 770, true),
   ]),
 
   sector('ocularis', 'Ocularis Malifica', '#c24bff', ring(SOLAR_R, INNER_RING_R, 71, 150), [330, 112], [
-    p5('Caliban', 593, 470),
-    p5('Medusa', 475, 515),
     p4('Cypra Mundi', 665, 428),
+    p4('Caliban', 555, 356),
+    p4('Medusa', 415, 400),
     p5('Cadia', 560, 625),
   ]),
 
@@ -145,52 +153,79 @@ export const SECTORS: Sector[] = [
     [...arc(SOLAR_R, 46, 71), ...arc(INNER_RING_R, 71, 133.5), ...arc(OBSCURUS_R, 133.5, 46)],
     [570, 90],
     [
-      p5('Rangda', 470, 205),
-      p4('Opuscalus Noctis', 215, 185),
-      p4('Hellion', 305, 343),
-      p4('Morox', 575, 247),
-      p4('Abyss', 730, 92),
-      p4('Lucius', 780, 298),
-      p4('Goth', 893, 380),
+      p4('Goth', 893, 381),
+      p4('Neo-geddon', 1112, 15),
+      p4('Fenris', 730, 561),
       p4('Isstvan', 978, 85),
-      p5('Fenris', 790, 640),
+      p4('Lucius', 778, 298, true),
+      p4('Abyss', 732, 92),
+      p4('Morox', 576, 246),
+      p4('Rangda', 408, 72),
+      p4('Opuscalus Noctis', 217, 185),
+      p4('Hellion', 304, 344),
+      p4('Sarcosa', 278, 461),
     ],
   ),
 
   sector('pacificus', 'Segmentum Pacificus', '#d6a94a', ring(SOLAR_R, 408, 150, 221), [300, 185], [
-    p4('Khur', 258, 583),
-    p4('Stygies VIII', 330, 653),
-    p5('Colchis', 438, 813), // the wiki puts Colchis in Segmentum Pacificus
+    p4('Colchis', 336, 535),
+    p4('Khur', 275, 583),
+    p4('Stygies VIII', 330, 653, true),
     p4('Vasalius', 292, 770),
-    p4('Gehenna', 418, 873),
+    p4('Gehenna', 418, 874),
   ]),
 
   sector('tempestus', 'Segmentum Tempestus', '#e0524d', ring(SOLAR_R, TEMPESTUS_R, 221, 315), [380, 268], [
-    p4('Graia', 488, 957),
-    p4('Taras', 580, 913),
-    p4('Inwit', 710, 925),
-    p4('Tallarn', 718, 1020),
+    p4('Graia', 488, 957, true),
+    p4('Taras', 591, 913),
+    p4('Barbarus', 548, 1181),
+    p4('Galaspar', 573, 1264),
     p4('Luth Tyre', 708, 1068),
-    p5('Barbarus', 573, 1252),
-    p5('Deliverance', 833, 1220),
-    p4('Gryphonne', 760, 1205),
-    p4('Galaspar', 535, 1262),
+    p4('Gryphonne', 778, 1204, true),
+    p4('Inwit', 705, 928),
+    p4('Tallarn', 736, 1020),
+    p4('Deliverance', 836, 1150),
   ]),
 
   sector('ultima', 'Segmentum Ultima', '#2fb7a8', ring(SOLAR_R, ULTIMA_R, -45, 46), [640, 0], [
-    p5('Baal', 1167, 552),
-    p4('Quai Jinn', 1440, 135),
-    p5('Nostramo', 1555, 382),
-    p4('Desperation', 1735, 420),
-    p5('Olympia', 1320, 760),
-    p5('Chogoris', 1150, 935),
-    p5('Chemos', 972, 918),
-    p5('Nocturne', 1086, 1055),
-    p5('Nuceria', 1575, 1000),
-    p5('Macragge', 1481, 1217),
-    p4('Ryza', 878, 752),
-    p5('Prospero', 1089, 741), // the wiki puts Prospero in Segmentum Ultima
-    p5('Seraphina', 1592, 732), // the wiki puts Seraphina in Segmentum Ultima (Wheel of Fire subsector)
+    p4('Incalpeta Terminus', 1355, 1319),
+    p4('Bale', 1319, 1197),
+    p4('Neverlight', 1325, 1143),
+    p4('Nocturne', 1070, 983),
+    p4('Macragge', 1482, 1154),
+    p4('Saran Luxor', 1693, 1248),
+    p4('Vayber', 1226, 995),
+    p4('Calth', 1503, 1104),
+    p4('Chemos', 968, 840),
+    p4('Accatran', 1320, 950, true),
+    p4('Nuceria', 1760, 1096),
+    p4('Chogoris', 1146, 856),
+    p4('Orpheus Prime', 1680, 879),
+    p4('Ryza', 878, 752, true),
+    p4('Tigrus', 1528, 851, true),
+    p4('Sulis', 1257, 792),
+    p4('Impetus', 1458, 808),
+    p4('Constantium', 1892, 852),
+    p4('Davin', 970, 746),
+    p4('Laeran', 1646, 806),
+    p4('Signus Prime', 1800, 694),
+    p4('Olympia', 1313, 671),
+    p4('Sarum', 984, 698, true),
+    p4('Prospero', 862, 702),
+    p4('Konig Secundus', 1617, 630),
+    p4('Lastrati', 1078, 661),
+    p4('Memlok', 1646, 530),
+    p4('Anvillus', 1170, 618, true),
+    p4('Desperation', 1783, 420),
+    p4('Chondax', 952, 621),
+    p4('Nostramo', 1562, 279),
+    p4('Honourum', 1342, 397),
+    p4('Angehs', 1395, 302),
+    p4('Baal', 1128, 453),
+    p4('Kayvas Belt', 950, 535),
+    p4('Quai Jinn', 1441, 135),
+    p4('Lamrys', 1043, 406),
+    p4('Bodi', 965, 449),
   ]),
 ]
 
@@ -291,7 +326,7 @@ export function makeHulkPlanets(sector: Sector, count: number): Planet[] {
   return spots.slice(0, count).map((p, k) => {
     const id = `space-hulk-${sector.id}-${k + 1}`
     const name = HULK_NAME_LIST[(sectorIndex * MAX_HULKS + k) % HULK_NAME_LIST.length]
-    return { id, name, x: p.x, z: p.z, tables: makeTables(id, name, DEFAULT_TABLES) }
+    return { id, name, x: p.x, z: p.z, forge: false, tables: makeTables(id, name, DEFAULT_TABLES) }
   })
 }
 

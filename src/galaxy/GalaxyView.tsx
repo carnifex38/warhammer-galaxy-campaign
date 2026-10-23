@@ -326,7 +326,7 @@ export default function GalaxyView({ events, auth, claims, onViewList, getInitia
                         className={pinfo.enabled ? '' : 'closed'}
                         {...hoverProps('planet', p.id)}
                       >
-                        <span>{isHulkId(p.id) ? 'Space Hulk · ' : ''}{p.name}</span>
+                        <span>{isHulkId(p.id) ? 'Space Hulk · ' : ''}{p.name}{p.forge ? ' ⚙' : ''}</span>
                         <small>{!pinfo.enabled ? 'Access restricted' : pinfo.zonesHidden ? 'Battlezones classified' : `${pinfo.open} of ${pinfo.total} battlezones open`}</small>
                       </button>
                       <button

@@ -216,7 +216,7 @@ async function buildStars(era: Era): Promise<StarData> {
   await sliced(ARM_N, (i) => {
     const t = Math.pow(rand(), 0.8)
     const r = 0.5 + 11.5 * t
-    const a = (i % 2) * Math.PI + t * 4.8
+    const a = Math.PI + (i % 2) * Math.PI - t * 5.4 // winds counter-clockwise (seen from above) as on the map: one arm starts west of the core, the other east
     const spread = 0.55 + t * 1.7
     const x = r * Math.cos(a) + gauss() * spread
     const z = r * Math.sin(a) + gauss() * spread
@@ -656,7 +656,7 @@ const DUST_FRAG = /* glsl */ `
     float edge = length(vec2(w.x - uCx, w.y)) / uRadius;
     float fade = (1.0 - smoothstep(0.3, 0.95, edge)) * smoothstep(0.8, 2.5, r);
     float ang = atan(w.y, w.x);
-    float lane = smoothstep(0.55, 0.95, sin(2.0 * ang - r * 0.42 + 1.6)); // runs along the inner edge of each arm
+    float lane = smoothstep(0.55, 0.95, sin(2.0 * ang + r * 0.94 + 0.6)); // runs along the inner edge of each arm
     float n = fbm3(w * 0.35 + 3.0);
     float a = lane * smoothstep(0.3, 0.8, n) * fade * 0.55;
     gl_FragColor = vec4(0.01, 0.01, 0.03, a);
@@ -1258,7 +1258,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
     // with a planet selected, only that planet keeps its label
     return sector.planets.filter((p) => !planetId || p.id === planetId).map((p) => ({
       id: p.id, x: p.x, y: p.id === planetId ? PLANET_FOCUS_Y + PLANET_RADIUS + 0.45 : 0.75, z: p.z, cls: 'planet-label',
-      lines: [p.name, planetInfo[p.id]?.enabled === false ? 'Restricted' : planetInfo[p.id]?.zonesHidden ? '' : `${planetInfo[p.id]?.open ?? openCount(p.tables)}/${planetInfo[p.id]?.total ?? p.tables.length} open`].filter(Boolean),
+      lines: [p.forge ? `⚙ ${p.name}` : p.name, planetInfo[p.id]?.enabled === false ? 'Restricted' : planetInfo[p.id]?.zonesHidden ? '' : `${planetInfo[p.id]?.open ?? openCount(p.tables)}/${planetInfo[p.id]?.total ?? p.tables.length} open`].filter(Boolean),
     }))
   }, [sector, planetId, planetInfo])
 

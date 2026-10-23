@@ -150,7 +150,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
                       <span aria-hidden="true" />
                     </label>
                     <span className="swcap">Shown</span>
-                    <span className="pname">{hulk ? 'Space Hulk · ' : ''}{p.name}</span>
+                    <span className="pname">{hulk ? 'Space Hulk · ' : ''}{p.name}{p.forge ? ' ⚙' : ''}</span>
                     <label className="switch">
                       <input type="checkbox" checked={v.enabled} onChange={(e) => events.setEnabled(p.id, e.target.checked)} aria-label={`${p.name} in play`} />
                       <span aria-hidden="true" />
