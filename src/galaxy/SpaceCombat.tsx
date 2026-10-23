@@ -20,8 +20,8 @@ const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52'
 const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
 const HIDDEN = 9999
 // The battle is played out in a flat arena (X by Z, in arena units); the whole arena is then drawn small and hung over the battlezone.
-const BOUND_X = 2.0 // the fleets stay inside an ellipse this wide...
-const BOUND_Z = 1.1 // ...and this deep
+const BOUND_X = 3.2 // the fleets stay inside an ellipse this wide...
+const BOUND_Z = 1.5 // ...and this deep
 const MAX_BOLTS = 90
 const MAX_LANCES = 4
 const MAX_FLASHES = 30
@@ -29,22 +29,22 @@ const MAX_DEBRIS = 240
 const PORTS = 6 // gun ports along the broadside of each ship
 const WARP_S = 3.2
 const DYING_S = 3.0
-const ARENA_SCALE = 0.15 // the whole battle is drawn this much smaller, so the ships are small beside the planet
+const ARENA_SCALE = 0.105 // the whole battle is drawn this much smaller, so the ships are small beside the planet
 const ARENA_HEIGHT = 0.55 // how high above the surface the battle hovers
 
 const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
-  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.12, turn: 0.22, range: 1.5, radius: 0.36 },
-  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.16, turn: 0.34, range: 1.05, radius: 0.26 },
-  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.23, turn: 0.6, range: 0.8, radius: 0.16 },
+  flagship: { scale: 0.16, hp: 26, volley: 4.2, vmax: 0.14, turn: 0.22, range: 2.4, radius: 0.36 },
+  cruiser: { scale: 0.115, hp: 15, volley: 3.4, vmax: 0.18, turn: 0.34, range: 1.7, radius: 0.26 },
+  escort: { scale: 0.07, hp: 8, volley: 2.6, vmax: 0.26, turn: 0.6, range: 1.3, radius: 0.16 },
 }
 // the five ships of a fleet and where each starts (as Team A; Team B is the mirror image on the other side)
 const LINEUP: { cls: Class; x: number; z: number }[] = [
-  { cls: 'flagship', x: -1.45, z: 0.1 },
-  { cls: 'cruiser', x: -1.75, z: -0.55 },
-  { cls: 'cruiser', x: -1.75, z: 0.7 },
-  { cls: 'escort', x: -1.35, z: -0.95 },
-  { cls: 'escort', x: -1.35, z: 0.95 },
+  { cls: 'flagship', x: -2.4, z: 0.1 },
+  { cls: 'cruiser', x: -2.8, z: -0.7 },
+  { cls: 'cruiser', x: -2.8, z: 0.9 },
+  { cls: 'escort', x: -2.2, z: -1.2 },
+  { cls: 'escort', x: -2.2, z: 1.2 },
 ]
 
 interface Ship {
@@ -395,7 +395,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
 
         // 4. fire: the broadside guns when the enemy is abeam and in range, the lance when the flagship has a clear shot
         if (tg && s.t > 1.2) {
-          if (!s.salvo && d < 2.7 && abeam < 0.45) {
+          if (!s.salvo && d < 4.2 && abeam < 0.45) {
             s.volleyAt -= dt * pace
             if (s.volleyAt <= 0) {
               s.salvo = { left: PORTS, next: 0, target: s.target, hitOdds: rand(0.45, 0.7) }
@@ -404,7 +404,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
           }
           if (s.cls === 'flagship') {
             s.lanceAt -= dt * pace
-            if (s.lanceAt <= 0 && !s.salvo && d < 3) {
+            if (s.lanceAt <= 0 && !s.salvo && d < 4.8) {
               const l = S.lances.find((x) => !x.on)
               if (l) { l.on = true; l.team = s.team; l.from = S.ships.indexOf(s); l.target = s.target; l.t = 0; l.dur = rand(1.4, 2.0) }
               s.lanceAt = rand(9, 15)
@@ -433,7 +433,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
               b.to.copy(tgt.pos).addScaledVector(tgt.dir, rand(-0.9, 0.9) * tgt.scale * 2).addScaledVector(side, 0.45 * tgt.scale * 1.2)
               b.to.y += rand(-0.1, 0.3) * tgt.scale
               if (!b.hit) { tmpA.copy(b.to).sub(b.from).normalize(); b.to.addScaledVector(tmpA, 0.5); b.to.y += rand(-0.18, 0.18) } // sails past
-              b.dur = b.from.distanceTo(b.to) / rand(2.0, 2.6)
+              b.dur = b.from.distanceTo(b.to) / rand(3.0, 3.8)
             }
             s.salvo.left--
             s.salvo.next = 0.09
