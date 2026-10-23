@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { getState, putState, watchState, Unauthorized } from '../api'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
-import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, type GameTable, type Planet, type Sector } from './data'
+import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, planetGroup, type GameTable, type Planet, type PlanetGroup, type Sector } from './data'
 
 // What the event host has set up: which planets and hulks are shown, in play, how many battlezones they have,
 // what players may read about them, and which sectors are locked.
@@ -24,6 +24,8 @@ export type EventConfig = Record<string, PlanetSetting>
 export interface PlanetView { enabled: boolean; visible: boolean; tables: GameTable[] }
 
 const DEFAULT: PlanetSetting = { enabled: true, tables: DEFAULT_TABLES, visible: true }
+/** What a planet starts as before the host touches it: the extra map planets start hidden. */
+const startOf = (id: string): PlanetSetting => (planetGroup(id) === 'extra' ? { ...DEFAULT, visible: false } : DEFAULT)
 
 /** How many space hulks drift in each sector (by sector id). Tempestus has one to begin with, never Terra's Solar. */
 export type HulkCounts = Record<string, number>
@@ -203,7 +205,7 @@ export function useEventConfig(canHost = true, token?: string) {
 
   // what players are shown: planets the host has hidden are removed (the host preview shows them anyway)
   const visibleSectors = useMemo<Sector[]>(
-    () => (hostPreview ? sectors : sectors.map((s) => ({ ...s, planets: s.planets.filter((p) => config[p.id]?.visible !== false) }))),
+    () => (hostPreview ? sectors : sectors.map((s) => ({ ...s, planets: s.planets.filter((p) => (config[p.id] ?? startOf(p.id)).visible) }))),
     [sectors, config, hostPreview],
   )
 
@@ -211,7 +213,7 @@ export function useEventConfig(canHost = true, token?: string) {
   const lockedForPlayers = hostPreview ? [] : locked
 
   const patch = (id: string, change: Partial<PlanetSetting>) =>
-    setConfig((c) => ({ ...c, [id]: { ...(c[id] ?? DEFAULT), ...change } }))
+    setConfig((c) => ({ ...c, [id]: { ...(c[id] ?? startOf(id)), ...change } }))
   const patchInfo = (id: string, change: Partial<InfoContent>) =>
     setInfoOverrides((o) => ({ ...o, [id]: { ...o[id], ...change } }))
 
@@ -260,7 +262,7 @@ export function useEventConfig(canHost = true, token?: string) {
       }),
 
     planetView(planet: Planet): PlanetView {
-      const s = config[planet.id] ?? DEFAULT
+      const s = config[planet.id] ?? startOf(planet.id)
       return { enabled: s.enabled, visible: s.visible, tables: s.tables === planet.tables.length ? planet.tables : makeTables(planet.id, planet.name, s.tables) }
     },
     setEnabled: (id: string, enabled: boolean) => patch(id, { enabled }),
@@ -269,13 +271,22 @@ export function useEventConfig(canHost = true, token?: string) {
     setSectorEnabled: (sector: Sector, enabled: boolean) =>
       setConfig((c) => {
         const next = { ...c }
-        for (const p of sector.planets) next[p.id] = { ...(c[p.id] ?? DEFAULT), enabled }
+        for (const p of sector.planets) next[p.id] = { ...(c[p.id] ?? startOf(p.id)), enabled }
         return next
       }),
     setSectorVisible: (sector: Sector, visible: boolean) =>
       setConfig((c) => {
         const next = { ...c }
-        for (const p of sector.planets) next[p.id] = { ...(c[p.id] ?? DEFAULT), visible }
+        for (const p of sector.planets) next[p.id] = { ...(c[p.id] ?? startOf(p.id)), visible }
+        return next
+      }),
+    /** Whether every planet of a group is shown on the map. */
+    groupVisible: (group: PlanetGroup) => sectors.every((s) => s.planets.every((p) => planetGroup(p.id) !== group || (config[p.id] ?? startOf(p.id)).visible)),
+    /** Show or hide a whole group of planets (the extra map planets, or the forge worlds added from the map). */
+    setGroupVisible: (group: PlanetGroup, visible: boolean) =>
+      setConfig((c) => {
+        const next = { ...c }
+        for (const s of sectors) for (const p of s.planets) if (planetGroup(p.id) === group) next[p.id] = { ...(c[p.id] ?? startOf(p.id)), visible }
         return next
       }),
     /** One tap to set how much players can see of a planet or hulk. */

@@ -58,6 +58,21 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
       </section>
 
       <section className="host-sector">
+        {([['extra', 'Extra map planets', 'The planets from the Horus Heresy map that are not in the original set.'], ['forge', 'Added forge worlds', 'The forge worlds added from the map (Voss, Phaeton, Anvillus, Sarum, Tigrus, Accatran).']] as const).map(([g, label, note]) => (
+          <div className="hulk-controls" key={g}>
+            <label className="switch">
+              <input type="checkbox" checked={events.groupVisible(g)} onChange={(e) => events.setGroupVisible(g, e.target.checked)} aria-label={label} />
+              <span aria-hidden="true" />
+            </label>
+            <span className="pname">
+              {label}
+              <small className="muted" style={{ display: 'block' }}>{note}</small>
+            </span>
+          </div>
+        ))}
+      </section>
+
+      <section className="host-sector">
         <div className="hulk-controls">
           <span className="pname">
             Battlezone results

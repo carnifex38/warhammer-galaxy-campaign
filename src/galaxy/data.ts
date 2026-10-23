@@ -81,6 +81,16 @@ const p4 = (name: string, x: number, y: number, forge = false): PlanetSpec => [n
 
 export const DEFAULT_TABLES = 4
 
+/** Planets from the Horus Heresy map that are not in the original set. The host can show or hide them as a group. */
+export type PlanetGroup = 'core' | 'extra' | 'forge'
+const EXTRA_IDS = new Set(['nikaea', 'lorin-alpha', 'shedim', 'neo-geddon', 'sarcosa', 'incalpeta-terminus', 'bale', 'neverlight', 'saran-luxor', 'vayber', 'calth', 'orpheus-prime', 'sulis', 'impetus', 'constantium', 'davin', 'laeran', 'signus-prime', 'konig-secundus', 'lastrati', 'memlok', 'chondax', 'honourum', 'angehs', 'kayvas-belt', 'lamrys', 'bodi'])
+const ADDED_FORGE_IDS = new Set(['voss', 'phaeton', 'anvillus', 'sarum', 'tigrus', 'accatran'])
+
+/** 'extra': a map planet added on top of the original set; 'forge': a forge world added from the map; 'core': everything else. */
+export function planetGroup(id: string): PlanetGroup {
+  return EXTRA_IDS.has(id) ? 'extra' : ADDED_FORGE_IDS.has(id) ? 'forge' : 'core'
+}
+
 /** Battlezones are named with the NATO phonetic alphabet (the host can have up to 12). */
 const NATO = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo', 'Lima']
 
@@ -135,6 +145,9 @@ export const SECTORS: Sector[] = [
     p4('Phaeton', 518, 810, true),
     p4('Necromunda', 685, 857),
     p5('Mars', 740, 770, true),
+    p4('Nikaea', 780, 775),
+    p4('Lorin Alpha', 783, 641),
+    p4('Shedim', 717, 815),
   ]),
 
   sector('ocularis', 'Ocularis Malifica', '#c24bff', ring(SOLAR_R, INNER_RING_R, 71, 150), [330, 112], [
@@ -159,6 +172,8 @@ export const SECTORS: Sector[] = [
       p4('Rangda', 408, 72),
       p4('Opuscalus Noctis', 217, 185),
       p4('Hellion', 304, 344),
+      p4('Neo-geddon', 1112, 15),
+      p4('Sarcosa', 278, 461),
     ],
   ),
 
@@ -199,6 +214,28 @@ export const SECTORS: Sector[] = [
     p4('Nostramo', 1562, 279),
     p4('Baal', 1128, 453),
     p4('Quai Jinn', 1441, 135),
+    p4('Incalpeta Terminus', 1355, 1319),
+    p4('Bale', 1319, 1197),
+    p4('Neverlight', 1325, 1143),
+    p4('Saran Luxor', 1693, 1248),
+    p4('Vayber', 1226, 995),
+    p4('Calth', 1503, 1104),
+    p4('Orpheus Prime', 1680, 879),
+    p4('Sulis', 1257, 792),
+    p4('Impetus', 1458, 808),
+    p4('Constantium', 1892, 852),
+    p4('Davin', 970, 746),
+    p4('Laeran', 1646, 806),
+    p4('Signus Prime', 1800, 694),
+    p4('Konig Secundus', 1617, 630),
+    p4('Lastrati', 1078, 661),
+    p4('Memlok', 1646, 530),
+    p4('Chondax', 952, 621),
+    p4('Honourum', 1342, 397),
+    p4('Angehs', 1395, 302),
+    p4('Kayvas Belt', 950, 535),
+    p4('Lamrys', 1043, 406),
+    p4('Bodi', 965, 449),
   ]),
 ]
 
