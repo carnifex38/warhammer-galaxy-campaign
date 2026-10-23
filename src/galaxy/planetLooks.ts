@@ -129,8 +129,23 @@ const LOOK_BY_PLANET: Record<string, LookName> = {
 
 // Planets whose look changed between the Horus Heresy and the 41st millennium.
 const LOOK_BY_ERA: Record<Era, Record<string, LookName>> = {
-  '40k': { Caliban: 'rock', Cadia: 'shattered', Prospero: 'prosperoRuin', Calth: 'calthRuin' },
-  '30k': { Caliban: 'caliban', Cadia: 'cadia', Prospero: 'prospero', Calth: 'calth' },
+  '40k': {
+    Caliban: 'rock', Cadia: 'shattered', Prospero: 'prosperoRuin', Calth: 'calthRuin',
+    // blown apart (a field of debris): Nostramo, Chemos, Colchis, Barbarus, Cthonia, Desperation
+    Nostramo: 'shattered', Chemos: 'shattered', Colchis: 'shattered', Barbarus: 'shattered', Cthonia: 'shattered', Desperation: 'shattered',
+    // dead or purged, still there
+    Isstvan: 'dead', Gryphonne: 'dead', Nuceria: 'dead', Bodi: 'dead', Tallarn: 'desert',
+  },
+  // In 30K these are still whole. The lore for a few is thin (marked ?), so the look is a guess at what they were before.
+  '30k': {
+    Caliban: 'caliban', Cadia: 'cadia', Prospero: 'prospero', Calth: 'calth',
+    Isstvan: 'hive', // Isstvan III: a hive world of about 12 billion before the virus bombs
+    Cthonia: 'dark', // the Sons of Horus' mining world, still lit and inhabited
+    Nostramo: 'dark', Chemos: 'terran', Colchis: 'terran', Barbarus: 'jungle', // Barbarus: toxic fog world (?)
+    Gryphonne: 'forge', // home of Legio Gryphonicus, before Hive Fleet Leviathan
+    Nuceria: 'terran', Bodi: 'volcanic', Tallarn: 'terran', // Tallarn: verdant before the Iron Warriors' virus bombs
+    Desperation: 'terran', // (?)
+  },
 }
 
 const FALLBACK: LookName[] = ['terran', 'desert', 'ice', 'jungle', 'volcanic', 'dead', 'ocean', 'dark', 'hive']
