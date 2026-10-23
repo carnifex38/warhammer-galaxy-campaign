@@ -178,7 +178,7 @@ export const SECTORS: Sector[] = [
   ),
 
   sector('pacificus', 'Segmentum Pacificus', '#d6a94a', ring(SOLAR_R, 408, 150, 221), [300, 185], [
-    p4('Colchis', 336, 535),
+    p5('Colchis', 372, 671),
     p4('Khur', 275, 583),
     p4('Stygies VIII', 330, 653, true),
     p4('Vasalius', 292, 770),
@@ -202,7 +202,7 @@ export const SECTORS: Sector[] = [
     p4('Macragge', 1482, 1154),
     p4('Chemos', 968, 840),
     p4('Accatran', 1320, 950, true),
-    p4('Nuceria', 1760, 1096),
+    p5('Nuceria', 1706, 1168),
     p4('Chogoris', 1146, 856),
     p4('Ryza', 878, 752, true),
     p4('Tigrus', 1528, 851, true),
@@ -210,7 +210,7 @@ export const SECTORS: Sector[] = [
     p4('Sarum', 984, 698, true),
     p4('Prospero', 862, 702),
     p4('Anvillus', 1170, 618, true),
-    p4('Desperation', 1783, 420),
+    p5('Desperation', 1728, 534),
     p4('Nostramo', 1562, 279),
     p4('Baal', 1128, 453),
     p4('Quai Jinn', 1441, 135),
