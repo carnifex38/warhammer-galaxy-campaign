@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { arriveFade } from './PlanetBody'
-import { CLASSES, HULL_TINT, TEAM_COLOR, glowTexture, hullGeometry, windowGeometry, type Class, type Team } from './SpaceCombat'
+import { CLASSES, HULL_TINT, TEAM_COLOR, glowTexture, hullGeometry, windowGeometry, type Class, type Team } from './shipKit'
 
 // When a team controls a planet, a few of its ships keep watch: 3 (or 4 once the whole planet is held) patrol in slow, wide circuits
 // round the planet, each on its own tilted orbit and at its own height, with engines burning. They fade in when the planet is won
-// and out when it is lost. Same ships as the battle (see SpaceCombat), just small and unhurried.
+// and out when it is lost. Same ships as the battle (see shipKit), just small and unhurried.
 
 const SHIP_SCALE = 0.19 // how much smaller than the battle's own scale: a patrol ship is a small thing beside the planet
 const MAX = 4
@@ -26,12 +26,9 @@ interface Orbit { u: THREE.Vector3; v: THREE.Vector3; r: number; w: number; phas
 export default function PatrolFleet({ team, count }: { team: Team; count: number }) {
   const hulls = useRef<THREE.InstancedMesh>(null)
   const windows = useRef<THREE.InstancedMesh>(null)
-  const countRef = useRef(count)
-  countRef.current = count
-  const glow = useMemo(glowTexture, [])
-  const hullGeo = useMemo(hullGeometry, [])
-  const windowGeo = useMemo(windowGeometry, [])
-  const lightTarget = useMemo(() => new THREE.Object3D(), [])
+  const glow = useMemo(() => glowTexture(), [])
+  const hullGeo = useMemo(() => hullGeometry(), [])
+  const windowGeo = useMemo(() => windowGeometry(), [])
   const level = useRef(0)
   const scales = useRef<number[]>(Array.from({ length: MAX }, () => 0))
 
@@ -42,7 +39,7 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
         const n = new THREE.Vector3(Math.sin(i * 2.4) * 0.45, 1, Math.cos(i * 1.7) * 0.45).normalize()
         const u = new THREE.Vector3().crossVectors(n, new THREE.Vector3(0, 0, 1)).normalize()
         const v = new THREE.Vector3().crossVectors(n, u).normalize()
-        return { u, v, r: 0.98 + i * 0.07, w: (0.085 - i * 0.012) * (i % 2 ? -1 : 1), phase: (i / MAX) * Math.PI * 2 + Math.random(), bob: Math.random() * 6, cls: LINEUP[i] }
+        return { u, v, r: 0.98 + i * 0.07, w: (0.085 - i * 0.012) * (i % 2 ? -1 : 1), phase: (i / MAX) * Math.PI * 2 + i * 0.7, bob: i * 1.9, cls: LINEUP[i] }
       }),
     [],
   )
@@ -74,7 +71,7 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
     const tc = TEAM_COLOR[team]
     orbits.forEach((o, i) => {
       // ships beyond the count slide away (shrink to nothing); new ones grow in
-      const want = i < countRef.current ? 1 : 0
+      const want = i < count ? 1 : 0
       scales.current[i] += (want - scales.current[i]) * Math.min(1, dt * 0.9)
       const k = scales.current[i]
       const sc = Math.max(CLASSES[o.cls].scale * SHIP_SCALE * smooth(k), 0.00001)
@@ -118,9 +115,6 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
   const additive = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending } as const
   return (
     <group>
-      <primitive object={lightTarget} />
-      <ambientLight intensity={0.9} color="#a89c90" />
-      <directionalLight position={[-4, 1.4, 2.2]} target={lightTarget} intensity={2.4} color="#ffe2bc" />
       <instancedMesh ref={hulls} args={[hullGeo, undefined, MAX]} frustumCulled={false} renderOrder={7}>
         <meshStandardMaterial vertexColors roughness={0.55} metalness={0.55} flatShading userData={keep} />
       </instancedMesh>

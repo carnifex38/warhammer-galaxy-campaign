@@ -3,25 +3,21 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PLANET_RADIUS, arriveFade } from './PlanetBody'
 import { zoneSpot } from './ZoneReticle'
+import { CLASSES, HULL_TINT, TEAM_COLOR, glowTexture, hullGeometry, ringTexture, windowGeometry, type Class, type Team } from './shipKit'
 
 // Two fleets of five ships fight over a planet whose battlezones are in play, like battleships trading broadsides. Every ship steers
 // for itself: it picks an enemy, closes to its preferred range, turns to bring its broadside to bear and sails past firing in rippling
 // volleys of tracer bolts, then swings round (its turn rate is limited, so the turns are wide and slow) and comes back for another pass.
-// Ships keep clear of each other, bank as they turn, and the flagship also fires a long lance now and then. Hits flash on the hull; a
-// destroyed ship burns, breaks up in a chain of explosions, and a few seconds later a replacement tears out of the warp at its fleet's
-// edge and joins the fight. Ships are simple shapes built in code (a stepped, spired, gun-decked hull with glowing windows and blue
-// engines), pooled and drawn in a handful of batches, so it stays light. Each battle plays small, hovering over the battlezone the
-// players are on (it rides on the planet's surface like the targeting reticle), not around the whole planet.
+// They fly in three dimensions, keep clear of each other, bank as they turn, and the flagship also fires a long lance now and then.
+// Hits flash on the hull; a destroyed ship burns, breaks up in a chain of explosions, and a few seconds later a replacement tears out
+// of the warp at its fleet's edge and joins the fight. Everything is pooled and drawn in a handful of batches, so it stays light.
+// Each battle plays small, out beside the planet at its middle level, on the side of the battlezone the players are on. It holds still
+// in space where it first appears (the planet spins under it) and does not turn with the camera.
 
-export type Team = 'A' | 'B'
-export type Class = 'flagship' | 'cruiser' | 'escort'
-
-export const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52') }
-export const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
 const HIDDEN = 9999
-// The battle is played out in a flat arena (X by Z, in arena units); the whole arena is then drawn small and hung over the battlezone.
-const BOUND_X = 3.2 // the fleets stay inside an ellipse this wide...
-const BOUND_Y = 1.15 // the fleets also fly up and down inside this height (battles are not flat)
+// The battle is played out in an arena (in arena units); the whole arena is then drawn small and set beside the planet.
+const BOUND_X = 3.2 // the fleets stay inside an ellipsoid this wide...
+const BOUND_Y = 1.15 // ...this high...
 const BOUND_Z = 1.5 // ...and this deep
 const MAX_BOLTS = 90
 const MAX_LANCES = 4
@@ -33,12 +29,6 @@ const DYING_S = 3.0
 const ARENA_SCALE = 0.105 // the whole battle is drawn this much smaller, so the ships are small beside the planet
 const ARENA_HEIGHT = 0.55 // how far out from the planet's surface the battle plays
 
-export const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
-  // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
-  flagship: { scale: 0.11, hp: 26, volley: 4.2, vmax: 0.14, turn: 0.22, range: 2.4, radius: 0.25 },
-  cruiser: { scale: 0.08, hp: 15, volley: 3.4, vmax: 0.18, turn: 0.34, range: 1.7, radius: 0.18 },
-  escort: { scale: 0.05, hp: 8, volley: 2.6, vmax: 0.26, turn: 0.6, range: 1.3, radius: 0.11 },
-}
 // the five ships of a fleet and where each starts (as Team A; Team B is the mirror image on the other side)
 const LINEUP: { cls: Class; x: number; z: number }[] = [
   { cls: 'flagship', x: -2.4, z: 0.1 },
@@ -107,105 +97,8 @@ const FORWARD = new THREE.Vector3(0, 0, 1)
 const UP = new THREE.Vector3(0, 1, 0)
 const smooth = (x: number) => { const k = Math.min(1, Math.max(0, x)); return k * k * (3 - 2 * k) }
 
-export function glowTexture() {
-  const cv = document.createElement('canvas')
-  cv.width = cv.height = 64
-  const ctx = cv.getContext('2d')!
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-  g.addColorStop(0, 'rgba(255,255,255,1)')
-  g.addColorStop(0.25, 'rgba(255,255,255,0.55)')
-  g.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, 64, 64)
-  return new THREE.CanvasTexture(cv)
-}
-
-function ringTexture() {
-  const cv = document.createElement('canvas')
-  cv.width = cv.height = 128
-  const ctx = cv.getContext('2d')!
-  const g = ctx.createRadialGradient(64, 64, 18, 64, 64, 62)
-  g.addColorStop(0, 'rgba(255,255,255,0)')
-  g.addColorStop(0.7, 'rgba(255,255,255,0.85)')
-  g.addColorStop(0.85, 'rgba(255,255,255,0.35)')
-  g.addColorStop(1, 'rgba(255,255,255,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, 128, 128)
-  return new THREE.CanvasTexture(cv)
-}
-
-// ---------- the ship: a gothic hull of stepped boxes, a spire and gun decks (bow along +Z) ----------
-
-interface Part { g: THREE.BufferGeometry; color: [number, number, number] }
-
-function merge(parts: Part[]) {
-  const pos: number[] = []
-  const nor: number[] = []
-  const col: number[] = []
-  for (const { g, color } of parts) {
-    const ng = g.index ? g.toNonIndexed() : g
-    const p = ng.attributes.position.array as Float32Array
-    const n = ng.attributes.normal.array as Float32Array
-    for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(n[i]) }
-    for (let i = 0; i < p.length / 3; i++) col.push(...color)
-  }
-  const out = new THREE.BufferGeometry()
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
-  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3))
-  return out
-}
-
-const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z)
-const cone = (r: number, h: number, segs: number, rx: number, x: number, y: number, z: number, flat = 1) => {
-  const g = new THREE.ConeGeometry(r, h, segs, 1)
-  g.rotateX(rx)
-  g.rotateZ(Math.PI / 4)
-  g.scale(1, flat, 1)
-  return g.translate(x, y, z)
-}
-
-export function hullGeometry() {
-  const dark: [number, number, number] = [0.3, 0.26, 0.23]
-  const mid: [number, number, number] = [0.42, 0.36, 0.3]
-  const gold: [number, number, number] = [0.62, 0.48, 0.24]
-  const parts: Part[] = [
-    { g: box(0.8, 0.42, 2.4, 0, 0, -0.1), color: dark },
-    { g: cone(0.5, 1.1, 4, Math.PI / 2, 0, 0, 1.65, 0.8), color: mid },
-    { g: new THREE.CylinderGeometry(0.05, 0.08, 0.7, 6).rotateX(Math.PI / 2).translate(0, 0, 2.3), color: gold },
-    { g: box(0.9, 0.5, 0.5, 0, 0, -1.45), color: mid },
-    { g: box(0.22, 0.2, 0.2, 0, 0, -1.75), color: dark },
-    { g: box(0.22, 0.2, 0.2, 0.28, 0, -1.75), color: dark },
-    { g: box(0.22, 0.2, 0.2, -0.28, 0, -1.75), color: dark },
-    { g: box(0.58, 0.24, 1.2, 0, 0.32, -0.3), color: mid },
-    { g: box(0.4, 0.22, 0.75, 0, 0.55, -0.5), color: dark },
-    { g: new THREE.ConeGeometry(0.13, 0.95, 5).translate(0, 1.1, -0.5), color: gold },
-    { g: new THREE.ConeGeometry(0.06, 0.5, 5).translate(0, 0.9, 0.2), color: gold },
-    { g: box(0.14, 0.5, 0.14, 0.3, 0.42, 0.05), color: mid },
-    { g: box(0.14, 0.5, 0.14, -0.3, 0.42, 0.05), color: mid },
-    { g: box(0.14, 0.22, 1.9, 0.47, 0, -0.1), color: mid },
-    { g: box(0.14, 0.22, 1.9, -0.47, 0, -0.1), color: mid },
-  ]
-  for (const z of [0.7, 0.2, -0.3, -0.8]) for (const s of [-1, 1]) parts.push({ g: box(0.2, 0.1, 0.22, 0.33 * s, 0.26, z), color: dark })
-  return merge(parts)
-}
-
-/** The glowing windows and gun-deck lights (white, so the instance colour sets each team's glow). */
-export function windowGeometry() {
-  const w: [number, number, number] = [1, 1, 1]
-  const parts: Part[] = []
-  for (const s of [-1, 1]) {
-    parts.push({ g: box(0.02, 0.035, 1.7, 0.545 * s, 0.05, -0.1), color: w })
-    parts.push({ g: box(0.02, 0.035, 1.7, 0.545 * s, -0.05, -0.1), color: w })
-    parts.push({ g: box(0.02, 0.03, 0.9, 0.41 * s, 0.34, -0.3), color: w })
-  }
-  parts.push({ g: box(0.3, 0.025, 0.5, 0, 0.67, -0.5), color: w })
-  parts.push({ g: box(0.3, 0.025, 0.35, 0, 0.2, 1.0), color: w })
-  return merge(parts)
-}
-
 export default function SpaceCombat({ zoneId }: { zoneId: string }) {
-  const place = useRef<THREE.Group>(null) // sits over the battlezone
+  const place = useRef<THREE.Group>(null) // holds the battle still in space
   const fixed = useRef<{ rel: THREE.Vector3; q: THREE.Quaternion } | null>(null) // where the battle holds still in space (set on the first frame)
   const root = useRef<THREE.Group>(null)
   const hulls = useRef<THREE.InstancedMesh>(null)
@@ -214,16 +107,12 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   const riftCore = useRef<(THREE.Sprite | null)[]>([])
   const riftRing = useRef<(THREE.Sprite | null)[]>([])
   // the battlezone this battle is fought over (its spot on the planet, which sets the side it first appears on)
-  const frame = useMemo(() => {
-    const up = zoneSpot(zoneId)
-    return { up }
-  }, [zoneId])
-  const lightTarget = useMemo(() => new THREE.Object3D(), [])
+  const spot = useMemo(() => zoneSpot(zoneId), [zoneId])
 
-  const glow = useMemo(glowTexture, [])
-  const ring = useMemo(ringTexture, [])
-  const hullGeo = useMemo(hullGeometry, [])
-  const windowGeo = useMemo(windowGeometry, [])
+  const glow = useMemo(() => glowTexture(), [])
+  const ring = useMemo(() => ringTexture(), [])
+  const hullGeo = useMemo(() => hullGeometry(), [])
+  const windowGeo = useMemo(() => windowGeometry(), [])
   useEffect(() => () => { glow.dispose(); ring.dispose(); hullGeo.dispose(); windowGeo.dispose() }, [glow, ring, hullGeo, windowGeo])
 
   const sim = useMemo(() => {
@@ -286,23 +175,23 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
     // The battle stays where it first appeared: out at the planet's level, on the side its battlezone was on, turned to face the camera
     // at that moment. The planet spins under it, so undo the planet's turn each frame to hold the battle still in space.
     const parent = place.current?.parent
-    if (parent) {
-      parent.getWorldQuaternion(qWorld)
-      if (!fixed.current) {
-        tmpA.copy(frame.up).applyQuaternion(qWorld)
-        tmpA.y = 0
-        if (tmpA.lengthSq() < 1e-4) tmpA.set(0, 0, 1)
-        tmpA.normalize().multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT)
-        fixed.current = { rel: tmpA.clone(), q: qWant.copy(state.camera.quaternion).multiply(TILT).clone() }
-      }
-      qInv.copy(qWorld).invert()
-      place.current!.position.copy(fixed.current.rel).applyQuaternion(qInv)
-      place.current!.quaternion.copy(qInv).multiply(fixed.current.q)
+    if (!parent) return
+    parent.getWorldQuaternion(qWorld)
+    if (!fixed.current) {
+      // wait until the planet has finished arriving, so the camera is where it will stay when the battle takes its angle from it
+      if (arriveFade.value < 0.5) { g.visible = false; return }
+      tmpA.copy(spot).applyQuaternion(qWorld)
+      tmpA.y = 0
+      if (tmpA.lengthSq() < 1e-4) tmpA.set(0, 0, 1)
+      tmpA.normalize().multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT)
+      fixed.current = { rel: tmpA.clone(), q: qWant.copy(state.camera.quaternion).multiply(TILT).clone() }
     }
+    qInv.copy(qWorld).invert()
+    place.current!.position.copy(fixed.current.rel).applyQuaternion(qInv)
+    place.current!.quaternion.copy(qInv).multiply(fixed.current.q)
     const master = S.level * arriveFade.value
     g.visible = master > 0.01
     if (!g.visible) return
-    const pace = 1
 
     const startFlash = (pos: THREE.Vector3, size: number, dur: number, color: THREE.Color) => {
       const f = S.flashes.find((x) => !x.on) ?? S.flashes[0]
@@ -347,7 +236,7 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
             while (ix < foes.length - 1 && (pick -= w[ix]) > 0) ix++
             s.target = foes[ix].i
           } else s.target = -1
-          s.retargetAt = now + rand(9, 16)
+          s.retargetAt = s.target >= 0 ? now + rand(9, 16) : now + 0.5 // no enemy to fight yet (just arrived, or all down): look again soon
           s.strafe = 0
           s.layer = rand(-0.9, 0.9)
           tg = s.target >= 0 ? S.ships[s.target] : null
@@ -417,14 +306,14 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
         // 4. fire: the broadside guns when the enemy is abeam and in range, the lance when the flagship has a clear shot
         if (tg && s.t > 1.2) {
           if (!s.salvo && d < 4.2 && abeam < 0.45) {
-            s.volleyAt -= dt * pace
+            s.volleyAt -= dt
             if (s.volleyAt <= 0) {
               s.salvo = { left: PORTS, next: 0, target: s.target, hitOdds: rand(0.45, 0.7) }
               s.volleyAt = CLASSES[s.cls].volley * rand(0.7, 1.4)
             }
           }
           if (s.cls === 'flagship') {
-            s.lanceAt -= dt * pace
+            s.lanceAt -= dt
             if (s.lanceAt <= 0 && !s.salvo && d < 4.8) {
               const l = S.lances.find((x) => !x.on)
               if (l) { l.on = true; l.team = s.team; l.from = S.ships.indexOf(s); l.target = s.target; l.t = 0; l.dur = rand(1.4, 2.0) }
@@ -671,9 +560,6 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   return (
     <group ref={place}>
     <group ref={root} scale={ARENA_SCALE} visible={false}>
-      <primitive object={lightTarget} />
-      <ambientLight intensity={0.9} color="#a89c90" />
-      <directionalLight position={[-4, 1.4, 2.2]} target={lightTarget} intensity={2.4} color="#ffe2bc" />
       <instancedMesh ref={hulls} args={[hullGeo, undefined, sim.ships.length]} frustumCulled={false} renderOrder={7}>
         <meshStandardMaterial vertexColors roughness={0.55} metalness={0.55} flatShading userData={keep} />
       </instancedMesh>
