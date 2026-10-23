@@ -90,7 +90,7 @@ const tmpB = new THREE.Vector3()
 const colA = new THREE.Color()
 const qWorld = new THREE.Quaternion()
 const qWant = new THREE.Quaternion()
-// the battle faces the viewer, tipped so the near fleet sits low and the far fleet high: ships are seen side-on, tops showing
+// the battle starts out facing the viewer, tipped so the near fleet sits low and the far fleet high: ships are seen side-on, tops showing
 const TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.6)
 const pWorld = new THREE.Vector3()
 const qRoll = new THREE.Quaternion()
@@ -201,7 +201,8 @@ function windowGeometry() {
 }
 
 export default function SpaceCombat({ zoneId }: { zoneId: string }) {
-  const place = useRef<THREE.Group>(null) // sits over the battlezone, bow-to-stern lanes lying along the surface
+  const place = useRef<THREE.Group>(null) // sits over the battlezone
+  const orient = useRef<THREE.Quaternion | null>(null)
   const root = useRef<THREE.Group>(null)
   const hulls = useRef<THREE.InstancedMesh>(null)
   const windows = useRef<THREE.InstancedMesh>(null)
@@ -287,9 +288,13 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
       tmpA.copy(state.camera.position).sub(pWorld).normalize()
       tmpB.copy(frame.up).applyQuaternion(qWorld)
       facing = smooth((tmpB.dot(tmpA) + 0.1) / 0.45)
-      // turn the battle to face the camera (in the planet's own frame, since it rides on the surface)
-      qWant.copy(state.camera.quaternion).multiply(TILT)
-      place.current!.quaternion.copy(qWorld).invert().multiply(qWant)
+      // the battle is turned to face the camera once, when it first appears (in the planet's own frame, since it rides on the surface),
+      // and stays that way: after that the camera can go round it
+      if (!orient.current) {
+        qWant.copy(state.camera.quaternion).multiply(TILT)
+        orient.current = new THREE.Quaternion().copy(qWorld).invert().multiply(qWant)
+      }
+      place.current!.quaternion.copy(orient.current)
     }
     const master = S.level * arriveFade.value * facing
     g.visible = master > 0.01
