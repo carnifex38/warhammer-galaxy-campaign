@@ -548,7 +548,7 @@ function GlowStars({ era }: { era: Era }) {
     for (let i = 0; i < 260; i++) {
       const t = Math.pow(rand(), 0.9)
       const r = 0.4 + 11 * t
-      const a = (i % 2) * Math.PI + t * 4.8 + gauss() * 0.3
+      const a = Math.PI + (i % 2) * Math.PI - t * 5.4 + gauss() * 0.3 // along the same two arms as the stars
       pts.push({ x: r * Math.cos(a) + gauss() * (0.3 + t * 0.8), y: gauss() * 0.2, z: r * Math.sin(a) + gauss() * (0.3 + t * 0.8) })
     }
     for (let i = 0; i < 90; i++) pts.push({ x: gauss() * 1.6, y: gauss() * 0.2, z: gauss() * 1.6 })
@@ -606,7 +606,7 @@ const CLOUD_FRAG = /* glsl */ `
     float ang = atan(w.y, w.x);
     vec2 q = vec2(fbm3(w * 0.32 + uLayer * 4.0 + uTime * 0.004), fbm3(w * 0.32 + vec2(5.2, 1.3) - uTime * 0.003));
     float n = fbm3(w * 0.3 + 2.0 * q + uLayer * 3.1);
-    float arms = 0.55 + 0.45 * sin(2.0 * ang - r * 0.42 + n * 2.5);
+    float arms = 0.55 + 0.45 * sin(2.0 * ang + r * 0.94 + 1.1 + n * 2.5); // peaks along the two arms (the same winding as the stars)
     float dens = smoothstep(0.42, 0.84, n) * (0.2 + 0.8 * arms);
     float coreGlow = exp(-r * 0.16);
     vec3 col = mix(vec3(0.10, 0.14, 0.34), vec3(0.50, 0.28, 0.55), smoothstep(0.2, 0.8, n));
