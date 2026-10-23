@@ -30,7 +30,7 @@ const PORTS = 6 // gun ports along the broadside of each ship
 const WARP_S = 3.2
 const DYING_S = 3.0
 const ARENA_SCALE = 0.105 // the whole battle is drawn this much smaller, so the ships are small beside the planet
-const ARENA_HEIGHT = 0.55 // how high above the surface the battle hovers
+const ARENA_HEIGHT = 0.55 // how far out from the planet's surface the battle plays
 
 const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear
@@ -209,10 +209,12 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   const flashSprites = useRef<(THREE.Sprite | null)[]>([])
   const riftCore = useRef<(THREE.Sprite | null)[]>([])
   const riftRing = useRef<(THREE.Sprite | null)[]>([])
-  // where the battle hovers: over the battlezone's spot on the surface
+  // where the battle plays: at the planet's level, on the same side as the battlezone
   const frame = useMemo(() => {
     const up = zoneSpot(zoneId)
-    return { up, pos: up.clone().multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT) }
+    // level with the planet's middle, out to the side the battlezone is on (not above it)
+    const level = new THREE.Vector3(up.x, 0, up.z).normalize()
+    return { up, pos: level.multiplyScalar(PLANET_RADIUS + ARENA_HEIGHT) }
   }, [zoneId])
   const lightTarget = useMemo(() => new THREE.Object3D(), [])
 
