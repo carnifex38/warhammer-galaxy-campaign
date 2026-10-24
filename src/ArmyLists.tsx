@@ -10,7 +10,7 @@ const ArmyBuilder = lazy(() => import('./builder/ArmyBuilder'))
 
 // The Army Lists tab. A player sees and edits the army lists on their own profile. The gamemaster sees every profile in a
 // list, can open any of them to read or edit its lists, can delete a profile, and can also have a profile of their own.
-// (The lists are a name, an era and notes for now; the army builder will grow out of this.)
+// A 30K list is built in the army builder; a 40K one is notes for now.
 
 /** Where the profiles are kept: on the server, or in this browser for the developer roles (DEV-TOOLS). */
 interface Backend {

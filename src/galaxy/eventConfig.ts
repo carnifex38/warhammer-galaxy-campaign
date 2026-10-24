@@ -266,7 +266,7 @@ export function useEventConfig(canHost = true, token?: string) {
 
     planetView(planet: Planet): PlanetView {
       const s = config[planet.id] ?? startOf(planet.id)
-      return { enabled: s.enabled, visible: s.visible, tables: s.tables === planet.tables.length ? planet.tables : makeTables(planet.id, planet.name, s.tables) }
+      return { enabled: s.enabled, visible: s.visible, tables: s.tables === planet.tables.length ? planet.tables : makeTables(planet.id, s.tables) }
     },
     setEnabled: (id: string, enabled: boolean) => patch(id, { enabled }),
     setVisible: (id: string, visible: boolean) => patch(id, { visible }),

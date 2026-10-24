@@ -15,7 +15,13 @@ export const CLASSES: Record<Class, { scale: number; hp: number; volley: number;
   escort: { scale: 0.05, hp: 8, volley: 2.6, vmax: 0.26, turn: 0.6, range: 1.3, radius: 0.11 },
 }
 
+let glowCache: THREE.CanvasTexture | null = null
+/** The soft round glow used for engines, bolts, flashes and haze. Built once and shared by every battle and patrol (so never disposed by them). */
 export function glowTexture() {
+  return (glowCache ??= makeGlowTexture())
+}
+
+function makeGlowTexture() {
   const cv = document.createElement('canvas')
   cv.width = cv.height = 64
   const ctx = cv.getContext('2d')!
@@ -28,7 +34,13 @@ export function glowTexture() {
   return new THREE.CanvasTexture(cv)
 }
 
+let ringCache: THREE.CanvasTexture | null = null
+/** The thin bright ring of a warp rift. Built once and shared. */
 export function ringTexture() {
+  return (ringCache ??= makeRingTexture())
+}
+
+function makeRingTexture() {
   const cv = document.createElement('canvas')
   cv.width = cv.height = 128
   const ctx = cv.getContext('2d')!
@@ -73,7 +85,13 @@ const cone = (r: number, h: number, segs: number, rx: number, x: number, y: numb
   return g.translate(x, y, z)
 }
 
+let hullCache: THREE.BufferGeometry | null = null
+/** The ship's hull. Built once and shared. */
 export function hullGeometry() {
+  return (hullCache ??= makeHullGeometry())
+}
+
+function makeHullGeometry() {
   const dark: [number, number, number] = [0.3, 0.26, 0.23]
   const mid: [number, number, number] = [0.42, 0.36, 0.3]
   const gold: [number, number, number] = [0.62, 0.48, 0.24]
@@ -99,7 +117,13 @@ export function hullGeometry() {
 }
 
 /** The glowing windows and gun-deck lights (white, so the instance colour sets each team's glow). */
+let windowCache: THREE.BufferGeometry | null = null
+/** The ship's glowing windows. Built once and shared. */
 export function windowGeometry() {
+  return (windowCache ??= makeWindowGeometry())
+}
+
+function makeWindowGeometry() {
   const w: [number, number, number] = [1, 1, 1]
   const parts: Part[] = []
   for (const s of [-1, 1]) {

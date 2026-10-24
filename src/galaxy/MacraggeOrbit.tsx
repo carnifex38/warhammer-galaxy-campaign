@@ -18,7 +18,6 @@ function rng(seed: number) {
 
 const PLATFORMS = 7
 const ESCORTS = 70
-const LIGHTS = 260
 
 export default function MacraggeOrbit({ radius }: { radius: number }) {
   const fleet = useRef<THREE.Group>(null)
@@ -63,12 +62,7 @@ export default function MacraggeOrbit({ radius }: { radius: number }) {
       escorts.push(m.clone().compose(pos, q, scale))
     }
 
-    const lights = new Float32Array(LIGHTS * 3)
-    for (let i = 0; i < LIGHTS; i++) {
-      const j = (i % (lightPts.length / 3)) * 3
-      lights.set([lightPts[j], lightPts[j + 1], lightPts[j + 2]], i * 3)
-    }
-    return { hull, trim, escorts, lights: new Float32Array(lightPts.length ? lightPts : lights) }
+    return { hull, trim, escorts, lights: new Float32Array(lightPts) }
   }, [radius])
 
   const setMatrices = (mesh: THREE.InstancedMesh | null, mats: THREE.Matrix4[]) => {

@@ -113,11 +113,6 @@ export function flatEntries(slots: Slot[], out: Slot[] = []): Slot[] {
   for (const s of slots) { if (s.isGroup) flatEntries(s.children ?? [], out); else out.push(s) }
   return out
 }
-export function flatGroups(slots: Slot[], out: Slot[] = []): Slot[] {
-  for (const s of slots) if (s.isGroup) { out.push(s); flatGroups(s.children ?? [], out) }
-  return out
-}
-
 // ---------------------------------------------------------------------------------------------------------------
 // roster instances
 // ---------------------------------------------------------------------------------------------------------------

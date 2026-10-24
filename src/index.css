@@ -228,8 +228,6 @@ button { font: inherit; color: inherit; }
 
 .list button:disabled { color: var(--text); }
 
-.look-switch { top: 58px; }
-.look-switch button { min-width: 84px; }
 
 /* ---------- Loading bar ---------- */
 .loading {
@@ -471,17 +469,8 @@ button { font: inherit; color: inherit; }
 .login-mode button { flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #141a2e; color: #aab2cc; cursor: pointer; font: inherit; }
 .login-mode button.on { background: #2a3358; color: #fff; border-color: #e0b650; }
 .login-hint { margin: 4px 0 0; font-size: 0.82rem; color: #8f98b8; line-height: 1.4; }
-.army-layout { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 20px; align-items: start; }
-@media (max-width: 760px) { .army-layout { grid-template-columns: 1fr; } }
-.army-side { display: flex; flex-direction: column; gap: 10px; }
-.army-side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.army-side-head h3, .prof-head h3 { margin: 0; }
-.army-side input, .own-form input, .army-row input, .army-row select, .army-card textarea { padding: 9px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #0f1426; color: #e6e9f5; font: inherit; }
-.profile-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; }
-.profile-list button { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 9px; border: 1px solid #2c3552; background: #141a2e; color: #e6e9f5; cursor: pointer; font: inherit; }
-.profile-list button.on { border-color: #e0b650; background: #1d2545; }
-.profile-list button span { font-size: 0.8rem; color: #8f98b8; }
-.profile-list em { font-style: normal; color: #e0b650; font-weight: 400; }
+.prof-head h3 { margin: 0; }
+.own-form input, .army-row input, .army-row select, .army-card textarea { padding: 9px 10px; border-radius: 8px; border: 1px solid #2c3552; background: #0f1426; color: #e6e9f5; font: inherit; }
 .own-form { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2c3552; border-radius: 10px; background: #10162b; }
 .own-form h4 { margin: 0; }
 .own-note { font-size: 0.85rem; }

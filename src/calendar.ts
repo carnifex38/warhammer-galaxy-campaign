@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listProfiles, watchState, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { local } from './localProfiles' // DEV-TOOLS
@@ -66,8 +66,14 @@ export function useCalendar(auth: AuthApi) {
     return () => { live = false }
   }, [dev])
 
+  // answers can arrive out of order when changes come quickly: only the newest request may update the screen
+  const latest = useRef(0)
   const refresh = useCallback(async () => {
-    try { setEvents(dev ? readDev() : await call('/api/calendar')) } catch { /* keep what we have */ }
+    const mine = ++latest.current
+    try {
+      const fresh = dev ? readDev() : await call('/api/calendar')
+      if (mine === latest.current) setEvents(fresh)
+    } catch { /* keep what we have */ }
   }, [dev])
 
   useEffect(() => {
@@ -76,7 +82,7 @@ export function useCalendar(auth: AuthApi) {
     return watchState(() => void refresh()) // the server announces every change
   }, [refresh, dev])
 
-  const after = (fresh?: CalendarEvent[]) => { if (fresh) setEvents(fresh); else void refresh() }
+  const after = (fresh?: CalendarEvent[]) => { if (fresh) { latest.current++; setEvents(fresh) } else void refresh() }
 
   return {
     events,

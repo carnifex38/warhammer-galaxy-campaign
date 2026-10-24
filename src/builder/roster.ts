@@ -1,7 +1,7 @@
 // The roster side of the army builder: adding and removing forces and selections, keeping automatic selections correct,
 // checking the data's rules, and turning all of it into plain objects the screen can draw. Works on top of engine.ts.
 import type { ImportedForce, ImportedRoster, ImportedSel } from './importRoster.ts'
-import { Engine, flatEntries, flatGroups, newRoster, nextUid, rootSlots, slotsOf, type Ctx, type Force, type Node, type Roster, type Sel, type Slot, type System } from './engine.ts'
+import { Engine, flatEntries, newRoster, nextUid, rootSlots, slotsOf, type Ctx, type Force, type Node, type Roster, type Sel, type Slot, type System } from './engine.ts'
 
 // ---------------------------------------------------------------------------------------------------------------
 // what the screen sees
@@ -222,10 +222,8 @@ export class Builder {
   /** Give a new selection what the data says it must have: minimums and defaults. */
   private populate(sel: Sel, depth = 0) {
     if (depth > 6) return
-    const ctx: Ctx = { self: sel, parent: sel.parent }
     const here: Ctx = { parent: sel }
     const tree = slotsOf(this.sys, sel.slot)
-    void ctx
     const visit = (slots: Slot[]) => {
       for (const slot of slots) {
         if (this.eng.isHidden(slot, here)) continue
@@ -716,4 +714,3 @@ export class Builder {
   }
 }
 
-export { flatGroups }

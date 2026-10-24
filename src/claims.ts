@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getMyProfile, getProfile, listProfiles, watchState, type Army, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { local } from './localProfiles' // DEV-TOOLS
@@ -71,8 +71,14 @@ export function useClaims(auth: AuthApi) {
   const gmToken = s?.role === 'gm' ? s.token : undefined
   const [map, setMap] = useState<ClaimMap>({})
 
+  // answers can arrive out of order when changes come quickly: only the newest request may update the screen
+  const latest = useRef(0)
   const refresh = useCallback(async () => {
-    try { setMap(dev ? publicMap(readDev()) : (await call<{ tables: ClaimMap }>('/api/claims')).tables) } catch { /* keep what we have */ }
+    const mine = ++latest.current
+    try {
+      const fresh = dev ? publicMap(readDev()) : (await call<{ tables: ClaimMap }>('/api/claims')).tables
+      if (mine === latest.current) setMap(fresh)
+    } catch { /* keep what we have */ }
   }, [dev])
 
   useEffect(() => {
@@ -81,7 +87,7 @@ export function useClaims(auth: AuthApi) {
     return watchState(() => void refresh()) // the server announces every change
   }, [refresh, dev])
 
-  const after = (fresh?: ClaimMap) => { if (fresh) setMap(fresh); else void refresh() }
+  const after = (fresh?: ClaimMap) => { if (fresh) { latest.current++; setMap(fresh) } else void refresh() }
 
   return {
     claims: map,

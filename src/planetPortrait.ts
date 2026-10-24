@@ -25,8 +25,13 @@ try {
   for (const [k, v] of Object.entries(saved)) if (typeof v === 'string' && v.startsWith('data:image/')) pictures.set(k, v)
 } catch { /* nothing remembered */ }
 
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+/** Saves the finished portraits: once, a moment after the last one is drawn, not after every picture. */
 function remember() {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(pictures))) } catch { /* too big or private mode: just not remembered */ }
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(pictures))) } catch { /* too big or private mode: just not remembered */ }
+  }, 600)
 }
 
 const keyOf = (name: string, era: Era) => `${name}|${era}`
@@ -73,6 +78,7 @@ async function drawRound(name: string, era: Era): Promise<string> {
   atmo.material = haze
   try { await renderer.compileAsync(scene, camera) } catch { /* it compiles when drawn instead */ }
   renderer.render(scene, camera)
+  if (renderer.getContext().isContextLost()) { drawing = null; throw new Error('the graphics were lost') }
   const url = renderer.domElement.toDataURL('image/jpeg', 0.88)
   surface.dispose()
   haze.dispose()

@@ -136,7 +136,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
   // a restricted planet, or one whose battlezones are not revealed, shows no battlezones
   const planetTables = planet && !planetClosed && !planetZonesHidden ? viewOf(planet).tables : []
   const table = planetTables.find((t) => t.id === tableId)
-  // DEV-TOOLS: battlezones a team has captured get a void shield (only on the planets the test is switched on for)
+  // battlezones a team has captured get a void shield
   const shieldOn = !!planet
   const shieldZones = shieldOn ? planetTables.filter((t) => winnerOf(t.id)).map((t) => { const w = winnerOf(t.id)!; return { id: t.id, name: t.name, team: w.team, at: w.at } }) : []
   // a team holds a MAJORITY of the planet's battlezones: a shield covers the whole planet (since its Nth capture, N = the majority)

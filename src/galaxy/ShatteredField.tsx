@@ -263,6 +263,7 @@ export default function ShatteredField({ seed }: { seed: number }) {
 
   const flareMap = useMemo(() => glowTexture([255, 235, 170]), [])
   const hazeMap = useMemo(() => glowTexture([150, 70, 45]), [])
+  useEffect(() => () => { flareMap.dispose(); hazeMap.dispose() }, [flareMap, hazeMap])
 
   useFrame((s, dt) => {
     const t = s.clock.elapsedTime

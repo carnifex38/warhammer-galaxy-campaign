@@ -26,9 +26,10 @@ interface Orbit { u: THREE.Vector3; v: THREE.Vector3; r: number; w: number; phas
 export default function PatrolFleet({ team, count }: { team: Team; count: number }) {
   const hulls = useRef<THREE.InstancedMesh>(null)
   const windows = useRef<THREE.InstancedMesh>(null)
-  const glow = useMemo(() => glowTexture(), [])
-  const hullGeo = useMemo(() => hullGeometry(), [])
-  const windowGeo = useMemo(() => windowGeometry(), [])
+  // shared with every other battle and patrol (see shipKit.ts), so not disposed here
+  const glow = glowTexture()
+  const hullGeo = hullGeometry()
+  const windowGeo = windowGeometry()
   const level = useRef(0)
   const scales = useRef<number[]>(Array.from({ length: MAX }, () => 0))
 
@@ -53,7 +54,7 @@ export default function PatrolFleet({ team, count }: { team: Team; count: number
     }
     return { lines: mk(MAX * 3 * 2), glow: mk(MAX * 3) }
   }, [])
-  useEffect(() => () => { glow.dispose(); hullGeo.dispose(); windowGeo.dispose(); exhaust.lines.dispose(); exhaust.glow.dispose() }, [glow, hullGeo, windowGeo, exhaust])
+  useEffect(() => () => { exhaust.lines.dispose(); exhaust.glow.dispose() }, [exhaust])
 
   useFrame((state, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)

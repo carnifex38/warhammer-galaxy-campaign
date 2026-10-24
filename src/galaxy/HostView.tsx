@@ -36,7 +36,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
       <h2>Event host controls</h2>
       <p className="muted">
         Choose what is shown in each sector, what is in play, and what players are allowed to read. Changes show up on the galaxy straight away.
-        They are saved on this device; sharing them with players' phones, and keeping hidden things truly hidden, comes with the live-event server.
+        They are saved on the live-event server, so players' phones follow them live; hidden planets and sections are never sent to players.
       </p>
       <div className="host-top">
         <button className="ghost" onClick={() => { if (window.confirm('Reset everything to defaults? Planets shown or hidden, battlezone counts, locks, space hulks and every information text you have written will be put back.')) events.reset() }}>Reset everything to defaults</button>

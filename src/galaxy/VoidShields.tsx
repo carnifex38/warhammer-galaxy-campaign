@@ -68,7 +68,6 @@ const FRAG = /* glsl */ `
   ${NOISE3}
 
   float sq(float x) { return x * x; } // (pow with a negative base is undefined on some graphics cards)
-  float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
 
   // a hexagon grid: xy = position inside the cell
   vec2 hexCell(vec2 p) {

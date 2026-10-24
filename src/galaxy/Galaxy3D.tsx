@@ -17,7 +17,7 @@ import { attachSurfaces, setPrebake, setPrebakeAllowed, tickSurfaces } from './p
 import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
-import { GALAXY_BOX, bbox, isHulkId, openCount, sectorCenter, toWorld, type Planet, type Sector } from './data'
+import { GALAXY_BOX, bbox, isHulkId, openCount, toWorld, type Planet, type Sector } from './data'
 
 export interface PlanetInfo { enabled: boolean; open: number; total: number; zonesHidden?: boolean }
 
@@ -974,8 +974,8 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
 /** One unit sphere shared by every planet dot (sized by scale), so picking a planet does not rebuild a hundred little spheres. */
 const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
 
-function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, selectable, zone, held, shields, shieldTotal, majority, onSelect }: {
-  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; selectable: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
+function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, zone, held, shields, shieldTotal, majority, onSelect }: {
+  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
   const { planetDisplay, spaceCombat } = useOptions()
@@ -985,8 +985,8 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
     <group position={[p.x, 0.12, p.z]}>
       {/* big invisible target so fingers can hit it */}
       <mesh
-        onClick={(e) => { e.stopPropagation(); if (e.delta > DRAG_PX || !selectable) return; onSelect() }}
-        onPointerOver={() => { if (selectable) document.body.style.cursor = 'pointer' }}
+        onClick={(e) => { e.stopPropagation(); if (e.delta > DRAG_PX) return; onSelect() }}
+        onPointerOver={() => { document.body.style.cursor = 'pointer' }}
         onPointerOut={() => { document.body.style.cursor = '' }}
       >
         <sphereGeometry args={[0.55, 12, 12]} />
@@ -1138,14 +1138,17 @@ function Warmup() {
     if (warmed.has(gl)) return
     const keep: THREE.Material[] = []
     warmed.set(gl, keep)
+    let live = true // false once the galaxy is closed: a warm-up for a canvas that is gone must not keep reporting progress or mark this graphics card as slow
 
     void (async () => {
       const total = 1 + WARMUP_PLANETS.length
       setLoad({ done: 0, total, label: 'Preparing the galaxy' })
       // let the first frame draw, then compile off the main thread (the browser's parallel shader compiler)
       await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+      if (!live) return
       const t0 = performance.now()
       try { await gl.compileAsync(scene, camera) } catch { /* the first real draw will compile it instead */ }
+      if (!live) return
       setLoad({ done: 1, label: 'Galaxy ready' })
 
       // A slow graphics card (or a browser that cannot compile in parallel) would sit here for a long time on every refresh. So the
@@ -1181,6 +1184,7 @@ function Warmup() {
           scene.remove(holder)
           markShaderReady(w.name, w.era)
         }
+        if (!live) return
         if (performance.now() - c0 > 2500) {
           try { localStorage.setItem(slowKey, '1') } catch { /* not remembered */ }
           if (import.meta.env.DEV) console.info(`[galaxy] ${w.label} took ${Math.round(performance.now() - c0)} ms to compile: warm-up stopped, the rest compile when opened`)
@@ -1194,6 +1198,7 @@ function Warmup() {
       setPrebakeAllowed(!slowed && canBake(gl))
       if (import.meta.env.DEV) console.info(`[galaxy] background compile: ${Math.round(performance.now() - t0)} ms, ${gl.info.programs?.length ?? '?'} programs`)
     })()
+    return () => { live = false; warmed.delete(gl) } // (a development re-mount runs the effect again for the same canvas: it must start over)
   }, [gl, scene, camera])
 
   return null
@@ -1257,7 +1262,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
   const specs = useMemo<LabelSpec[]>(() => {
     if (!sector) {
       return SECTORS.map((s) => {
-        const c = sectorCenter(s)
+        const c = s.label
         return { id: s.id, x: c.x, y: 0.4, z: c.z, cls: 'sector-label', lines: [s.name.replace('Segmentum ', '')] }
       })
     }
@@ -1317,7 +1322,6 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
                 compact={!!planetId}
                 hot={p.id === hoverPlanetId}
                 enabled={planetInfo[p.id]?.enabled !== false}
-                selectable
                 zone={p.id === planetId ? hoverZone ?? null : null}
                 held={p.id === planetId ? playZones ?? [] : []}
                 shields={p.id === planetId ? shieldZones ?? [] : []}

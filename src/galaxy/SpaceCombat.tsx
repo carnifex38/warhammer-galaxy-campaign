@@ -110,11 +110,11 @@ export default function SpaceCombat({ zoneId }: { zoneId: string }) {
   // the battlezone this battle is fought over (its spot on the planet, which sets the side it first appears on)
   const spot = useMemo(() => zoneSpot(zoneId), [zoneId])
 
-  const glow = useMemo(() => glowTexture(), [])
-  const ring = useMemo(() => ringTexture(), [])
-  const hullGeo = useMemo(() => hullGeometry(), [])
-  const windowGeo = useMemo(() => windowGeometry(), [])
-  useEffect(() => () => { glow.dispose(); ring.dispose(); hullGeo.dispose(); windowGeo.dispose() }, [glow, ring, hullGeo, windowGeo])
+  // shared with every other battle and patrol (see shipKit.ts), so not disposed here
+  const glow = glowTexture()
+  const ring = ringTexture()
+  const hullGeo = hullGeometry()
+  const windowGeo = windowGeometry()
 
   const sim = useMemo(() => {
     const ships: Ship[] = []

@@ -6,7 +6,7 @@
 // The bright galactic core (map 5 pixel 1170,760) is the world origin.
 // Planet names/positions also come from the Horus Heresy map ("map 4"), converted with `fromMap4()`.
 //
-// The organiser editor (milestone 3) will eventually replace this hand-placed layout.
+// The event host decides which planets are shown and how many battlezones each has (see eventConfig.ts); this file is the fixed layout.
 
 export type TableStatus = 'open' | 'in_play'
 
@@ -95,7 +95,7 @@ export function planetGroup(id: string): PlanetGroup {
 const NATO = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel', 'India', 'Juliett', 'Kilo', 'Lima']
 
 /** Placeholder tables for a planet; the host can change how many there are. */
-export function makeTables(planetId: string, _planetName: string, count: number): GameTable[] {
+export function makeTables(planetId: string, count: number): GameTable[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `${planetId}-t${i + 1}`,
     name: `Battlezone ${NATO[i] ?? i + 1}`,
@@ -107,7 +107,7 @@ export function makeTables(planetId: string, _planetName: string, count: number)
 function planet([name, px, py, forge]: PlanetSpec): Planet {
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
   const { x, z } = toWorld(px, py)
-  return { id, name, x, z, forge, tables: makeTables(id, name, DEFAULT_TABLES) }
+  return { id, name, x, z, forge, tables: makeTables(id, DEFAULT_TABLES) }
 }
 
 function sector(
@@ -249,11 +249,6 @@ export function bbox(points: [number, number][]) {
   return { x, z, w: Math.max(...xs) - x, h: Math.max(...zs) - z }
 }
 
-/** World position of a sector's name label. */
-export function sectorCenter(s: Sector) {
-  return s.label
-}
-
 /** Bounding box of the whole galaxy. */
 export const GALAXY_BOX = bbox(SECTORS.flatMap((s) => s.polygon))
 
@@ -336,7 +331,7 @@ export function makeHulkPlanets(sector: Sector, count: number): Planet[] {
   return spots.slice(0, count).map((p, k) => {
     const id = `space-hulk-${sector.id}-${k + 1}`
     const name = HULK_NAME_LIST[(sectorIndex * MAX_HULKS + k) % HULK_NAME_LIST.length]
-    return { id, name, x: p.x, z: p.z, forge: false, tables: makeTables(id, name, DEFAULT_TABLES) }
+    return { id, name, x: p.x, z: p.z, forge: false, tables: makeTables(id, DEFAULT_TABLES) }
   })
 }
 

@@ -70,7 +70,7 @@ function bakeFragmentReal(): string {
     land *= 1.0 + cr * 0.6;
     land *= 0.88 + 0.24 * rid;
     land *= 0.9 + 0.2 * fbm3d(p * uScale * 10.0 + uSeed);
-    land *= 1.0 - 0.28 * max(step(0.95, uCity) * 0.0 + uGrid, 0.0) * step(0.5, noise3(p * 70.0 + uSeed));
+    land *= 1.0 - 0.28 * max(uGrid, 0.0) * step(0.5, noise3(p * 70.0 + uSeed));
     vec3 ocean = mix(uDeep, uShallow, smoothstep(uSea - 0.2, uSea, h0));
     vec3 col = mix(ocean, land, isLand);
     float ice = smoothstep(0.76, 0.92, abs(p.y) + (h0 - 0.5) * 0.3) * uIce;
