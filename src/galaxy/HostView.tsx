@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MAX_HULKS, isHulkId } from './data'
 import InfoEditor from './InfoEditor'
+import SaveLoad from './SaveLoad'
 import { MARS_SAMPLE } from './sampleMissions'
 import { defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 import type { Era } from './planetLooks'
@@ -71,6 +72,8 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
           </div>
         ))}
       </section>
+
+      <SaveLoad token={events.token} />
 
       <section className="host-sector">
         <div className="hulk-controls">

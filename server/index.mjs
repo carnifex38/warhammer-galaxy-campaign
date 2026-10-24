@@ -8,7 +8,7 @@
 import { createServer } from 'node:http'
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync, unlinkSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { extname, join, normalize, resolve, sep } from 'node:path'
@@ -541,6 +541,119 @@ async function calendarApi(req, res, path) {
   return null
 }
 
+// ---- save and load a whole event ----------------------------------------------------------------------------------
+// The gamemaster can download everything about the event as one file and load it back (on this server or another): the setup (planets
+// shown or hidden, battlezone counts, locks, hulks, every information text and mission), the battlezones (who sits where, what is in
+// play, who won) and the calendar with its sign-ups. Players' accounts and army lists are NOT in the file: they belong to the players.
+// Seats and sign-ups carry the player's name, so on loading they are joined back to the same player (by id, else by name); those with
+// no matching player on this server are left out and counted in the report. Seats of battlezones in play keep the frozen list they
+// were playing with.
+const SAVE_FORMAT = 'galaxy-campaign-event'
+const SAVE_VERSION = 1
+const MAX_SAVE_BODY = 8_000_000
+
+function exportEvent() {
+  const battlezones = {}
+  for (const [id, t] of Object.entries(claims)) {
+    battlezones[id] = {
+      status: t.status, winner: t.winner ?? null, wonAt: t.wonAt ?? 0,
+      seats: t.seats.map((x) => ({ profileId: x.profileId, name: profiles[x.profileId]?.name ?? '', team: x.team, armyId: x.armyId, claimedAt: x.claimedAt, ...(x.snapshot ? { snapshot: x.snapshot } : {}) })),
+    }
+  }
+  const events = calendar.map((e) => ({
+    id: e.id, name: e.name, date: e.date, notes: e.notes,
+    planets: e.planets.map((pl) => ({ planetId: pl.planetId, target: pl.target, players: pl.signups.map((id) => ({ profileId: id, name: profiles[id]?.name ?? '' })) })),
+  }))
+  return { format: SAVE_FORMAT, version: SAVE_VERSION, exportedAt: new Date().toISOString(), setup: state, battlezones, calendar: events }
+}
+
+/** The player a saved seat or sign-up belongs to on this server: the same id, else the same name, else nobody. */
+function relink(saved) {
+  if (!isObj(saved)) return null
+  if (typeof saved.profileId === 'string' && profiles[saved.profileId]) return saved.profileId
+  const key = cleanName(saved.name).toLowerCase()
+  return key ? Object.values(profiles).find((p) => p.key === key)?.id ?? null : null
+}
+
+/** Loads (some parts of) a save. Throws an Error with a message for the gamemaster when the file is not usable; changes nothing then. */
+function importEvent(save, parts) {
+  if (!isObj(save) || save.format !== SAVE_FORMAT) throw new Error('That is not a Galaxy Campaign event save.')
+  if (!Number.isInteger(save.version) || save.version < 1 || save.version > SAVE_VERSION) throw new Error('That save was made by a newer version of the app. Update the app first.')
+  const want = { setup: !!parts?.setup, battlezones: !!parts?.battlezones, calendar: !!parts?.calendar }
+  if (!want.setup && !want.battlezones && !want.calendar) throw new Error('Choose what to load.')
+  const report = { setup: false, battlezones: 0, seatsKept: 0, seatsDropped: 0, events: 0, signupsKept: 0, signupsDropped: 0 }
+
+  // everything is built and checked first, and only then put in place, so a bad file changes nothing
+  let nextState = state
+  if (want.setup) {
+    if (save.setup !== null && !validState(save.setup)) throw new Error('The setup in that save is damaged.')
+    nextState = save.setup
+    report.setup = true
+  }
+
+  let nextClaims = claims
+  if (want.battlezones) {
+    if (!isObj(save.battlezones)) throw new Error('The battlezones in that save are damaged.')
+    nextClaims = keyed()
+    for (const [id, t] of Object.entries(save.battlezones)) {
+      if (!/^[a-z0-9-]{1,80}$/.test(id) || !isObj(t) || !Array.isArray(t.seats)) continue
+      if (Object.keys(nextClaims).length >= 2000) break
+      const seen = new Set()
+      const seats = []
+      for (const x of t.seats) {
+        const profileId = relink(x)
+        if (!profileId || seen.has(profileId) || (x.team !== 'A' && x.team !== 'B') || typeof x.armyId !== 'string' || x.armyId.length > 40) { report.seatsDropped++; continue }
+        seen.add(profileId)
+        seats.push({ profileId, team: x.team, armyId: x.armyId, claimedAt: Number.isFinite(x.claimedAt) ? x.claimedAt : Date.now(), ...(validArmy(x.snapshot) ? { snapshot: x.snapshot } : {}) })
+        report.seatsKept++
+      }
+      const winner = t.winner === 'A' || t.winner === 'B' ? t.winner : null
+      const status = t.status === 'in_play' ? 'in_play' : 'open'
+      if (!seats.length && !winner && status === 'open') continue // an empty open battlezone is the same as none
+      nextClaims[id] = { status, seats, ...(winner ? { winner, wonAt: Number.isFinite(t.wonAt) ? t.wonAt : 0 } : {}) }
+      report.battlezones++
+    }
+  }
+
+  let nextCalendar = calendar
+  if (want.calendar) {
+    if (!Array.isArray(save.calendar)) throw new Error('The calendar in that save is damaged.')
+    nextCalendar = []
+    const ids = new Set()
+    for (const e of save.calendar) {
+      if (!isObj(e) || nextCalendar.length >= MAX_EVENTS) continue
+      const name = cleanLine(e.name, 60)
+      const planets = parsePlanets((Array.isArray(e.planets) ? e.planets : []).map((pl) => ({ planetId: pl?.planetId, target: pl?.target })))
+      if (!name || !validDate(e.date) || !planets) continue
+      const id = typeof e.id === 'string' && /^[a-f0-9]{12}$/.test(e.id) && !ids.has(e.id) ? e.id : randomBytes(6).toString('hex')
+      ids.add(id)
+      for (const pl of planets) {
+        const saved = (Array.isArray(e.planets) ? e.planets : []).find((x) => x?.planetId === pl.planetId)
+        for (const who of Array.isArray(saved?.players) ? saved.players : []) {
+          const profileId = relink(who)
+          // one planet per player in an event
+          if (!profileId || planets.some((o) => o.signups.includes(profileId))) { report.signupsDropped++; continue }
+          pl.signups.push(profileId)
+          report.signupsKept++
+        }
+      }
+      nextCalendar.push({ id, name, date: e.date, notes: cleanNotes(e.notes), planets })
+      report.events++
+    }
+  }
+
+  // put it all in place
+  if (want.setup) {
+    state = nextState
+    if (state) persist()
+    else { try { unlinkSync(STATE_FILE) } catch { /* there was none */ } }
+  }
+  if (want.battlezones) { claims = nextClaims; persistClaims() }
+  if (want.calendar) calendar = nextCalendar
+  calendarChanged() // saves the calendar, and tells every screen that something changed
+  return report
+}
+
 // ---- live updates (server-sent events) ---------------------------------------------------------------------------
 const streams = new Set()
 const broadcast = () => { for (const res of streams) res.write(`data: ${version}\n\n`) }
@@ -553,12 +666,12 @@ const json = (res, status, body) => {
   res.end(text)
 }
 
-const readBody = (req) => new Promise((ok, fail) => {
+const readBody = (req, limit = MAX_BODY) => new Promise((ok, fail) => {
   let size = 0
   const chunks = []
   req.on('data', (c) => {
     size += c.length
-    if (size > MAX_BODY) { fail(new Error('too large')); req.destroy(); return }
+    if (size > limit) { fail(new Error('too large')); req.destroy(); return }
     chunks.push(c)
   })
   req.on('end', () => { try { ok(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')) } catch (e) { fail(e) } })
@@ -612,6 +725,17 @@ async function api(req, res, path) {
   if (path === '/api/calendar' || path.startsWith('/api/calendar/')) {
     const r = await calendarApi(req, res, path)
     if (r !== null) return r
+    return json(res, 405, { error: 'Method not allowed.' })
+  }
+
+  if (path === '/api/event-save') { // gamemaster: download or load the whole event
+    if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+    if (req.method === 'GET') return json(res, 200, exportEvent())
+    if (req.method === 'POST') {
+      const body = await readBody(req, MAX_SAVE_BODY).catch(() => null)
+      if (!isObj(body)) return json(res, 400, { error: 'That file could not be read (is it too large?).' })
+      try { return json(res, 200, { report: importEvent(body.save, body.parts) }) } catch (e) { return json(res, 400, { error: e instanceof Error ? e.message : 'That save could not be loaded.' }) }
+    }
     return json(res, 405, { error: 'Method not allowed.' })
   }
 

@@ -220,6 +220,8 @@ export function useEventConfig(canHost = true, token?: string) {
 
   return {
     sync,
+    /** the gamemaster's server token (none for the developer gamemaster, who works on practice data in this browser) */
+    token: gmToken,
     config,
     /** what the host has rewritten in the information windows (changes only when it does, so screens can rebuild only then) */
     infoOverrides,
