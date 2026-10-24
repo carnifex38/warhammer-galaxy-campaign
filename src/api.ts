@@ -79,31 +79,44 @@ export async function putState(token: string, state: ServerState): Promise<void>
   if (!r.ok) throw new Error(`save failed (${r.status})`)
 }
 
+// One live connection to the server is shared by everything on the page that listens (the event setup, the battlezone claims and
+// the calendar all do): a browser only allows a few connections to one address at a time, and each tab used to take three.
+const watchers = new Set<() => void>()
+let stream: EventSource | null = null
+let streamOpen = false
+let streamTimer: number | undefined
+let streamFailures = 0
+
+function connectStream() {
+  if (stream || watchers.size === 0) return
+  stream = new EventSource('/api/stream')
+  stream.onmessage = () => { streamOpen = true; streamFailures = 0; for (const w of [...watchers]) w() } // the first message arrives on every (re)connect, so this also covers catching up after a drop
+  stream.onerror = () => {
+    stream?.close()
+    stream = null
+    streamOpen = false
+    streamFailures++
+    streamTimer = window.setTimeout(connectStream, Math.min(60000, 1000 * 2 ** streamFailures))
+  }
+}
+
 /**
- * Calls onChange when the server connects and whenever the gamemaster saves. Returns a function that stops listening.
- * If the server cannot be reached it backs off (2s, 4s, 8s ... up to a minute) instead of retrying every few seconds
- * for ever, so a copy of the site with no server behind it stays quiet.
+ * Calls onChange when the server connects and whenever anything changes on it (the gamemaster saves, a seat is taken, an event is
+ * scheduled...). Returns a function that stops listening. If the server cannot be reached it backs off (2s, 4s, 8s ... up to a
+ * minute) instead of retrying every few seconds for ever, so a copy of the site with no server behind it stays quiet.
  */
 export function watchState(onChange: () => void): () => void {
-  let es: EventSource | null = null
-  let timer: number | undefined
-  let failures = 0
-  let stopped = false
-  const connect = () => {
-    if (stopped) return
-    es = new EventSource('/api/stream')
-    es.onmessage = () => { failures = 0; onChange() } // the first message arrives on every (re)connect, so this also covers catching up after a drop
-    es.onerror = () => {
-      es?.close()
-      es = null
-      failures++
-      timer = window.setTimeout(connect, Math.min(60000, 1000 * 2 ** failures))
-    }
-  }
-  connect()
+  watchers.add(onChange)
+  if (streamOpen) queueMicrotask(() => { if (watchers.has(onChange)) onChange() }) // joined a connection that is already up: it will not announce itself again
+  connectStream()
   return () => {
-    stopped = true
-    es?.close()
-    window.clearTimeout(timer)
+    watchers.delete(onChange)
+    if (watchers.size === 0) {
+      stream?.close()
+      stream = null
+      streamOpen = false
+      streamFailures = 0
+      window.clearTimeout(streamTimer)
+    }
   }
 }

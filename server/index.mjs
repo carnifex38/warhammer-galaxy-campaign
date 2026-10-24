@@ -28,14 +28,32 @@ const MAX_BODY = 1_000_000
 
 mkdirSync(DATA_DIR, { recursive: true })
 
+/**
+ * Reads a saved file. A file that is missing gives `empty`. One that cannot be read, or has the wrong shape, is kept aside as
+ * `<name>.bak` (so the next save does not overwrite it) and gives `empty` too.
+ */
+function loadJson(file, valid, empty) {
+  if (!existsSync(file)) return empty
+  try {
+    const data = JSON.parse(readFileSync(file, 'utf8'))
+    if (valid(data)) return data
+    console.error(`${file} has the wrong shape: set aside as ${file}.bak, starting empty.`)
+  } catch (e) {
+    console.error(`Could not read ${file} (${e.message}): set aside as ${file}.bak, starting empty.`)
+  }
+  try { renameSync(file, file + '.bak') } catch { /* nothing more to do */ }
+  return empty
+}
+
 // ---- state -----------------------------------------------------------------------------------------------------
 // { config, hulks, info, locked } exactly as the client's useEventConfig keeps it, or null before the gamemaster saves.
-let state = null
 let version = 0
-try { if (existsSync(STATE_FILE)) state = JSON.parse(readFileSync(STATE_FILE, 'utf8')) } catch (e) { console.error('Could not read state.json, starting empty:', e.message) }
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const validState = (s) => isObj(s) && isObj(s.config) && isObj(s.hulks) && isObj(s.info) && Array.isArray(s.locked)
+let state = loadJson(STATE_FILE, validState, null)
+/** A map keyed by text that comes from a request: no prototype, so a key like "constructor" is just a key. */
+const keyed = (o = {}) => Object.assign(Object.create(null), o)
 
 function persist() {
   const tmp = STATE_FILE + '.tmp'
@@ -76,8 +94,7 @@ const scryptAsync = promisify(scrypt)
 const MAX_PROFILES = 300
 const MAX_ARMIES_BYTES = 200_000
 /** id -> { id, name, key (lower-case name), salt, hash, created, updated, armies } */
-let profiles = {}
-try { if (existsSync(PROFILES_FILE)) profiles = JSON.parse(readFileSync(PROFILES_FILE, 'utf8')) } catch (e) { console.error('Could not read profiles.json, starting empty:', e.message) }
+let profiles = keyed(loadJson(PROFILES_FILE, isObj, {}))
 
 function persistProfiles() {
   const tmp = PROFILES_FILE + '.tmp'
@@ -98,12 +115,16 @@ const full = (p) => ({ ...summary(p), armies: p.armies })
 const cleanName = (v) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
 const validName = (n) => n.length >= 2 && n.length <= 24 && ![...n].some((ch) => ch.charCodeAt(0) < 32)
 const validPassword = (v) => typeof v === 'string' && v.length >= 4 && v.length <= 64
-const validArmies = (a) => Array.isArray(a) && a.length <= 60 && a.every((x) => isObj(x) && typeof x.id === 'string' && typeof x.name === 'string') && JSON.stringify(a).length <= MAX_ARMIES_BYTES
+const validArmy = (x) =>
+  isObj(x) && typeof x.id === 'string' && x.id.length <= 40 && typeof x.name === 'string' && x.name.length <= 80
+  && (x.era === undefined || x.era === '40k' || x.era === '30k') && (x.notes === undefined || (typeof x.notes === 'string' && x.notes.length <= 4000))
+  && (x.roster === undefined || x.roster === null || (isObj(x.roster) && (x.roster.pts === undefined || Number.isFinite(x.roster.pts))))
+const validArmies = (a) => Array.isArray(a) && a.length <= 60 && a.every(validArmy) && JSON.stringify(a).length <= MAX_ARMIES_BYTES
 
 // slow down guessing: at most 10 failed attempts a minute from one address
 const profileFails = new Map()
 setInterval(() => profileFails.clear(), 60_000).unref()
-const who = (req) => req.socket.remoteAddress ?? '?'
+const who = (req) => (process.env.TRUST_PROXY === '1' ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') || (req.socket.remoteAddress ?? '?')
 const tooMany = (req) => (profileFails.get(who(req)) ?? 0) >= 10
 const failed = (req) => profileFails.set(who(req), (profileFails.get(who(req)) ?? 0) + 1)
 
@@ -113,16 +134,22 @@ async function profilesApi(req, res, path) {
 
   if (path === '/api/profiles' && m === 'POST') {
     if (tooMany(req)) return json(res, 429, { error: 'Too many attempts, wait a minute.' })
+    failed(req) // making accounts counts as an attempt too, so a script cannot fill every profile slot
     const body = await readBody(req).catch(() => null)
     const name = cleanName(body?.name)
     if (!validName(name)) return json(res, 400, { error: 'The name must be 2 to 24 characters.' })
     if (!validPassword(body?.password)) return json(res, 400, { error: 'The password must be 4 to 64 characters.' })
-    if (Object.values(profiles).some((p) => p.key === name.toLowerCase())) return json(res, 409, { error: 'That name is taken. Choose another.' })
+    const nameTaken = () => Object.values(profiles).some((p) => p.key === name.toLowerCase())
+    if (nameTaken()) return json(res, 409, { error: 'That name is taken. Choose another.' })
     if (Object.keys(profiles).length >= MAX_PROFILES) return json(res, 507, { error: 'There are too many profiles.' })
     const salt = randomBytes(16).toString('hex')
     const id = randomBytes(8).toString('hex')
     const now = Date.now()
-    const p = { id, name, key: name.toLowerCase(), salt, hash: await hashPassword(body.password, salt), created: now, updated: now, armies: [] }
+    const hash = await hashPassword(body.password, salt)
+    // the hashing took a moment: another request may have taken the name or the last slot meanwhile
+    if (nameTaken()) return json(res, 409, { error: 'That name is taken. Choose another.' })
+    if (Object.keys(profiles).length >= MAX_PROFILES) return json(res, 507, { error: 'There are too many profiles.' })
+    const p = { id, name, key: name.toLowerCase(), salt, hash, created: now, updated: now, armies: [] }
     profiles[id] = p
     persistProfiles()
     return json(res, 201, { token: profileToken(p), profile: full(p) })
@@ -218,8 +245,7 @@ async function profilesApi(req, res, path) {
 // copy is frozen, and reopening it unfreezes it. Seats of a deleted profile disappear.
 const CLAIMS_FILE = join(DATA_DIR, 'claims.json')
 /** tableId -> { status: 'open' | 'in_play', seats: [{ profileId, team, armyId, claimedAt, snapshot? }] } */
-let claims = {}
-try { if (existsSync(CLAIMS_FILE)) claims = JSON.parse(readFileSync(CLAIMS_FILE, 'utf8')) } catch (e) { console.error('Could not read claims.json, starting empty:', e.message) }
+let claims = keyed(loadJson(CLAIMS_FILE, isObj, {}))
 
 function persistClaims() {
   const tmp = CLAIMS_FILE + '.tmp'
@@ -248,7 +274,7 @@ function seatView(seat) {
   const army = seat.snapshot ?? armyOf(p, seat.armyId)
   return {
     profileId: seat.profileId, name: p?.name ?? 'Unknown', team: seat.team, armyId: seat.armyId,
-    armyName: army?.name || 'Untitled army', era: army?.era ?? '40k', pts: army?.roster?.pts, locked: !!seat.snapshot, missing: !army,
+    armyName: String(army?.name ?? '').slice(0, 80) || 'Untitled army', era: army?.era === '30k' ? '30k' : '40k', pts: Number.isFinite(army?.roster?.pts) ? army.roster.pts : undefined, locked: !!seat.snapshot, missing: !army,
   }
 }
 
@@ -275,9 +301,9 @@ async function claimsApi(req, res, path) {
       const body = await readBody(req).catch(() => null)
       if (body?.team !== 'A' && body?.team !== 'B') return json(res, 400, { error: 'Pick team A or B.' })
       if (!armyOf(who.profile, body?.armyId)) return json(res, 400, { error: 'Pick one of your army lists.' })
+      if (!claims[tableId] && Object.keys(claims).length >= 2000) return json(res, 507, { error: 'Too many battlezones.' })
       const t = claims[tableId] ?? (claims[tableId] = { status: 'open', seats: [] })
       if (t.status !== 'open') return json(res, 409, { error: 'This battlezone is already in play.' })
-      if (Object.keys(claims).length > 2000) return json(res, 507, { error: 'Too many battlezones.' })
       const seat = t.seats.find((s) => s.profileId === who.profile.id)
       if (seat) { seat.team = body.team; seat.armyId = body.armyId } else t.seats.push({ profileId: who.profile.id, team: body.team, armyId: body.armyId, claimedAt: Date.now() })
       changed()
@@ -387,8 +413,7 @@ async function claimsApi(req, res, path) {
 // Players with a profile sign up for one planet per event; everyone can read the calendar. Signed-up players are shown by name.
 const CALENDAR_FILE = join(DATA_DIR, 'calendar.json')
 /** [{ id, name, date: 'YYYY-MM-DD', notes, planets: [{ planetId, target, signups: [profileId] }] }] */
-let calendar = []
-try { if (existsSync(CALENDAR_FILE)) calendar = JSON.parse(readFileSync(CALENDAR_FILE, 'utf8')) } catch (e) { console.error('Could not read calendar.json, starting empty:', e.message) }
+let calendar = loadJson(CALENDAR_FILE, Array.isArray, [])
 
 const MAX_EVENTS = 500
 const MAX_PLANETS_PER_EVENT = 24
@@ -540,15 +565,15 @@ const readBody = (req) => new Promise((ok, fail) => {
   req.on('error', fail)
 })
 
-let failedLogins = 0
-setInterval(() => { failedLogins = 0 }, 60_000).unref()
+const gmFails = new Map()
+setInterval(() => gmFails.clear(), 60_000).unref()
 
 async function api(req, res, path) {
   if (path === '/api/gm-login' && req.method === 'POST') {
-    if (failedLogins >= 10) return json(res, 429, { error: 'Too many attempts, wait a minute.' })
+    if ((gmFails.get(who(req)) ?? 0) >= 10) return json(res, 429, { error: 'Too many attempts, wait a minute.' })
     const body = await readBody(req).catch(() => null)
     if (isObj(body) && typeof body.password === 'string' && safeEq(body.password, GM_PASSWORD)) return json(res, 200, { token: GM_TOKEN })
-    failedLogins++
+    gmFails.set(who(req), (gmFails.get(who(req)) ?? 0) + 1)
     return json(res, 401, { error: 'Wrong password.' })
   }
 
@@ -609,7 +634,9 @@ const COMPRESSIBLE = new Set(['.html', '.js', '.css', '.json', '.webmanifest', '
 const gzCache = new Map()
 
 async function serveStatic(req, res, path) {
-  let file = normalize(join(DIST_DIR, decodeURIComponent(path)))
+  let decoded
+  try { decoded = decodeURIComponent(path) } catch { res.writeHead(400); return res.end() }
+  let file = normalize(join(DIST_DIR, decoded))
   if (file !== DIST_DIR && !file.startsWith(DIST_DIR + sep)) { res.writeHead(403); return res.end() }
   if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST_DIR, 'index.html') // single-page app
   const ext = extname(file)

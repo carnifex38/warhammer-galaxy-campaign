@@ -39,7 +39,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
         They are saved on this device; sharing them with players' phones, and keeping hidden things truly hidden, comes with the live-event server.
       </p>
       <div className="host-top">
-        <button className="ghost" onClick={events.reset}>Reset everything to defaults</button>
+        <button className="ghost" onClick={() => { if (window.confirm('Reset everything to defaults? Planets shown or hidden, battlezone counts, locks, space hulks and every information text you have written will be put back.')) events.reset() }}>Reset everything to defaults</button>
         <button className="ghost" onClick={() => setOpenSectors(events.sectors.map((x) => x.id))}>Expand all</button>
         <button className="ghost" onClick={() => setOpenSectors([])}>Collapse all</button>
       </div>

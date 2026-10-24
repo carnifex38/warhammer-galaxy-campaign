@@ -6,6 +6,7 @@ import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
 import { useClaims, type Viewing } from './claims'
 import { useCalendar } from './calendar'
+import { useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
@@ -47,6 +48,7 @@ export default function App() {
   const events = useEventConfig(role === 'gm', auth.session?.token)
   const claims = useClaims(auth)
   const calendar = useCalendar(auth)
+  const updateReady = useUpdateReady()
   // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
   const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
@@ -69,6 +71,12 @@ export default function App() {
 
   return (
     <div className="shell">
+      {updateReady && (
+        <div className="update-bar" role="status">
+          A new version of the site is ready.
+          <button onClick={() => location.reload()}>Reload</button>
+        </div>
+      )}
       <header className="topbar">
         <h1>Galaxy Campaign</h1>
         <div className="topbar-right">

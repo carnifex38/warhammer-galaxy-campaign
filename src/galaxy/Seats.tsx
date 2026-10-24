@@ -106,11 +106,11 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
   const status = claims.statusOf(tableId)
   const mine = seats.find((s) => s.profileId === me?.id)
   const [armyId, setArmyId] = useState('')
-  const [team, setTeam] = useState<Team>('A')
+  const [pickedTeam, setPickedTeam] = useState<Team | null>(null) // the side tapped; until then, the side already held (or A)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const chosen = armyId || mine?.armyId || me?.armies[0]?.id || ''
-  const chosenTeam = mine && !busy ? mine.team : team
+  const chosenTeam = pickedTeam ?? mine?.team ?? 'A'
 
   const run = async (job: () => Promise<void>) => {
     setBusy(true)
@@ -179,7 +179,7 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
             {armies.map((a) => <option key={a.id} value={a.id}>{(a.name || 'Untitled army')} · {a.era.toUpperCase()}</option>)}
           </select>
           <div className="seat-sides" role="group" aria-label="Team">
-            {TEAMS.map((t) => <button key={t} className={chosenTeam === t ? 'on' : ''} aria-pressed={chosenTeam === t} onClick={() => setTeam(t)}>Team {t}</button>)}
+            {TEAMS.map((t) => <button key={t} className={chosenTeam === t ? 'on' : ''} aria-pressed={chosenTeam === t} onClick={() => setPickedTeam(t)}>Team {t}</button>)}
           </div>
           <button className="primary" disabled={busy || !chosen} onClick={() => void run(() => claims.claim(tableId, chosenTeam, chosen))}>
             {mine ? 'Update my seat' : `Join Team ${chosenTeam}`}

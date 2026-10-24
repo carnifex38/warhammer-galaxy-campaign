@@ -24,6 +24,10 @@ function useWorker(): Call {
   useEffect(() => {
     const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<{ id: number; res: Response }>) => { pending.current.get(e.data.id)?.(e.data.res); pending.current.delete(e.data.id) }
+    w.onerror = () => {
+      for (const answer of pending.current.values()) answer({ ok: false, error: 'The army builder could not start. Reload the page and try again.' })
+      pending.current.clear()
+    }
     worker.current = w
     return () => { w.terminate(); worker.current = null }
   }, [])
@@ -129,6 +133,14 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
 
   const act = useCallback<Act>(async (req) => { apply(await call(req)) }, [call, apply])
 
+  // the army's name is sent when the list is started; a later rename has to follow it
+  const sentName = useRef(name)
+  useEffect(() => {
+    if (!view || !editing || name === sentName.current) return
+    sentName.current = name
+    void act({ op: 'name', name })
+  }, [name, view, editing, act])
+
   /** Open a list made in New Recruit or BattleScribe (.json, .ros or .rosz). */
   const importFile = useCallback(async (file: File) => {
     setBusy(true)
@@ -157,7 +169,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
   const shared = useMemo<Shared | null>(() => (view ? { act, call, view, editing, open: setPopup } : null), [act, call, view, editing])
 
   if (!view && !editing && !stored) return <p className="muted">No list built yet. Press Edit to start one.</p>
-  if (!view && !editing) return <p className="muted">Opening the list…</p>
+  if (!view && !editing) return error ? <p className="login-error" role="alert">{error}</p> : <p className="muted">Opening the list…</p>
 
   if (!view || !shared) {
     return (

@@ -1,6 +1,6 @@
 import PlanetEvents from '../PlanetEvents'
 import type { CalendarApi } from '../calendar'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Galaxy3D, { type PlanetInfo } from './Galaxy3D'
 import type { Era } from './planetLooks'
 import type { EventApi } from './eventConfig'
@@ -112,13 +112,24 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
   const planet = sector?.planets.find((p) => p.id === planetId)
 
   // what the host has set for every planet: in play or restricted, battlezone counts, and whether those are revealed
-  const planetInfo: Record<string, PlanetInfo> = {}
-  for (const s of SECTORS) {
-    for (const p of s.planets) {
-      const v = viewOf(p)
-      planetInfo[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden: events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden }
+  const planetInfo = useMemo(() => {
+    const out: Record<string, PlanetInfo> = {}
+    for (const s of SECTORS) {
+      for (const p of s.planets) {
+        const v = viewOf(p)
+        out[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden: events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden }
+      }
     }
-  }
+    return out
+  }, [SECTORS, events.infoOverrides, events.hostPreview, claims.claims]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // what is picked has to still be there: a sector the host has locked, or a planet the host has hidden, since it was picked
+  useEffect(() => {
+    if (sectorId && (!sector || isLocked(sectorId))) { setSectorId(null); setPlanetId(null); setTableId(null) }
+    else if (planetId && !planet) { setPlanetId(null); setTableId(null) }
+  }, [sector, planet, sectorId, planetId, lockedIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  // the battlezone row that was under the pointer is gone once something else is picked: it must not keep a reticle on the planet
+  useEffect(() => { setHoverZone(null) }, [sectorId, planetId, tableId])
 
   const planetClosed = !!planet && !planetInfo[planet.id].enabled
   const planetZonesHidden = !!planet && planetInfo[planet.id].zonesHidden

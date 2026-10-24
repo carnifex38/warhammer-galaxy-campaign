@@ -23,12 +23,15 @@ interface Entry {
   low: PlanetBake | null // finished soft bake
   high: PlanetBake | null // finished sharp bake
   wanted: number // how many planet views are showing this one right now
+  retryAt: number // after a bake failed, when it may be tried again (a failure must not be retried every frame)
 }
 
 interface Job { entry: Entry; level: 'low' | 'high'; bake: PlanetBake; compiled: boolean; priority: boolean }
 
 const KEEP_HIGH = 3
 const PRIORITY_BUDGET_MS = 24
+const COMPILE_TIMEOUT_MS = 15000 // a program that has not compiled by then is given up on (the bake is tried, and dropped if it fails)
+const RETRY_AFTER_MS = 20000
 
 let config: Config | null = null
 let gl: THREE.WebGLRenderer | null = null
@@ -56,6 +59,16 @@ export function configureSurfaces(c: Config) {
 
 let busyHooked = false
 
+/** Everything baked is forgotten (but who is waiting for what is kept): the graphics memory it was in is gone. */
+function forgetAll() {
+  current = null
+  highOrder.length = 0
+  for (const e of entries.values()) { e.low = null; e.high = null }
+  bump()
+}
+
+let lostWatch: { canvas: HTMLCanvasElement; lost: (e: Event) => void; restored: () => void } | null = null
+
 /**
  * Called when a renderer exists. If it is a NEW one (the galaxy view was closed, for example by switching to the Host tab, and opened
  * again, which makes a new canvas), everything baked for the old one is gone with its graphics memory: forget it, keep who is
@@ -63,13 +76,15 @@ let busyHooked = false
  */
 export function attachSurfaces(renderer: THREE.WebGLRenderer) {
   if (gl === renderer) return
-  if (gl) {
-    current = null
-    highOrder.length = 0
-    for (const e of entries.values()) { e.low = null; e.high = null }
-    bump()
-  }
+  if (gl) forgetAll()
   gl = renderer
+  // If the graphics card drops the page's context (a phone coming back from another app, a driver reset) every baked texture is gone
+  // with it: forget them all and they are baked again once the context is back.
+  if (lostWatch) { lostWatch.canvas.removeEventListener('webglcontextlost', lostWatch.lost); lostWatch.canvas.removeEventListener('webglcontextrestored', lostWatch.restored) }
+  const canvas = renderer.domElement
+  lostWatch = { canvas, lost: (e) => { e.preventDefault(); forgetAll() }, restored: forgetAll }
+  canvas.addEventListener('webglcontextlost', lostWatch.lost)
+  canvas.addEventListener('webglcontextrestored', lostWatch.restored)
   if (busyHooked) return
   busyHooked = true
   const busy = () => { lastBusy = performance.now() }
@@ -79,7 +94,7 @@ export function attachSurfaces(renderer: THREE.WebGLRenderer) {
 const entryFor = (name: string, era: string): Entry => {
   const key = surfaceKey(name, era)
   let e = entries.get(key)
-  if (!e) { e = { key, name, era, low: null, high: null, wanted: 0 }; entries.set(key, e) }
+  if (!e) { e = { key, name, era, low: null, high: null, wanted: 0, retryAt: 0 }; entries.set(key, e) }
   return e
 }
 
@@ -114,6 +129,7 @@ export function setPrebake(list: { name: string; era: string }[]) {
   const keep = new Set<string>()
   prebakeOrder = []
   for (const p of list) { const e = entryFor(p.name, p.era); keep.add(e.key); prebakeOrder.push(e.key) }
+  if (current && !keep.has(current.entry.key) && current.entry.wanted === 0) dropCurrent()
   for (const [k, e] of entries) {
     if (keep.has(k) || e.wanted > 0) continue
     free(e)
@@ -150,7 +166,9 @@ function dropCurrent() {
 
 /** What to bake next: what a planet view is waiting for first, then (if the player is idle) the background list. */
 function pickNext(idle: boolean): { entry: Entry; level: 'low' | 'high'; priority: boolean } | null {
+  const now = performance.now()
   for (const e of entries.values()) {
+    if (e.retryAt > now) continue
     if (e.wanted > 0) {
       if (!e.low) return { entry: e, level: 'low', priority: true }
       if (!e.high) return { entry: e, level: 'high', priority: true }
@@ -159,7 +177,7 @@ function pickNext(idle: boolean): { entry: Entry; level: 'low' | 'high'; priorit
   if (prebakeOn && idle) {
     for (const k of prebakeOrder) {
       const e = entries.get(k)
-      if (e && !e.low) return { entry: e, level: 'low', priority: false }
+      if (e && !e.low && e.retryAt <= now) return { entry: e, level: 'low', priority: false }
     }
   }
   return null
@@ -182,7 +200,8 @@ export function tickSurfaces() {
     const job: Job = { ...next, bake, compiled: false }
     current = job
     void (async () => {
-      try { await bake.compile() } catch { /* it will compile when first drawn instead */ }
+      // a compile that never answers (a lost context) must not hold the queue for ever
+      try { await Promise.race([bake.compile(), new Promise<void>((resolve) => setTimeout(resolve, COMPILE_TIMEOUT_MS))]) } catch { /* it will compile when first drawn instead */ }
       job.compiled = true
     })()
     return
@@ -194,8 +213,15 @@ export function tickSurfaces() {
   // a planet someone is waiting for gets a few bands per frame (about 24 ms), so it is ready in a handful of frames even when the
   // page runs slowly; background work stays at one small band per frame
   const t0 = performance.now()
-  do job.bake.step()
-  while (job.priority && !job.bake.done && performance.now() - t0 < PRIORITY_BUDGET_MS)
+  try {
+    do job.bake.step()
+    while (job.priority && !job.bake.done && performance.now() - t0 < PRIORITY_BUDGET_MS)
+  } catch {
+    // the bake failed (no usable graphics, a lost context): give this planet up for a while, instead of failing again every frame
+    job.entry.retryAt = performance.now() + RETRY_AFTER_MS
+    dropCurrent()
+    return
+  }
   if (!job.bake.done) return
 
   current = null

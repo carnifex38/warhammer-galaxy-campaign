@@ -159,7 +159,8 @@ export function useEventConfig(canHost = true, token?: string) {
             locked: parseLocked(s.locked as string[]),
           }
           synced.current = JSON.stringify(next)
-          setConfig(next.config); setHulks(next.hulks); setInfoOverrides(next.info); setLocked(next.locked)
+          const keep = <T,>(now: T, fresh: T): T => (JSON.stringify(now) === JSON.stringify(fresh) ? now : fresh)
+          setConfig((c) => keep(c, next.config)); setHulks((h) => keep(h, next.hulks)); setInfoOverrides((o) => keep(o, next.info)); setLocked((l) => keep(l, next.locked))
         } else if (!gmToken) {
           // nothing published yet: players see the built-in galaxy, not a stale copy
           synced.current = ''
@@ -220,6 +221,8 @@ export function useEventConfig(canHost = true, token?: string) {
   return {
     sync,
     config,
+    /** what the host has rewritten in the information windows (changes only when it does, so screens can rebuild only then) */
+    infoOverrides,
     hulks,
     sectors,
     visibleSectors,

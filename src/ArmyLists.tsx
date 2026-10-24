@@ -32,10 +32,12 @@ const newId = () => Math.random().toString(36).slice(2, 10)
 const when = (t: number) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** One army list: folded to its name, era and points; opens to show what is in it; changed only after pressing Edit. */
-function ArmyCard({ a, open, editing, onToggle, onEdit, onChange, onRemove }: {
+function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemove }: {
   a: Army
   open: boolean
   editing: boolean
+  /** changes when the lists were put back to the saved copy: the army builder is opened afresh then */
+  undone: number
   onToggle: () => void
   onEdit: (on: boolean) => void
   onChange: (patch: Partial<Army>) => void
@@ -68,7 +70,7 @@ function ArmyCard({ a, open, editing, onToggle, onEdit, onChange, onRemove }: {
             : a.notes.trim() && <p className="army-notes">{a.notes}</p>}
           {a.era === '30k' ? (
             <Suspense fallback={<p className="muted">Opening the list…</p>}>
-              <ArmyBuilder stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
+              <ArmyBuilder key={undone} stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
             </Suspense>
           ) : (
             <p className="muted army-build-note">The army builder for 40K is coming. For now, use the notes.</p>
@@ -97,7 +99,8 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
   const [error, setError] = useState('')
   const [openIds, setOpenIds] = useState<string[]>([]) // lists are folded away until opened
   const [editIds, setEditIds] = useState<string[]>([]) // and can only be changed after pressing Edit
-  const dirty = JSON.stringify(armies) !== JSON.stringify(saved)
+  const [undone, setUndone] = useState(0) // counts "Undo changes", so the army builders reload what was put back
+  const dirty = useMemo(() => JSON.stringify(armies) !== JSON.stringify(saved), [armies, saved])
 
   const edit = (id: string, patch: Partial<Army>) => { setArmies((a) => a.map((x) => (x.id === id ? { ...x, ...patch } : x))); setError('') }
   const run = async (job: () => Promise<void>) => {
@@ -128,6 +131,7 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
           a={a}
           open={openIds.includes(a.id)}
           editing={editIds.includes(a.id)}
+          undone={undone}
           onToggle={() => setOpenIds((l) => (l.includes(a.id) ? l.filter((x) => x !== a.id) : [...l, a.id]))}
           onEdit={(on) => { setEditIds((l) => (on ? [...l, a.id] : l.filter((x) => x !== a.id))); if (on) setOpenIds((l) => (l.includes(a.id) ? l : [...l, a.id])) }}
           onChange={(patch) => edit(a.id, patch)}
@@ -138,7 +142,7 @@ function ProfileEditor({ profile, who, onSave, onDelete }: {
       <div className="prof-actions">
         <button className="ghost" onClick={() => { const id = newId(); setArmies((l) => [...l, { id, name: '', era: '40k', notes: '' }]); setOpenIds((l) => [...l, id]); setEditIds((l) => [...l, id]) }} disabled={armies.length >= 60}>+ Add army</button>
         <span className="spacer" />
-        {dirty && <button className="ghost" onClick={() => { setArmies(saved); setError('') }} disabled={busy}>Undo changes</button>}
+        {dirty && <button className="ghost" onClick={() => { setArmies(saved); setUndone((n) => n + 1); setError('') }} disabled={busy}>Undo changes</button>}
         <button className="primary" onClick={save} disabled={!dirty || busy}>{busy ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
       </div>
       {error && <p className="login-error" role="alert">{error}</p>}
@@ -215,6 +219,7 @@ function ProfileRow({ summary, backend, mine, open, onToggle, onChanged }: {
     if (!open) return
     let live = true
     setError('')
+    setProfile(null) // load it afresh: the editor copies the lists once, so a stale copy would be edited and saved over newer work
     backend.get(summary.id).then((p) => { if (live) setProfile(p) }).catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not open that profile.') })
     return () => { live = false }
   }, [open, summary.id, backend])
@@ -308,13 +313,14 @@ function AllProfiles({ auth, token }: { auth: AuthApi; token: string | null }) {
 /** A list opened from a battlezone: read-only, with a way back to where the player was. */
 function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: ClaimsApi; onClose: () => void; onBack: () => void }) {
   const [list, setList] = useState<SeatList | null>(null)
+  const [loads, setLoads] = useState(0) // counts loads, so the army builder is opened afresh on each
   const [error, setError] = useState('')
   // load again whenever the seat changes (the player edits a live list, or the gamemaster locks or reopens the battlezone)
   const seat = claims.seatsOf(v.tableId).find((x) => x.profileId === v.profileId)
   const key = `${claims.statusOf(v.tableId)}|${seat?.armyId}|${seat?.armyName}|${seat?.pts}|${seat?.team}|${seat ? 1 : 0}`
   useEffect(() => {
     let live = true
-    claims.loadList(v.tableId, v.profileId).then((l) => { if (live) { setList(l); setError('') } }).catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not open that list.') })
+    claims.loadList(v.tableId, v.profileId).then((l) => { if (live) { setList(l); setLoads((n) => n + 1); setError('') } }).catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not open that list.') })
     return () => { live = false }
   }, [v.tableId, v.profileId, key]) // eslint-disable-line react-hooks/exhaustive-deps
   const stored = list?.roster as StoredRoster | null | undefined
@@ -336,7 +342,7 @@ function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: Claims
         <>
           {list.notes.trim() && <p className="army-notes">{list.notes}</p>}
           {list.era === '30k' && stored
-            ? <Suspense fallback={<p className="muted">Opening the list…</p>}><ArmyBuilder stored={stored} name={list.name} editing={false} onChange={() => undefined} /></Suspense>
+            ? <Suspense fallback={<p className="muted">Opening the list…</p>}><ArmyBuilder key={loads} stored={stored} name={list.name} editing={false} onChange={() => undefined} /></Suspense>
             : !list.notes.trim() && <p className="muted">This list has no units written down.</p>}
         </>
       )}
