@@ -364,7 +364,7 @@ button { font: inherit; color: inherit; }
 .hidden-tag { font-style: normal; margin-left: 8px; font-size: 0.8rem; }
 
 /* ---------- Host: collapsible sectors ---------- */
-.host-top { display: flex; flex-wrap: wrap; gap: 8px; }
+.host-top { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .sector-toggle {
   display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 44px; padding: 0; text-align: left;
   background: none; border: 0; cursor: pointer; color: inherit;

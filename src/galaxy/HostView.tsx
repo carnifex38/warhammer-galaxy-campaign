@@ -39,6 +39,8 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
         Choose what is shown in each sector, what is in play, and what players are allowed to read. Changes show up on the galaxy straight away.
         They are saved on the live-event server, so players' phones follow them live; hidden planets and sections are never sent to players.
       </p>
+      <SaveLoad token={events.token} />
+
       <div className="host-top">
         <button className="ghost" onClick={() => { if (window.confirm('Reset everything to defaults? Planets shown or hidden, battlezone counts, locks, space hulks and every information text you have written will be put back.')) events.reset() }}>Reset everything to defaults</button>
         <button className="ghost" onClick={() => setOpenSectors(events.sectors.map((x) => x.id))}>Expand all</button>
@@ -72,8 +74,6 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
           </div>
         ))}
       </section>
-
-      <SaveLoad token={events.token} />
 
       <section className="host-sector">
         <div className="hulk-controls">
