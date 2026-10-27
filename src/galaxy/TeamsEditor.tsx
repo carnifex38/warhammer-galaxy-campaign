@@ -35,8 +35,8 @@ function TeamRow({ id, events }: { id: TeamId; events: EventApi }) {
 export default function TeamsEditor({ events }: { events: EventApi }) {
   return (
     <section className="host-sector">
-      <div className="hulk-controls" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-        <span className="pname">
+      <div className="team-panel">
+        <span className="team-title">
           Teams
           <small className="muted" style={{ display: 'block' }}>The name and colour of each side, on the map, the seats and the Territory page. The 3D map picks up a new colour when you go back to it.</small>
         </span>
