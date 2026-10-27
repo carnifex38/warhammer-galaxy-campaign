@@ -17,10 +17,11 @@ function currentEra(): Era {
 
 interface Row extends Holder { planet: Planet; sector: Sector; total: number }
 
-export default function TerritoryView({ events, claims, initialTeam, onOpenPlanet }: {
+export default function TerritoryView({ events, claims, initialTeam, onBack, onOpenPlanet }: {
   events: EventApi
   claims: ClaimsApi
   initialTeam: TeamId
+  onBack: () => void
   onOpenPlanet: (sectorId: string, planetId: string) => void
 }) {
   const [team, setTeam] = useState<TeamId>(initialTeam)
@@ -47,6 +48,7 @@ export default function TerritoryView({ events, claims, initialTeam, onOpenPlane
 
   return (
     <div className="terr">
+      <button className="ghost" onClick={onBack}>‹ Back to the galaxy</button>
       <h2>Territory</h2>
       <p className="muted terr-note">A team holds a planet once every battlezone on it has a winner and the team won more of them than the other team.</p>
 

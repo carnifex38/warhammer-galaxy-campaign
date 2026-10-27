@@ -19,9 +19,9 @@ const TerritoryView = lazy(() => import('./TerritoryView'))
 
 type TabId = 'galaxy' | 'territory' | 'lists' | 'calendar' | 'host' | 'options'
 
-const TABS: { id: TabId; label: string; icon: string; roles: Role[] }[] = [
+const TABS: { id: TabId; label: string; icon: string; roles: Role[]; /** reachable only from elsewhere (no button in the menu) */ hidden?: boolean }[] = [
   { id: 'galaxy', label: 'Galaxy', icon: '✦', roles: ['guest', 'player', 'gm'] },
-  { id: 'territory', label: 'Territory', icon: '\u2691', roles: ['guest', 'player', 'gm'] },
+  { id: 'territory', label: 'Territory', icon: '\u2691', roles: ['guest', 'player', 'gm'], hidden: true },
   { id: 'lists', label: 'Army Lists', icon: '☰', roles: ['player', 'gm'] },
   { id: 'calendar', label: 'Calendar', icon: '\u25a6', roles: ['guest', 'player', 'gm'] },
   { id: 'host', label: 'Host', icon: '\u2699', roles: ['gm'] },
@@ -95,10 +95,10 @@ export default function App() {
       </header>
 
       <nav className="nav" aria-label="Main">
-        {tabs.map((t) => (
+        {tabs.filter((t) => !t.hidden).map((t) => (
           <button
             key={t.id}
-            className={t.id === activeId ? 'active' : ''}
+            className={t.id === activeId || (activeId === 'territory' && t.id === 'galaxy') ? 'active' : ''}
             aria-current={t.id === activeId ? 'page' : undefined}
             onClick={() => setTab(t.id)}
           >
@@ -131,6 +131,7 @@ export default function App() {
               events={events}
               claims={claims}
               initialTeam={territoryTeam}
+              onBack={() => setTab('galaxy')}
               onOpenPlanet={(sector, planet) => { galaxySel.current = { sector, planet, table: null }; setTab('galaxy') }}
             />
           </Suspense>
