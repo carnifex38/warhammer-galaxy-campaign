@@ -1031,7 +1031,7 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
             <HulkMarker hot={hot} enabled={enabled} compact={compact} />
           ) : (
             <>
-              {holder && <HolderRing team={holder} radius={0.3 + (compact ? 0.06 : showLabel ? 0.2 : 0.11) * 1.3} />}
+              {holder && <HolderRing team={holder} radius={0.04 + (compact ? 0.06 : showLabel ? 0.2 : 0.11) * 1.8} />}
               <mesh geometry={PIN_GEOMETRY} renderOrder={focus ? 5 : 1} scale={(compact ? 0.06 : showLabel ? 0.2 : 0.11) * (hot ? 2.2 : 1) * (enabled ? 1 : 0.7)}>
                 <meshBasicMaterial color={!enabled ? '#4b5064' : hot ? '#ffffff' : color} transparent />
               </mesh>
