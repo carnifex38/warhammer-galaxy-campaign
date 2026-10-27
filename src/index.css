@@ -931,3 +931,5 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .team-colours input[type='color'] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; }
 .team-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
 .team-title { font-weight: 600; }
+.host-sector > .hulk-controls { padding: 10px 14px; }
+.host-sector > .hulk-controls + .hulk-controls { padding-top: 0; }
