@@ -19,7 +19,14 @@ import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
 import { GALAXY_BOX, bbox, isHulkId, openCount, toWorld, type Planet, type Sector } from './data'
 
-export interface PlanetInfo { enabled: boolean; open: number; total: number; zonesHidden?: boolean }
+export interface PlanetInfo {
+  enabled: boolean
+  open: number
+  total: number
+  zonesHidden?: boolean
+  /** the team that holds the planet (it won most of its battlezones, and every battlezone has a winner), or null */
+  holder?: 'A' | 'B' | null
+}
 
 interface Props {
   sectorId: string | null
@@ -971,11 +978,30 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
   return <group ref={group}>{children}</group>
 }
 
+/** The colours of the two teams on the map: the ring under a planet a team holds. */
+const HOLDER_COLOR = { A: '#3d8bff', B: '#ff4141' } as const
+const HOLDER_RING = new THREE.RingGeometry(0.84, 1, 56).rotateX(-Math.PI / 2)
+const HOLDER_DISC = new THREE.CircleGeometry(1, 56).rotateX(-Math.PI / 2)
+
+/** A flat ring (and a faint disc inside it) lying under a planet, in the colour of the team that holds it. */
+function HolderRing({ team, radius }: { team: 'A' | 'B'; radius: number }) {
+  return (
+    <group position={[0, -0.1, 0]} scale={radius}>
+      <mesh geometry={HOLDER_DISC} renderOrder={3}>
+        <meshBasicMaterial color={HOLDER_COLOR[team]} transparent opacity={0.16} depthWrite={false} toneMapped={false} />
+      </mesh>
+      <mesh geometry={HOLDER_RING} renderOrder={4}>
+        <meshBasicMaterial color={HOLDER_COLOR[team]} transparent opacity={0.95} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  )
+}
+
 /** One unit sphere shared by every planet dot (sized by scale), so picking a planet does not rebuild a hundred little spheres. */
 const PIN_GEOMETRY = new THREE.SphereGeometry(1, 20, 20)
 
-function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, zone, held, shields, shieldTotal, majority, onSelect }: {
-  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
+function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, enabled, holder, zone, held, shields, shieldTotal, majority, onSelect }: {
+  p: Planet; color: string; era: Era; selected: boolean; showLabel: boolean; focus: boolean; compact: boolean; hot: boolean; enabled: boolean; holder: 'A' | 'B' | null; zone: { id: string; name: string; live?: boolean } | null; held: { id: string; name: string }[]; shields: ShieldZone[]; shieldTotal: number; majority: PlanetShieldInfo | null; onSelect: () => void
 }) {
   // the reticle needs a round planet to sit on (not a hulk, the Rock or a shattered world)
   const { planetDisplay, spaceCombat } = useOptions()
@@ -1004,9 +1030,12 @@ function PlanetPin({ p, color, era, selected, showLabel, focus, compact, hot, en
           {isHulkId(p.id) ? (
             <HulkMarker hot={hot} enabled={enabled} compact={compact} />
           ) : (
-            <mesh geometry={PIN_GEOMETRY} renderOrder={focus ? 5 : 1} scale={(compact ? 0.06 : showLabel ? 0.2 : 0.11) * (hot ? 2.2 : 1) * (enabled ? 1 : 0.7)}>
-              <meshBasicMaterial color={!enabled ? '#4b5064' : hot ? '#ffffff' : color} transparent />
-            </mesh>
+            <>
+              {holder && <HolderRing team={holder} radius={0.3 + (compact ? 0.06 : showLabel ? 0.2 : 0.11) * 1.3} />}
+              <mesh geometry={PIN_GEOMETRY} renderOrder={focus ? 5 : 1} scale={(compact ? 0.06 : showLabel ? 0.2 : 0.11) * (hot ? 2.2 : 1) * (enabled ? 1 : 0.7)}>
+                <meshBasicMaterial color={!enabled ? '#4b5064' : hot ? '#ffffff' : color} transparent />
+              </mesh>
+            </>
           )}
           {/* zoomed in close, the dot gives way to the planet's own surface */}
           {roundWorld && enabled && planetDisplay !== 'dots' && <PlanetLod name={p.name} era={era} radius={0.24} {...(planetDisplay === 'all' ? { far: 1e6, near: 1e5 } : {})} getFade={() => 1 - (1 - OTHERS_LEFT) * backdropLevel.v} />}
@@ -1322,6 +1351,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
                 compact={!!planetId}
                 hot={p.id === hoverPlanetId}
                 enabled={planetInfo[p.id]?.enabled !== false}
+                holder={planetInfo[p.id]?.holder ?? null}
                 zone={p.id === planetId ? hoverZone ?? null : null}
                 held={p.id === planetId ? playZones ?? [] : []}
                 shields={p.id === planetId ? shieldZones ?? [] : []}

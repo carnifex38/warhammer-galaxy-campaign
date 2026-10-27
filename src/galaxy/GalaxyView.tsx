@@ -117,11 +117,27 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
     for (const s of SECTORS) {
       for (const p of s.planets) {
         const v = viewOf(p)
-        out[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden: events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden }
+        const zonesHidden = events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden
+        // who holds the planet: the team with more of its battlezones, once every battlezone has a winner (a tie is not decided).
+        // A restricted planet, or one whose battlezones are not revealed, shows no holder.
+        let holder: 'A' | 'B' | null = null
+        if (v.enabled && !zonesHidden && v.tables.length > 0) {
+          const won = v.tables.map((t) => claims.winnerOf(t.id)?.team)
+          if (won.every((w) => w)) {
+            const a = won.filter((w) => w === 'A').length
+            const b = won.length - a
+            if (a !== b) holder = a > b ? 'A' : 'B'
+          }
+        }
+        out[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden, holder }
       }
     }
     return out
   }, [SECTORS, events.infoOverrides, events.hostPreview, claims.claims]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // how many planets each team holds (for the key on the map)
+  const holding = { A: 0, B: 0 }
+  for (const info of Object.values(planetInfo)) if (info.holder) holding[info.holder]++
 
   // what is picked has to still be there: a sector the host has locked, or a planet the host has hidden, since it was picked
   useEffect(() => {
@@ -276,6 +292,12 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
           <span className="era-caption">{ERA_LABEL[shownEra]}</span>
         </div>
         <div className={`era-fade${fading ? ' on' : ''}`} aria-hidden="true" />
+        {(holding.A > 0 || holding.B > 0) && (
+          <div className="holder-key" role="group" aria-label="Planets held">
+            <span><i className="a" aria-hidden="true" />Team A holds {holding.A}</span>
+            <span><i className="b" aria-hidden="true" />Team B holds {holding.B}</span>
+          </div>
+        )}
         {events.hostPreview && (
           <div className="preview-banner" role="status">
             <span>Host preview: you can see everything</span>
