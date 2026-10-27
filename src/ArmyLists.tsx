@@ -4,6 +4,7 @@ import type { AuthApi } from './auth'
 import { DEV_PLAYER_ID, local } from './localProfiles' // DEV-TOOLS
 import type { StoredRoster } from './builder/ArmyBuilder'
 import type { ClaimsApi, SeatList, Viewing } from './claims'
+import { useTeams } from './teams'
 
 // the army builder (and the rules data it reads) only downloads when someone opens it
 const ArmyBuilder = lazy(() => import('./builder/ArmyBuilder'))
@@ -312,6 +313,7 @@ function AllProfiles({ auth, token }: { auth: AuthApi; token: string | null }) {
 
 /** A list opened from a battlezone: read-only, with a way back to where the player was. */
 function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: ClaimsApi; onClose: () => void; onBack: () => void }) {
+  const teams = useTeams()
   const [list, setList] = useState<SeatList | null>(null)
   const [loads, setLoads] = useState(0) // counts loads, so the army builder is opened afresh on each
   const [error, setError] = useState('')
@@ -329,7 +331,7 @@ function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: Claims
       <header className="viewed-head">
         <div>
           <h3>{list?.name?.trim() || 'Army list'}</h3>
-          <p className="muted">{v.player} · Team {list?.team ?? v.team} · {v.where}{list ? (list.locked ? ' · locked: the battlezone is in play' : ' · live: updates until the battlezone is in play') : ''}</p>
+          <p className="muted">{v.player} · {teams[list?.team ?? v.team].name} · {v.where}{list ? (list.locked ? ' · locked: the battlezone is in play' : ' · live: updates until the battlezone is in play') : ''}</p>
         </div>
         <div className="viewed-actions">
           <button className="primary" onClick={onBack}>Back to the battlezone</button>

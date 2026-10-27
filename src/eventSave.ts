@@ -10,7 +10,7 @@ export interface EventSave {
   version: number
   exportedAt: string
   /** the event's setup, or null when nothing had been set up */
-  setup: { config: Record<string, unknown>; hulks: Record<string, unknown>; info: Record<string, unknown>; locked: unknown[] } | null
+  setup: { config: Record<string, unknown>; hulks: Record<string, unknown>; info: Record<string, unknown>; locked: unknown[]; teams?: unknown } | null
   battlezones: Record<string, { status: string; winner: string | null; seats: unknown[] }>
   calendar: { name: string; date: string; planets: { players?: unknown[] }[] }[]
 }
@@ -89,14 +89,14 @@ async function call<T>(path: string, token: string, init: RequestInit = {}): Pro
 
 // ---- the practice data of the developer gamemaster (DEV-TOOLS) ----
 
-const LOCAL = { config: 'galaxy-event-config', hulks: 'galaxy-hulks', info: 'galaxy-info', locked: 'galaxy-locked', claims: 'galaxy-dev-claims', calendar: 'galaxy-dev-calendar' }
+const LOCAL = { config: 'galaxy-event-config', hulks: 'galaxy-hulks', info: 'galaxy-info', locked: 'galaxy-locked', teams: 'galaxy-teams', claims: 'galaxy-dev-claims', calendar: 'galaxy-dev-calendar' }
 const readLocal = <T,>(key: string, empty: T): T => { try { return (JSON.parse(localStorage.getItem(key) ?? 'null') as T | null) ?? empty } catch { return empty } }
 const writeLocal = (key: string, value: unknown) => { try { localStorage.setItem(key, JSON.stringify(value)) } catch { throw new Error('This browser has no room to keep that.') } }
 
 function exportLocal(): EventSave {
   return {
     format: SAVE_FORMAT, version: 1, exportedAt: new Date().toISOString(),
-    setup: { config: readLocal(LOCAL.config, {}), hulks: readLocal(LOCAL.hulks, {}), info: readLocal(LOCAL.info, {}), locked: readLocal(LOCAL.locked, []) },
+    setup: { config: readLocal(LOCAL.config, {}), hulks: readLocal(LOCAL.hulks, {}), info: readLocal(LOCAL.info, {}), locked: readLocal(LOCAL.locked, []), teams: readLocal(LOCAL.teams, null) },
     battlezones: readLocal(LOCAL.claims, {}),
     calendar: readLocal(LOCAL.calendar, []),
   }
@@ -108,6 +108,7 @@ function importLocal(save: EventSave, parts: SaveParts): SaveReport {
     writeLocal(LOCAL.hulks, save.setup?.hulks ?? {})
     writeLocal(LOCAL.info, save.setup?.info ?? {})
     writeLocal(LOCAL.locked, save.setup?.locked ?? [])
+    writeLocal(LOCAL.teams, save.setup?.teams ?? null)
   }
   if (parts.battlezones) writeLocal(LOCAL.claims, save.battlezones)
   if (parts.calendar) writeLocal(LOCAL.calendar, save.calendar)

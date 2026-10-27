@@ -705,8 +705,8 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 
 /* the "void shield" banner */
 .shield-banner { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; padding: 6px 16px; border-radius: 8px; font: 600 0.8rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: 0.08em; background: rgba(6, 12, 24, 0.8); border: 1px solid currentColor; pointer-events: none; }
-.shield-banner.team-A { color: #38c6ff; box-shadow: 0 0 14px rgba(56, 198, 255, 0.35); }
-.shield-banner.team-B { color: #ff7a3a; box-shadow: 0 0 14px rgba(255, 122, 58, 0.35); }
+.shield-banner.team-A { color: var(--team-a-text, #38c6ff); box-shadow: 0 0 14px rgba(var(--team-a-rgb, 56, 198, 255), 0.35); }
+.shield-banner.team-B { color: var(--team-b-text, #ff7a3a); box-shadow: 0 0 14px rgba(var(--team-b-rgb, 255, 122, 58), 0.35); }
 
 .seat-result { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 0.8rem; }
 .seat-result span { flex: 1; color: var(--muted); }
@@ -715,8 +715,8 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .seat-won { margin: 0 0 8px; font-size: 0.78rem; color: var(--gold); }
 
 .badge.won { border-color: currentColor; background: transparent; font-weight: 600; white-space: nowrap; }
-.badge.won.team-A { color: #6fd0ff; }
-.badge.won.team-B { color: #ff9a5c; }
+.badge.won.team-A { color: var(--team-a-text, #6fd0ff); }
+.badge.won.team-B { color: var(--team-b-text, #ff9a5c); }
 
 /* ---------- Options ---------- */
 .options-body { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
@@ -898,3 +898,38 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .save-ok { margin: 0 14px 14px; color: var(--ok); }
 .save-reload { margin: 0 14px 14px; }
 .save-load .login-error { margin: 0 14px 14px; }
+
+/* the key on the map for the rings under planets a team holds: tap it to open the Territory page */
+.holder-key { position: absolute; left: 12px; bottom: 12px; z-index: 5; display: flex; flex-direction: column; gap: 2px; min-width: 150px; padding: 6px 8px; border-radius: 10px; background: rgba(6, 12, 24, 0.8); border: 1px solid var(--line); font-size: 0.8rem; }
+.holder-row { display: flex; align-items: center; gap: 8px; padding: 4px 4px; border-radius: 6px; background: transparent; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.holder-row:hover { background: rgba(255, 255, 255, 0.07); }
+.holder-key i, .terr-tab i { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid; background: transparent; }
+.holder-row.a i, .terr-tab.a i { border-color: var(--team-a, #3d8bff); box-shadow: 0 0 8px rgba(var(--team-a-rgb, 61, 139, 255), 0.6); }
+.holder-row.b i, .terr-tab.b i { border-color: var(--team-b, #ff4141); box-shadow: 0 0 8px rgba(var(--team-b-rgb, 255, 65, 65), 0.6); }
+
+/* the Territory page */
+.terr { max-width: 760px; margin: 0 auto; }
+.terr-note { margin: 0 0 14px; font-size: 0.9rem; }
+.terr-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.terr-tab { display: flex; align-items: center; gap: 12px; padding: 12px 14px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: inherit; font: inherit; cursor: pointer; }
+.terr-tab i { width: 18px; height: 18px; }
+.terr-tab span { display: flex; flex-direction: column; }
+.terr-tab strong { font-size: 1.05rem; }
+.terr-tab em { font-style: normal; font-size: 0.85rem; color: var(--muted); }
+.terr-tab:hover { border-color: rgba(255, 255, 255, 0.3); }
+.terr-tab.on.a { border-color: var(--team-a, #3d8bff); background: rgba(var(--team-a-rgb, 61, 139, 255), 0.14); }
+.terr-tab.on.b { border-color: var(--team-b, #ff4141); background: rgba(var(--team-b-rgb, 255, 65, 65), 0.14); }
+.terr-none { padding: 22px 16px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+
+/* Host tab: naming and colouring the two teams */
+.team-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.team-dot { flex: none; width: 18px; height: 18px; border-radius: 50%; }
+.team-name { flex: 1 1 160px; min-width: 0; max-width: 260px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: inherit; font: inherit; }
+.team-colours { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.swatch.on { border-color: #fff; }
+.team-colours input[type='color'] { width: 34px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; }
+.team-panel { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
+.team-title { font-weight: 600; }
+.host-sector > .hulk-controls { padding: 10px 14px; }
+.host-sector > .hulk-controls + .hulk-controls { padding-top: 0; }

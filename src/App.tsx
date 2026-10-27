@@ -8,6 +8,7 @@ import { useClaims, type Viewing } from './claims'
 import { useCalendar } from './calendar'
 import { useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
+import { TeamsProvider, setTeamsNow, teamVars } from './teams'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
@@ -15,11 +16,13 @@ const HostView = lazy(() => import('./galaxy/HostView'))
 const ArmyLists = lazy(() => import('./ArmyLists'))
 const OptionsView = lazy(() => import('./OptionsView'))
 const CalendarView = lazy(() => import('./CalendarView'))
+const TerritoryView = lazy(() => import('./TerritoryView'))
 
-type TabId = 'galaxy' | 'lists' | 'calendar' | 'host' | 'options'
+type TabId = 'galaxy' | 'territory' | 'lists' | 'calendar' | 'host' | 'options'
 
-const TABS: { id: TabId; label: string; icon: string; roles: Role[] }[] = [
+const TABS: { id: TabId; label: string; icon: string; roles: Role[]; /** reachable only from elsewhere (no button in the menu) */ hidden?: boolean }[] = [
   { id: 'galaxy', label: 'Galaxy', icon: '✦', roles: ['guest', 'player', 'gm'] },
+  { id: 'territory', label: 'Territory', icon: '\u2691', roles: ['guest', 'player', 'gm'], hidden: true },
   { id: 'lists', label: 'Army Lists', icon: '☰', roles: ['player', 'gm'] },
   { id: 'calendar', label: 'Calendar', icon: '\u25a6', roles: ['guest', 'player', 'gm'] },
   { id: 'host', label: 'Host', icon: '\u2699', roles: ['gm'] },
@@ -51,6 +54,8 @@ export default function App() {
   const updateReady = useUpdateReady()
   // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
   const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
+  // which team's tab the Territory page opens on (chosen from the key on the galaxy map)
+  const [territoryTeam, setTerritoryTeam] = useState<'A' | 'B'>('A')
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
   const [viewing, setViewing] = useState<Viewing | null>(null)
   const galaxySel = useRef<GalaxySelection | undefined>(undefined)
@@ -62,6 +67,8 @@ export default function App() {
   // the server no longer accepts this gamemaster login (the password was changed): back to the login screen
   useEffect(() => { if (denied) auth.logout() }, [denied])
 
+  setTeamsNow(events.teams) // for the 3D scenes, which cannot read the context
+
   if (!auth.session) return <LoginScreen auth={auth} />
 
   // each role sees only its own tabs
@@ -70,7 +77,8 @@ export default function App() {
   const current = tabs.find((t) => t.id === activeId)!
 
   return (
-    <div className="shell">
+    <TeamsProvider value={events.teams}>
+    <div className="shell" style={teamVars(events.teams)}>
       {updateReady && (
         <div className="update-bar" role="status">
           A new version of the site is ready.
@@ -91,10 +99,10 @@ export default function App() {
       </header>
 
       <nav className="nav" aria-label="Main">
-        {tabs.map((t) => (
+        {tabs.filter((t) => !t.hidden).map((t) => (
           <button
             key={t.id}
-            className={t.id === activeId ? 'active' : ''}
+            className={t.id === activeId || (activeId === 'territory' && t.id === 'galaxy') ? 'active' : ''}
             aria-current={t.id === activeId ? 'page' : undefined}
             onClick={() => setTab(t.id)}
           >
@@ -113,9 +121,22 @@ export default function App() {
               claims={claims}
               calendar={calendar}
               onOpenEvent={(id) => { setCalendarFocus(id); setTab('calendar') }}
+              onOpenHeld={(team) => { setTerritoryTeam(team); setTab('territory') }}
               getInitial={() => galaxySel.current}
               onSelect={(s) => { galaxySel.current = s }}
               onViewList={(v) => { setViewing(v); setTab('lists') }}
+            />
+          </Suspense>
+        </main>
+      ) : activeId === 'territory' ? (
+        <main className="content">
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <TerritoryView
+              events={events}
+              claims={claims}
+              initialTeam={territoryTeam}
+              onBack={() => setTab('galaxy')}
+              onOpenPlanet={(sector, planet) => { galaxySel.current = { sector, planet, table: null }; setTab('galaxy') }}
             />
           </Suspense>
         </main>
@@ -159,5 +180,6 @@ export default function App() {
         </main>
       )}
     </div>
+    </TeamsProvider>
   )
 }

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { dayKey, MAX_EVENT_PLANETS, type CalendarApi, type CalendarEvent, type EventDraft } from './calendar'
-import { usePortrait } from './planetPortrait'
+import Portrait from './Portrait'
 import type { Planet, Sector } from './galaxy/data'
 import type { EventApi } from './galaxy/eventConfig'
-import { lookFor, type Era } from './galaxy/planetLooks'
+import type { Era } from './galaxy/planetLooks'
 
 // The calendar: a month of boxes (the event names show in them on a computer; on a phone the days carry dots and the events are listed
 // below), and an event opens to the list of planets being fought over: portrait, sector, and how many players are going. Tapping a
@@ -36,19 +36,6 @@ function monthWeeks(first: Date): Date[][] {
 }
 
 interface Found { planet: Planet; sector: Sector }
-
-/** A planet's portrait: the real picture once it is drawn, a disc in the planet's colours until then. */
-function Portrait({ planet, era, size = 64 }: { planet: Planet; era: Era; size?: number }) {
-  const url = usePortrait(planet.name, era)
-  const look = lookFor(planet.name, era)
-  return (
-    <span
-      className="cal-portrait"
-      style={{ width: size, height: size, background: url ? `center / cover url(${url})` : `radial-gradient(circle at 35% 30%, ${look.landB}, ${look.landA} 55%, ${look.deep})` }}
-      aria-hidden="true"
-    />
-  )
-}
 
 export default function CalendarView({ auth, calendar, events, onOpenPlanet, focusId, onFocusUsed }: {
   auth: AuthApi

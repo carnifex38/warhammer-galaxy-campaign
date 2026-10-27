@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { getState, putState, watchState, Unauthorized } from '../api'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
 import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, planetGroup, type GameTable, type Planet, type PlanetGroup, type Sector } from './data'
+import { DEFAULT_TEAMS, parseTeams, type TeamId, type TeamLook, type Teams } from '../teams'
 
 // What the event host has set up: which planets and hulks are shown, in play, how many battlezones they have,
 // what players may read about them, and which sectors are locked.
@@ -15,6 +16,7 @@ const HULK_KEY = 'galaxy-hulk' // the old single-hulk setting, read once to carr
 const HULKS_KEY = 'galaxy-hulks'
 const INFO_KEY = 'galaxy-info'
 const LOCKED_KEY = 'galaxy-locked'
+const TEAMS_KEY = 'galaxy-teams'
 const PREVIEW_KEY = 'galaxy-host-preview'
 /** shown: on the sector map at all. enabled: in play (battlezones to claim). tables: how many battlezones. */
 export interface PlanetSetting { enabled: boolean; tables: number; visible: boolean }
@@ -66,6 +68,10 @@ function loadInfo(): InfoOverrides {
 }
 
 const parseLocked = (ids: string[]): string[] => ids.filter((id) => SECTORS.some((s) => s.id === id))
+
+function loadTeams(): Teams {
+  try { return parseTeams(JSON.parse(localStorage.getItem(TEAMS_KEY) ?? 'null')) } catch { return DEFAULT_TEAMS }
+}
 
 function loadLocked(): string[] {
   try {
@@ -119,6 +125,7 @@ export function useEventConfig(canHost = true, token?: string) {
   const [hulks, setHulks] = useState<HulkCounts>(loadHulks)
   const [infoOverrides, setInfoOverrides] = useState<InfoOverrides>(loadInfo)
   const [locked, setLocked] = useState<string[]>(loadLocked)
+  const [teams, setTeams] = useState<Teams>(loadTeams)
   const [sync, setSync] = useState<SyncStatus>('loading')
   // the last state this device and the server agree on (as JSON), and whether the gamemaster has caught up with the server
   const synced = useRef('')
@@ -138,6 +145,7 @@ export function useEventConfig(canHost = true, token?: string) {
   useEffect(() => save(HULKS_KEY, hulks), [hulks])
   useEffect(() => save(INFO_KEY, infoOverrides), [infoOverrides])
   useEffect(() => save(LOCKED_KEY, locked), [locked])
+  useEffect(() => save(TEAMS_KEY, teams), [teams])
   useEffect(() => { try { localStorage.setItem(PREVIEW_KEY, previewOn ? 'yes' : 'no') } catch { /* not remembered */ } }, [previewOn])
 
   // pull the event from the server: once for the gamemaster, and live for everyone else
@@ -157,14 +165,15 @@ export function useEventConfig(canHost = true, token?: string) {
             hulks: parseHulks(s.hulks as Record<string, number>),
             info: s.info as InfoOverrides,
             locked: parseLocked(s.locked as string[]),
+            teams: parseTeams(s.teams),
           }
           synced.current = JSON.stringify(next)
           const keep = <T,>(now: T, fresh: T): T => (JSON.stringify(now) === JSON.stringify(fresh) ? now : fresh)
-          setConfig((c) => keep(c, next.config)); setHulks((h) => keep(h, next.hulks)); setInfoOverrides((o) => keep(o, next.info)); setLocked((l) => keep(l, next.locked))
+          setConfig((c) => keep(c, next.config)); setHulks((h) => keep(h, next.hulks)); setInfoOverrides((o) => keep(o, next.info)); setLocked((l) => keep(l, next.locked)); setTeams((t) => keep(t, next.teams))
         } else if (!gmToken) {
           // nothing published yet: players see the built-in galaxy, not a stale copy
           synced.current = ''
-          setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([])
+          setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([]); setTeams(DEFAULT_TEAMS)
         } else {
           synced.current = '' // the server is empty: this gamemaster device's saved setup becomes the event
         }
@@ -186,7 +195,7 @@ export function useEventConfig(canHost = true, token?: string) {
   // gamemaster: send every change to the server
   useEffect(() => {
     if (!gmToken || !caughtUp) return
-    const state = { config, hulks, info: infoOverrides, locked }
+    const state = { config, hulks, info: infoOverrides, locked, teams }
     const json = JSON.stringify(state)
     if (json === synced.current) return
     const t = setTimeout(() => {
@@ -196,7 +205,7 @@ export function useEventConfig(canHost = true, token?: string) {
       )
     }, 400)
     return () => clearTimeout(t)
-  }, [gmToken, caughtUp, config, hulks, infoOverrides, locked])
+  }, [gmToken, caughtUp, config, hulks, infoOverrides, locked, teams])
 
   // every sector as this event has it, hulks included (this is what the host edits)
   const sectors = useMemo<Sector[]>(
@@ -229,6 +238,9 @@ export function useEventConfig(canHost = true, token?: string) {
     sectors,
     visibleSectors,
     locked,
+    /** the two sides: a name and a colour each */
+    teams,
+    setTeam: (id: TeamId, change: Partial<TeamLook>) => setTeams((t) => parseTeams({ ...t, [id]: { ...t[id], ...change } })),
     lockedForPlayers,
     hostPreview,
     setHostPreview,
@@ -301,7 +313,7 @@ export function useEventConfig(canHost = true, token?: string) {
       patch(id, { visible: true, enabled: p.enabled })
       patchInfo(id, p.info)
     },
-    reset: () => { setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([]); setHostPreview(false) },
+    reset: () => { setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([]); setTeams(DEFAULT_TEAMS); setHostPreview(false) },
   }
 }
 

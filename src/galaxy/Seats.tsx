@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Army, ProfileSummary } from '../api'
 import type { AuthApi } from '../auth'
 import { useMyProfile, type ClaimsApi, type Seat, type Team, type Viewing } from '../claims'
+import { useTeams } from '../teams'
 
 // Who is at a battlezone: two sides, and for each player the army list they brought. Players drop in and out freely while the
 // battlezone is open; the gamemaster marks it in play (which freezes the lists) or reopens it. Tapping a player's list opens it
@@ -11,6 +12,7 @@ const TEAMS: Team[] = ['A', 'B']
 
 /** Gamemaster: change a seated player's team or list. The list choices are fetched when the gamemaster asks for them. */
 function GmSeatEdit({ seat, otherTeam, claims, tableId, run, busy }: { seat: Seat; otherTeam: Team; claims: ClaimsApi; tableId: string; run: (job: () => Promise<void>) => Promise<void>; busy: boolean }) {
+  const teams = useTeams()
   const [armies, setArmies] = useState<Army[] | null>(null)
   const [picking, setPicking] = useState(false)
   const pickList = () => {
@@ -19,7 +21,7 @@ function GmSeatEdit({ seat, otherTeam, claims, tableId, run, busy }: { seat: Sea
   }
   return (
     <div className="seat-gm">
-      <button className="ghost" disabled={busy} onClick={() => void run(() => claims.assign(tableId, seat.profileId, otherTeam, seat.armyId))}>Move to Team {otherTeam}</button>
+      <button className="ghost" disabled={busy} onClick={() => void run(() => claims.assign(tableId, seat.profileId, otherTeam, seat.armyId))}>Move to {teams[otherTeam].name}</button>
       {!picking ? (
         <button className="ghost" disabled={busy} onClick={pickList}>Change list</button>
       ) : armies === null ? (
@@ -37,6 +39,7 @@ function GmSeatEdit({ seat, otherTeam, claims, tableId, run, busy }: { seat: Sea
 
 /** Gamemaster: put any player at this battlezone, on a team, with one of their lists. */
 function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: string; claims: ClaimsApi; seatedIds: string[]; run: (job: () => Promise<void>) => Promise<void>; busy: boolean }) {
+  const teams = useTeams()
   const [players, setPlayers] = useState<ProfileSummary[] | null>(null)
   const [profileId, setProfileId] = useState('')
   const [armies, setArmies] = useState<Army[] | null>(null) // null = not loaded yet
@@ -75,7 +78,7 @@ function GmAddPlayer({ tableId, claims, seatedIds, run, busy }: { tableId: strin
             </select>
           ))}
           <div className="seat-sides" role="group" aria-label="Team">
-            {TEAMS.map((t) => <button key={t} className={team === t ? 'on' : ''} aria-pressed={team === t} onClick={() => setTeam(t)}>Team {t}</button>)}
+            {TEAMS.map((t) => <button key={t} className={team === t ? 'on' : ''} aria-pressed={team === t} onClick={() => setTeam(t)}>{teams[t].name}</button>)}
           </div>
           <button className="primary" disabled={busy || !profileId || !armyId} onClick={() => void run(async () => { await claims.assign(tableId, profileId, team, armyId); setProfileId(''); setArmyId(''); setArmies(null); setPlayers(null) })}>Add to Team {team}</button>
         </>
@@ -100,6 +103,7 @@ function SeatRow({ seat, mine, canRead, gm, onView, onRemove, edit }: { seat: Se
 }
 
 export default function Seats({ tableId, where, auth, claims, onView }: { tableId: string; where: string; auth: AuthApi; claims: ClaimsApi; onView: (v: Viewing) => void }) {
+  const teams = useTeams()
   const role = auth.session?.role ?? 'guest'
   const me = useMyProfile(auth)
   const seats = claims.seatsOf(tableId)
@@ -136,16 +140,16 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
       {role === 'gm' && (
         <div className="seat-result">
           <span>Result</span>
-          {TEAMS.map((t) => <button key={t} className={claims.winnerOf(tableId)?.team === t ? 'on' : ''} disabled={busy} onClick={() => void run(() => claims.setWinner(tableId, claims.winnerOf(tableId)?.team === t ? null : t))}>Team {t} won</button>)}
+          {TEAMS.map((t) => <button key={t} className={claims.winnerOf(tableId)?.team === t ? 'on' : ''} disabled={busy} onClick={() => void run(() => claims.setWinner(tableId, claims.winnerOf(tableId)?.team === t ? null : t))}>{teams[t].name} won</button>)}
         </div>
       )}
-      {claims.winnerOf(tableId) && <p className="seat-won">Team {claims.winnerOf(tableId)?.team} won this battlezone. A void shield is up.</p>}
+      {claims.winnerOf(tableId) && <p className="seat-won">{teams[claims.winnerOf(tableId)!.team].name} won this battlezone. A void shield is up.</p>}
       <div className="seat-teams">
         {TEAMS.map((t) => {
           const list = seats.filter((s) => s.team === t)
           return (
             <div key={t} className="seat-team">
-              <h5>Team {t}</h5>
+              <h5>{teams[t].name}</h5>
               {list.length === 0 && <p className="muted">Empty</p>}
               <ul>
                 {list.map((s) => (
@@ -179,10 +183,10 @@ export default function Seats({ tableId, where, auth, claims, onView }: { tableI
             {armies.map((a) => <option key={a.id} value={a.id}>{(a.name || 'Untitled army')} · {a.era.toUpperCase()}</option>)}
           </select>
           <div className="seat-sides" role="group" aria-label="Team">
-            {TEAMS.map((t) => <button key={t} className={chosenTeam === t ? 'on' : ''} aria-pressed={chosenTeam === t} onClick={() => setPickedTeam(t)}>Team {t}</button>)}
+            {TEAMS.map((t) => <button key={t} className={chosenTeam === t ? 'on' : ''} aria-pressed={chosenTeam === t} onClick={() => setPickedTeam(t)}>{teams[t].name}</button>)}
           </div>
           <button className="primary" disabled={busy || !chosen} onClick={() => void run(() => claims.claim(tableId, chosenTeam, chosen))}>
-            {mine ? 'Update my seat' : `Join Team ${chosenTeam}`}
+            {mine ? 'Update my seat' : `Join ${teams[chosenTeam].name}`}
           </button>
           {mine && <button className="ghost" disabled={busy} onClick={() => void run(() => claims.leave(tableId))}>Leave</button>}
         </div>

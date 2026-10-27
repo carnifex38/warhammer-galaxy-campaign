@@ -46,11 +46,12 @@ function loadJson(file, valid, empty) {
 }
 
 // ---- state -----------------------------------------------------------------------------------------------------
-// { config, hulks, info, locked } exactly as the client's useEventConfig keeps it, or null before the gamemaster saves.
+// { config, hulks, info, locked, teams } exactly as the client's useEventConfig keeps it, or null before the gamemaster saves.
 let version = 0
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
-const validState = (s) => isObj(s) && isObj(s.config) && isObj(s.hulks) && isObj(s.info) && Array.isArray(s.locked)
+const validTeam = (t) => isObj(t) && typeof t.name === 'string' && t.name.length <= 24 && /^#[0-9a-f]{6}$/i.test(t.color)
+const validState = (s) => isObj(s) && isObj(s.config) && isObj(s.hulks) && isObj(s.info) && Array.isArray(s.locked) && (s.teams === undefined || s.teams === null || (isObj(s.teams) && validTeam(s.teams.A) && validTeam(s.teams.B)))
 let state = loadJson(STATE_FILE, validState, null)
 /** A map keyed by text that comes from a request: no prototype, so a key like "constructor" is just a key. */
 const keyed = (o = {}) => Object.assign(Object.create(null), o)

@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { NOISE3 } from './glsl'
 import { PLANET_RADIUS, arriveFade } from './PlanetBody'
 import { zoneSpot } from './ZoneReticle'
+import { lighten, rgb01, teamsNow } from '../teams'
 
 // Void shields. A battlezone captured by a team gets a shield dome over its own spot on the planet (the same fixed spot its reticle and
 // explosions use), as in the lore: shields cover regions and fortress sites, never a whole world.
@@ -17,8 +18,9 @@ import { zoneSpot } from './ZoneReticle'
 
 export interface ShieldZone { id: string; name: string; team: 'A' | 'B'; at: number }
 
-const TEAM_TINT: Record<'A' | 'B', [number, number, number]> = { A: [0.2, 0.62, 1.0], B: [1.0, 0.4, 0.14] }
-const TEAM_TEXT: Record<'A' | 'B', string> = { A: '#6fd0ff', B: '#ff9a5c' }
+// the teams' colours are the host's choice (see teams.ts)
+const tintOf = (team: 'A' | 'B'): [number, number, number] => rgb01(teamsNow()[team].color)
+const textOf = (team: 'A' | 'B') => lighten(teamsNow()[team].color, 0.4)
 const DOME_RADIUS = 0.4 // how far a dome reaches over the surface from its spot (radians), about 23 degrees
 const NETWORK_RADIUS = 0.85 // (the point at which the joined look is fully on)
 const JOIN_RADIUS = 2.4 // when a team controls the planet the domes keep growing until they cover it, and melt into the planet shield
@@ -156,21 +158,22 @@ function labelTexture(team: 'A' | 'B', heldBy: 'A' | 'B' | null = null) {
   cv.width = 512
   cv.height = 128
   const c = cv.getContext('2d')!
-  const col = TEAM_TEXT[team]
+  const col = textOf(team)
   c.textAlign = 'center'
   c.lineJoin = 'round'
   c.strokeStyle = 'rgba(0, 10, 24, 0.85)'
   c.fillStyle = col
   c.lineWidth = 8
   c.font = 'bold 54px ui-monospace, Consolas, monospace'
-  const head = heldBy ? `TEAM ${team} CONTROL` : `TEAM ${team} CAPTURED`
-  c.strokeText(head, 256, 56)
-  c.fillText(head, 256, 56)
+  const nameOf = (t: 'A' | 'B') => teamsNow()[t].name.toUpperCase()
+  const head = heldBy ? `${nameOf(team)} CONTROL` : `${nameOf(team)} CAPTURED`
+  c.strokeText(head, 256, 56, 500)
+  c.fillText(head, 256, 56, 500)
   c.lineWidth = 6
   c.font = '26px ui-monospace, Consolas, monospace'
-  const sub = heldBy ? `ZONE HELD BY TEAM ${heldBy}` : 'VOID SHIELD ACTIVE'
-  c.strokeText(sub, 256, 100)
-  c.fillText(sub, 256, 100)
+  const sub = heldBy ? `ZONE HELD BY ${nameOf(heldBy)}` : 'VOID SHIELD ACTIVE'
+  c.strokeText(sub, 256, 100, 500)
+  c.fillText(sub, 256, 100, 500)
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
   return t
@@ -199,7 +202,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
       uCenter: { value: spot.clone() },
       uU: { value: u },
       uV: { value: v },
-      uTint: { value: new THREE.Vector3(...TEAM_TINT[zone.team]) },
+      uTint: { value: new THREE.Vector3(...tintOf(zone.team)) },
       uLight: { value: LIGHT },
       uRadius: { value: DOME_RADIUS },
       uHeight: { value: 0.085 },
@@ -223,7 +226,7 @@ function Shield({ zone, full, control }: { zone: ShieldZone; full: boolean; cont
     if (!g || !g.parent || !U) return
     const now = s.clock.elapsedTime
     const prog = zone.at ? Math.min(1, (Date.now() - zone.at) / 1000 / POWER_UP_S) : 1
-    tint.set(...TEAM_TINT[shownTeam])
+    tint.set(...tintOf(shownTeam))
     U.uTint.value.lerp(tint, 1 - Math.exp(-dt * 2.2)) // a flip of colour is a smooth change
     U.uTime.value = now
     U.uProgress.value = prog
@@ -373,7 +376,7 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
   const mesh = useRef<THREE.Mesh>(null)
   const hits = useRef({ next: 0.4, slot: 0 })
   const uniforms = useMemo(() => ({
-    uTint: { value: new THREE.Vector3(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT)) },
+    uTint: { value: new THREE.Vector3(...(info.team ? tintOf(info.team) : NEUTRAL_TINT)) },
     uGain: { value: 0 },
     uLight: { value: LIGHT },
     uProgress: { value: 0 },
@@ -393,7 +396,7 @@ function PlanetShield({ info }: { info: PlanetShieldInfo }) {
     const now = s.clock.elapsedTime
     if (born.current < 0) born.current = now
     // neutral until a team controls the planet, then it turns that team's colour (smoothly), and brightens
-    target.set(...(info.team ? TEAM_TINT[info.team] : NEUTRAL_TINT))
+    target.set(...(info.team ? tintOf(info.team) : NEUTRAL_TINT))
     const k = 1 - Math.exp(-dt * 2.2)
     U.uTint.value.lerp(target, k)
     U.uGain.value += ((!info.active ? 0 : info.team ? 1 : 0.85) - U.uGain.value) * k
