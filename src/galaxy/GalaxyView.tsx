@@ -1,4 +1,5 @@
 import PlanetEvents from '../PlanetEvents'
+import { holderOf } from '../holders'
 import type { CalendarApi } from '../calendar'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Galaxy3D, { type PlanetInfo } from './Galaxy3D'
@@ -38,13 +39,15 @@ function devStart(sectors: Sector[]) {
 /** Where the player was in the galaxy (kept by the app so it can come back after reading a list). */
 export interface GalaxySelection { sector: string | null; planet: string | null; table: string | null }
 
-export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent, onViewList, getInitial, onSelect }: {
+export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent, onOpenHeld, onViewList, getInitial, onSelect }: {
   events: EventApi
   auth: AuthApi
   claims: ClaimsApi
   calendar: CalendarApi
   /** Open a calendar event (chosen from this planet's planned events). */
   onOpenEvent: (eventId: string) => void
+  /** Open the Territory page on a team's tab (from the key on the map). */
+  onOpenHeld: (team: 'A' | 'B') => void
   onViewList: (v: Viewing) => void
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
@@ -118,35 +121,23 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
       for (const p of s.planets) {
         const v = viewOf(p)
         const zonesHidden = events.infoForPlayer(p.id, EMPTY_INFO).zonesHidden
-        // who holds the planet: the team with more of its battlezones, once every battlezone has a winner (a tie is not decided).
-        // A restricted planet, or one whose battlezones are not revealed, shows no holder.
-        let holder: 'A' | 'B' | null = null
-        if (v.enabled && !zonesHidden && v.tables.length > 0) {
-          const won = v.tables.map((t) => claims.winnerOf(t.id)?.team)
-          if (won.every((w) => w)) {
-            const a = won.filter((w) => w === 'A').length
-            const b = won.length - a
-            if (a !== b) holder = a > b ? 'A' : 'B'
-          }
-        }
+        // who holds the planet (see holders.ts). A restricted planet, or one whose battlezones are not revealed, shows no holder.
+        const holder = v.enabled && !zonesHidden ? holderOf(v.tables.map((t) => t.id), claims.winnerOf)?.team ?? null : null
         out[p.id] = { enabled: v.enabled, open: openCount(v.tables), total: v.tables.length, zonesHidden, holder }
       }
     }
     return out
   }, [SECTORS, events.infoOverrides, events.hostPreview, claims.claims]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the planets each team holds, as seen on the map (a locked sector shows no planets, so it shows no holders either)
-  const held: Record<'A' | 'B', { planet: Sector['planets'][number]; sector: Sector }[]> = { A: [], B: [] }
+  // how many planets each team holds, as seen on the map (a locked sector shows no planets, so it shows no holders either)
+  const held = { A: 0, B: 0 }
   for (const s of SECTORS) {
     if (isLocked(s.id)) continue
     for (const p of s.planets) {
       const team = planetInfo[p.id]?.holder
-      if (team) held[team].push({ planet: p, sector: s })
+      if (team) held[team]++
     }
   }
-  for (const team of ['A', 'B'] as const) held[team].sort((x, y) => x.planet.name.localeCompare(y.planet.name))
-  // the list of held planets: closed, or open on one team's tab
-  const [heldOpen, setHeldOpen] = useState<'A' | 'B' | null>(null)
 
   // what is picked has to still be there: a sector the host has locked, or a planet the host has hidden, since it was picked
   useEffect(() => {
@@ -301,36 +292,10 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
           <span className="era-caption">{ERA_LABEL[shownEra]}</span>
         </div>
         <div className={`era-fade${fading ? ' on' : ''}`} aria-hidden="true" />
-        {(held.A.length > 0 || held.B.length > 0 || heldOpen) && (
-          <div className={`holder-key${heldOpen ? ' open' : ''}`} role="group" aria-label="Planets held">
-            {heldOpen ? (
-              <>
-                <div className="holder-tabs" role="tablist">
-                  {(['A', 'B'] as const).map((t) => (
-                    <button key={t} role="tab" aria-selected={heldOpen === t} className={`${t === 'A' ? 'a' : 'b'}${heldOpen === t ? ' on' : ''}`} onClick={() => setHeldOpen(t)}>
-                      <i aria-hidden="true" />Team {t} · {held[t].length}
-                    </button>
-                  ))}
-                  <button className="holder-close" onClick={() => setHeldOpen(null)} aria-label="Close the list">✕</button>
-                </div>
-                <ul className="holder-list" role="tabpanel">
-                  {held[heldOpen].length === 0 && <li className="muted holder-none">No planets held yet.</li>}
-                  {held[heldOpen].map(({ planet: p, sector: s }) => (
-                    <li key={p.id}>
-                      <button onClick={() => goPlanet(s.id, p.id)}>
-                        <span>{isHulkId(p.id) ? 'Space Hulk · ' : ''}{p.name}{p.forge ? ' ⚙' : ''}</span>
-                        <small style={{ color: s.color }}>{s.name}</small>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <>
-                <button className="holder-row a" onClick={() => setHeldOpen('A')}><i aria-hidden="true" />Team A holds {held.A.length}</button>
-                <button className="holder-row b" onClick={() => setHeldOpen('B')}><i aria-hidden="true" />Team B holds {held.B.length}</button>
-              </>
-            )}
+        {(held.A > 0 || held.B > 0) && (
+          <div className="holder-key" role="group" aria-label="Planets held">
+            <button className="holder-row a" onClick={() => onOpenHeld('A')}><i aria-hidden="true" />Team A holds {held.A}</button>
+            <button className="holder-row b" onClick={() => onOpenHeld('B')}><i aria-hidden="true" />Team B holds {held.B}</button>
           </div>
         )}
         {events.hostPreview && (

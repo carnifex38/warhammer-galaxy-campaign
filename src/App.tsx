@@ -15,11 +15,13 @@ const HostView = lazy(() => import('./galaxy/HostView'))
 const ArmyLists = lazy(() => import('./ArmyLists'))
 const OptionsView = lazy(() => import('./OptionsView'))
 const CalendarView = lazy(() => import('./CalendarView'))
+const TerritoryView = lazy(() => import('./TerritoryView'))
 
-type TabId = 'galaxy' | 'lists' | 'calendar' | 'host' | 'options'
+type TabId = 'galaxy' | 'territory' | 'lists' | 'calendar' | 'host' | 'options'
 
 const TABS: { id: TabId; label: string; icon: string; roles: Role[] }[] = [
   { id: 'galaxy', label: 'Galaxy', icon: '✦', roles: ['guest', 'player', 'gm'] },
+  { id: 'territory', label: 'Territory', icon: '\u2691', roles: ['guest', 'player', 'gm'] },
   { id: 'lists', label: 'Army Lists', icon: '☰', roles: ['player', 'gm'] },
   { id: 'calendar', label: 'Calendar', icon: '\u25a6', roles: ['guest', 'player', 'gm'] },
   { id: 'host', label: 'Host', icon: '\u2699', roles: ['gm'] },
@@ -51,6 +53,8 @@ export default function App() {
   const updateReady = useUpdateReady()
   // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
   const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
+  // which team's tab the Territory page opens on (chosen from the key on the galaxy map)
+  const [territoryTeam, setTerritoryTeam] = useState<'A' | 'B'>('A')
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
   const [viewing, setViewing] = useState<Viewing | null>(null)
   const galaxySel = useRef<GalaxySelection | undefined>(undefined)
@@ -113,9 +117,21 @@ export default function App() {
               claims={claims}
               calendar={calendar}
               onOpenEvent={(id) => { setCalendarFocus(id); setTab('calendar') }}
+              onOpenHeld={(team) => { setTerritoryTeam(team); setTab('territory') }}
               getInitial={() => galaxySel.current}
               onSelect={(s) => { galaxySel.current = s }}
               onViewList={(v) => { setViewing(v); setTab('lists') }}
+            />
+          </Suspense>
+        </main>
+      ) : activeId === 'territory' ? (
+        <main className="content">
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            <TerritoryView
+              events={events}
+              claims={claims}
+              initialTeam={territoryTeam}
+              onOpenPlanet={(sector, planet) => { galaxySel.current = { sector, planet, table: null }; setTab('galaxy') }}
             />
           </Suspense>
         </main>
