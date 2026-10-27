@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { lighten, teamsNow } from '../teams'
 
 // The pieces the battle ships and the patrol ships share: the two teams' colours, the three ship classes, the glow textures, and the
 // ship itself (a gothic hull of stepped boxes with a spire and gun decks, and a separate set of glowing windows).
@@ -6,7 +7,15 @@ import * as THREE from 'three'
 export type Team = 'A' | 'B'
 export type Class = 'flagship' | 'cruiser' | 'escort'
 
-export const TEAM_COLOR = { A: new THREE.Color('#7ad4ff'), B: new THREE.Color('#ff9a52') }
+// the glow of a team's ships: its colour, a little lighter (the host chooses the colours, see teams.ts)
+const glows = new Map<string, THREE.Color>()
+const glowOf = (team: Team) => {
+  const hex = lighten(teamsNow()[team].color, 0.3)
+  let c = glows.get(hex)
+  if (!c) { c = new THREE.Color(hex); glows.set(hex, c) }
+  return c
+}
+export const TEAM_COLOR = { get A() { return glowOf('A') }, get B() { return glowOf('B') } }
 export const HULL_TINT = { A: new THREE.Color('#aab6c8'), B: new THREE.Color('#c8b09a') }
 export const CLASSES: Record<Class, { scale: number; hp: number; volley: number; vmax: number; turn: number; range: number; radius: number }> = {
   // volley: seconds between volleys; vmax: top speed; turn: how fast it can turn (rad/s); range: where it likes to fight; radius: its size, for keeping clear

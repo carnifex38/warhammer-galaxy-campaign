@@ -6,6 +6,8 @@ export interface ServerState {
   hulks: unknown
   info: unknown
   locked: unknown
+  /** the two sides' names and colours (older saves have none) */
+  teams?: unknown
 }
 
 /** The request was refused because the gamemaster login is missing or no longer valid. */

@@ -18,6 +18,7 @@ import { setLoad, useLoad } from './loading'
 import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
 import { GALAXY_BOX, bbox, isHulkId, openCount, toWorld, type Planet, type Sector } from './data'
+import { teamsNow } from '../teams'
 
 export interface PlanetInfo {
   enabled: boolean
@@ -978,8 +979,7 @@ function FadeWithBackdrop({ children, left = OTHERS_LEFT }: { children: ReactNod
   return <group ref={group}>{children}</group>
 }
 
-/** The colours of the two teams on the map: the ring under a planet a team holds. */
-const HOLDER_COLOR = { A: '#3d8bff', B: '#ff4141' } as const
+/** The ring under a planet a team holds. */
 const HOLDER_RING = new THREE.RingGeometry(0.84, 1, 56).rotateX(-Math.PI / 2)
 const HOLDER_DISC = new THREE.CircleGeometry(1, 56).rotateX(-Math.PI / 2)
 
@@ -988,10 +988,10 @@ function HolderRing({ team, radius }: { team: 'A' | 'B'; radius: number }) {
   return (
     <group position={[0, -0.1, 0]} scale={radius}>
       <mesh geometry={HOLDER_DISC} renderOrder={3}>
-        <meshBasicMaterial color={HOLDER_COLOR[team]} transparent opacity={0.16} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial color={teamsNow()[team].color} transparent opacity={0.16} depthWrite={false} toneMapped={false} />
       </mesh>
       <mesh geometry={HOLDER_RING} renderOrder={4}>
-        <meshBasicMaterial color={HOLDER_COLOR[team]} transparent opacity={0.95} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color={teamsNow()[team].color} transparent opacity={0.95} depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )

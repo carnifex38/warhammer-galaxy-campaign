@@ -6,6 +6,7 @@ import { isHulkId, type Planet, type Sector } from './galaxy/data'
 import type { EventApi } from './galaxy/eventConfig'
 import { EMPTY_INFO } from './galaxy/infoDefaults'
 import type { Era } from './galaxy/planetLooks'
+import { useTeams } from './teams'
 
 // The Territory page: the planets each team holds, one team at a time (tabs). Opened from the key on the galaxy map, or from the menu.
 // Tapping a planet takes the player to it in the galaxy.
@@ -26,6 +27,7 @@ export default function TerritoryView({ events, claims, initialTeam, onBack, onO
 }) {
   const [team, setTeam] = useState<TeamId>(initialTeam)
   const [era] = useState(currentEra)
+  const teams = useTeams()
 
   // as on the map: a locked sector, a restricted planet, or one whose battlezones are not revealed, shows no holder
   const lists = useMemo(() => {
@@ -56,13 +58,13 @@ export default function TerritoryView({ events, claims, initialTeam, onBack, onO
         {(['A', 'B'] as const).map((t) => (
           <button key={t} role="tab" aria-selected={team === t} className={`terr-tab ${t === 'A' ? 'a' : 'b'}${team === t ? ' on' : ''}`} onClick={() => setTeam(t)}>
             <i aria-hidden="true" />
-            <span><strong>Team {t}</strong><em>{plural(lists[t].length)}</em></span>
+            <span><strong>{teams[t].name}</strong><em>{plural(lists[t].length)}</em></span>
           </button>
         ))}
       </div>
 
       <ul className="cal-planets terr-list" role="tabpanel">
-        {rows.length === 0 && <li className="terr-none muted">Team {team} does not hold any planets yet.</li>}
+        {rows.length === 0 && <li className="terr-none muted">{teams[team].name} does not hold any planets yet.</li>}
         {rows.map(({ planet, sector, wins, against, total, at }) => (
           <li key={planet.id}>
             <button className="cal-planet" onClick={() => onOpenPlanet(sector.id, planet.id)} aria-label={`Open ${planet.name} in the galaxy`}>

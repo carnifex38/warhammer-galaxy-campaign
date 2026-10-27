@@ -8,6 +8,7 @@ import { useClaims, type Viewing } from './claims'
 import { useCalendar } from './calendar'
 import { useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
+import { TeamsProvider, setTeamsNow, teamVars } from './teams'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
@@ -66,6 +67,8 @@ export default function App() {
   // the server no longer accepts this gamemaster login (the password was changed): back to the login screen
   useEffect(() => { if (denied) auth.logout() }, [denied])
 
+  setTeamsNow(events.teams) // for the 3D scenes, which cannot read the context
+
   if (!auth.session) return <LoginScreen auth={auth} />
 
   // each role sees only its own tabs
@@ -74,7 +77,8 @@ export default function App() {
   const current = tabs.find((t) => t.id === activeId)!
 
   return (
-    <div className="shell">
+    <TeamsProvider value={events.teams}>
+    <div className="shell" style={teamVars(events.teams)}>
       {updateReady && (
         <div className="update-bar" role="status">
           A new version of the site is ready.
@@ -176,5 +180,6 @@ export default function App() {
         </main>
       )}
     </div>
+    </TeamsProvider>
   )
 }

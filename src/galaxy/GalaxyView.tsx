@@ -12,6 +12,7 @@ import Seats from './Seats'
 import type { AuthApi } from '../auth'
 import type { ClaimsApi, Viewing } from '../claims'
 import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
+import { useTeams } from '../teams'
 
 const ERA_KEY = 'galaxy-era'
 const ERA_LABEL: Record<Era, string> = { '40k': 'The Dark Imperium', '30k': 'The Horus Heresy' }
@@ -52,6 +53,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
   getInitial?: () => GalaxySelection | undefined
   onSelect?: (s: GalaxySelection) => void
 }) {
+  const teams = useTeams()
   // a planet as the event has it, with each battlezone's real status (open or in play) from the claims
   const viewOf = (p: Sector['planets'][number]) => {
     const v = events.planetView(p)
@@ -285,7 +287,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
         lockedSectors={lockedIds}
         planetInfo={planetInfo}
       >
-        {majority && planet && <div className={`shield-banner team-${majority.team}`}>VOID SHIELD ACTIVE · TEAM {majority.team} {heldBy ? 'HOLDS' : 'CONTROLS'} {planet.name.toUpperCase()}{heldBy ? '' : ` · ${majority.count} OF ${planetTables.length}`}</div>}
+        {majority && planet && <div className={`shield-banner team-${majority.team}`}>VOID SHIELD ACTIVE · {teams[majority.team].name.toUpperCase()} {heldBy ? 'HOLDS' : 'CONTROLS'} {planet.name.toUpperCase()}{heldBy ? '' : ` · ${majority.count} OF ${planetTables.length}`}</div>}
         <div className="era-switch" role="group" aria-label="Era">
           <button className={shownEra === '40k' ? 'on' : ''} aria-pressed={shownEra === '40k'} onClick={() => setEra('40k')}>40K</button>
           <button className={shownEra === '30k' ? 'on' : ''} aria-pressed={shownEra === '30k'} onClick={() => setEra('30k')}>30K</button>
@@ -294,8 +296,8 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
         <div className={`era-fade${fading ? ' on' : ''}`} aria-hidden="true" />
         {(held.A > 0 || held.B > 0) && (
           <div className="holder-key" role="group" aria-label="Planets held">
-            <button className="holder-row a" onClick={() => onOpenHeld('A')}><i aria-hidden="true" />Team A holds {held.A}</button>
-            <button className="holder-row b" onClick={() => onOpenHeld('B')}><i aria-hidden="true" />Team B holds {held.B}</button>
+            <button className="holder-row a" onClick={() => onOpenHeld('A')}><i aria-hidden="true" />{teams.A.name} holds {held.A}</button>
+            <button className="holder-row b" onClick={() => onOpenHeld('B')}><i aria-hidden="true" />{teams.B.name} holds {held.B}</button>
           </div>
         )}
         {events.hostPreview && (
@@ -403,7 +405,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
                       onFocus={() => setHoverZone(t.id)}
                       onBlur={() => setHoverZone(null)}
                     >
-                      <span>{t.name} {winnerOf(t.id) ? <em className={`badge won team-${winnerOf(t.id)!.team}`}>Team {winnerOf(t.id)!.team} won</em> : <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em>}</span>
+                      <span>{t.name} {winnerOf(t.id) ? <em className={`badge won team-${winnerOf(t.id)!.team}`}>{teams[winnerOf(t.id)!.team].name} won</em> : <em className={`badge ${t.status}`}>{t.status === 'open' ? 'Open' : 'In play'}</em>}</span>
                       <small>{t.note}</small>
                     </button>
                     <button
@@ -422,7 +424,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
           {table && planet && (
             <div className="table-detail">
               <h3>{planet.name} · {table.name}</h3>
-              {winnerOf(table.id) ? <span className={`badge won team-${winnerOf(table.id)!.team}`}>Team {winnerOf(table.id)!.team} won</span> : <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>}
+              {winnerOf(table.id) ? <span className={`badge won team-${winnerOf(table.id)!.team}`}>{teams[winnerOf(table.id)!.team].name} won</span> : <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>}
               <div className="layout-placeholder">Battlezone layout image goes here</div>
               <p className="muted">{table.note}</p>
               <Seats tableId={table.id} where={`${planet.name} · ${table.name}`} auth={auth} claims={claims} onView={onViewList} />

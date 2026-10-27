@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MAX_HULKS, isHulkId } from './data'
 import InfoEditor from './InfoEditor'
 import SaveLoad from './SaveLoad'
+import TeamsEditor from './TeamsEditor'
 import { MARS_SAMPLE } from './sampleMissions'
 import { defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 import type { Era } from './planetLooks'
@@ -59,6 +60,8 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
           </span>
         </div>
       </section>
+
+      <TeamsEditor events={events} />
 
       <section className="host-sector">
         {([['extra', 'Extra map planets', 'The planets from the Horus Heresy map that are not in the original set.'], ['forge', 'Added forge worlds', 'The forge worlds added from the map (Voss, Phaeton, Anvillus, Sarum, Tigrus, Accatran).']] as const).map(([g, label, note]) => (
