@@ -45,7 +45,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg}'],
-        navigateFallbackDenylist: [/^\/api\//], // the service worker must never answer API calls with index.html
+        // the service worker must never answer these with index.html: API calls, and an uploaded picture opened in its own tab
+        navigateFallbackDenylist: [/^\/api\//, /^\/media\//],
         // the army builder's rules files are big and change rarely: show the saved copy at once, refresh it in the background
         runtimeCaching: [
           { urlPattern: /\/data\/[^/]+\/.*\.json$/, handler: 'StaleWhileRevalidate', options: { cacheName: 'rules-data' } },
