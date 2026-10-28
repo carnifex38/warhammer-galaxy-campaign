@@ -3,8 +3,8 @@ services:
     build:
       context: .
       args:
-        # the version shown in the app; run with  GIT_HASH=$(git rev-parse HEAD) docker compose up --build
-        GIT_HASH: ${GIT_HASH:-unknown}
+        # the version shown in the app is read from .git; set GIT_HASH only when building without it
+        GIT_HASH: ${GIT_HASH:-}
     restart: unless-stopped
     ports:
       # where it is published on this machine, from .env:  BIND_ADDRESS=10.0.0.2  PORT=5172  (default: every address, port 3000).

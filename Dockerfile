@@ -8,9 +8,10 @@ RUN npm ci
 COPY scripts ./scripts
 RUN npm run data
 COPY . .
-# the build has no git history (.dockerignore): pass the commit in with --build-arg GIT_HASH=$(git rev-parse HEAD)
-ARG GIT_HASH=unknown
-RUN GIT_HASH=$GIT_HASH npm run build
+# the version shown in the app is the commit being built: read from the checkout's .git (which is why .dockerignore lets it in), or
+# given with --build-arg GIT_HASH=... when there is no .git
+ARG GIT_HASH=
+RUN git config --global --add safe.directory /app && GIT_HASH=$GIT_HASH npm run build
 
 FROM node:24-alpine
 WORKDIR /app

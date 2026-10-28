@@ -1,7 +1,6 @@
 node_modules
 dist
 data
-.git
 .env
 public/data
 .bsdata-cache

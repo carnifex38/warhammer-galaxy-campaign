@@ -6,7 +6,7 @@ import { execSync } from 'node:child_process'
 // The site can live in a sub-folder (GitHub Pages serves it at /<repo-name>/), so the build reads its base path from BASE_PATH.
 const base = process.env.BASE_PATH ?? '/'
 
-// The version shown in the app: the short git hash of the commit being built. A build without git (the Docker build) passes it in as GIT_HASH.
+// The version shown in the app: the short git hash of the commit being built (from .git, or from GIT_HASH when the build has no .git).
 function gitHash(): string {
   if (process.env.GIT_HASH) return process.env.GIT_HASH.slice(0, 7)
   try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return 'unknown' }
