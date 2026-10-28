@@ -89,16 +89,33 @@ let streamOpen = false
 let streamTimer: number | undefined
 let streamFailures = 0
 
+/** The server's side of the live connection: the build it serves (from `hello`) and whether it said it is restarting. */
+export interface ServerLink { build: string | null; restarting: boolean }
+let link: ServerLink = { build: null, restarting: false }
+const linkWatchers = new Set<(l: ServerLink) => void>()
+const setLink = (l: ServerLink) => { link = l; for (const w of [...linkWatchers]) w(link) }
+
+/** Calls fn with the server link now and whenever it changes. Returns a function that stops listening. */
+export function watchServerLink(fn: (l: ServerLink) => void): () => void {
+  linkWatchers.add(fn)
+  fn(link)
+  return () => { linkWatchers.delete(fn) }
+}
+
 function connectStream() {
   if (stream || watchers.size === 0) return
   stream = new EventSource('/api/stream')
   stream.onmessage = () => { streamOpen = true; streamFailures = 0; for (const w of [...watchers]) w() } // the first message arrives on every (re)connect, so this also covers catching up after a drop
+  stream.addEventListener('hello', (e) => setLink({ build: (e as MessageEvent<string>).data || null, restarting: false }))
+  stream.addEventListener('shutdown', () => setLink({ ...link, restarting: true }))
   stream.onerror = () => {
     stream?.close()
     stream = null
     streamOpen = false
     streamFailures++
-    streamTimer = window.setTimeout(connectStream, Math.min(60000, 1000 * 2 ** streamFailures))
+    // a restart (a deploy) takes seconds: retry every second for a while instead of backing off
+    const delay = link.restarting && streamFailures <= 60 ? 1000 : Math.min(60000, 1000 * 2 ** streamFailures)
+    streamTimer = window.setTimeout(connectStream, delay)
   }
 }
 

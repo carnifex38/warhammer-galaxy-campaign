@@ -12,14 +12,18 @@ function gitHash(): string {
   try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() } catch { return 'unknown' }
 }
 
+const APP_VERSION = gitHash()
+
 // https://vite.dev/config/
 export default defineConfig({
   base,
-  define: { __APP_VERSION__: JSON.stringify(gitHash()) },
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   // `npm run dev` proxies /api to the live-event server (`npm run serve`)
   server: { host: true, proxy: { '/api': 'http://localhost:3000' } },
   plugins: [
     react(),
+    // dist/version.txt: the server announces it to open pages, so a page from an older build knows to update (src/updateReady.ts)
+    { name: 'version-file', generateBundle() { this.emitFile({ type: 'asset', fileName: 'version.txt', source: APP_VERSION }) } },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],

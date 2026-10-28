@@ -6,7 +6,7 @@ import { ROLE_LABEL, useAuth, type Role } from './auth'
 import { useEventConfig } from './galaxy/eventConfig'
 import { useClaims, type Viewing } from './claims'
 import { useCalendar } from './calendar'
-import { useUpdateReady } from './updateReady'
+import { useServerRestarting, useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
 import { TeamsProvider, setTeamsNow, teamVars } from './teams'
 
@@ -52,6 +52,7 @@ export default function App() {
   const claims = useClaims(auth)
   const calendar = useCalendar(auth)
   const updateReady = useUpdateReady()
+  const restarting = useServerRestarting()
   // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
   const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
   // which team's tab the Territory page opens on (chosen from the key on the galaxy map)
@@ -94,7 +95,7 @@ export default function App() {
             <i>{ROLE_LABEL[auth.session.role]}</i>
           </span>
           <button className="ghost logout" onClick={() => { setTab('galaxy'); setViewing(null); galaxySel.current = undefined; auth.logout() }}>Log out</button>
-          <span className={`status ${online && serverUp ? 'on' : 'off'}`}>{!online ? 'Offline' : serverUp ? 'Online' : 'No server'}</span>
+          <span className={`status ${online && serverUp && !restarting ? 'on' : 'off'}`}>{!online ? 'Offline' : restarting ? 'Restarting…' : serverUp ? 'Online' : 'No server'}</span>
         </div>
       </header>
 

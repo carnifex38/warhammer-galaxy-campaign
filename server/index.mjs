@@ -661,7 +661,10 @@ function importEvent(save, parts) {
 }
 
 // ---- live updates (server-sent events) ---------------------------------------------------------------------------
+// Every connection opens with `hello` naming the build of the app being served (dist/version.txt), so a page from an older build
+// can update itself after a deploy. When the server is told to stop, open pages get `shutdown` first (see the end of this file).
 const streams = new Set()
+const BUILD = (() => { try { return readFileSync(join(DIST_DIR, 'version.txt'), 'utf8').trim() } catch { return '' } })()
 const broadcast = () => { for (const res of streams) res.write(`data: ${version}\n\n`) }
 setInterval(() => { for (const res of streams) res.write(': ping\n\n') }, 25_000).unref()
 
@@ -716,7 +719,7 @@ async function api(req, res, path) {
 
   if (path === '/api/stream' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
-    res.write(`retry: 3000\ndata: ${version}\n\n`)
+    res.write(`retry: 3000\nevent: hello\ndata: ${BUILD}\n\ndata: ${version}\n\n`)
     streams.add(res)
     req.on('close', () => streams.delete(res))
     return
@@ -806,5 +809,13 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => console.log(`Galaxy Campaign on http://${HOST}:${PORT}  (data: ${join(DATA_DIR, 'campaign.db')})`))
 
-// close the database cleanly on Ctrl+C and on `docker compose down`
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { store.close(); process.exit(0) })
+// Ctrl+C, `docker compose down` or a deploy: tell open pages the server is restarting (they retry every second until it is back),
+// stop taking requests, and close the database cleanly
+let stopping = false
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => {
+  if (stopping) return
+  stopping = true
+  for (const res of streams) res.end('event: shutdown\nretry: 1000\ndata: Server restarting\n\n')
+  server.close()
+  setTimeout(() => { store.close(); process.exit(0) }, 300) // a moment for the goodbyes and requests in flight
+})
