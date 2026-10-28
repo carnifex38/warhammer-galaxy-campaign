@@ -768,7 +768,11 @@ async function serveStatic(req, res, path) {
   try { decoded = decodeURIComponent(path) } catch { res.writeHead(400); return res.end() }
   let file = normalize(join(DIST_DIR, decoded))
   if (file !== DIST_DIR && !file.startsWith(DIST_DIR + sep)) { res.writeHead(403); return res.end() }
-  if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST_DIR, 'index.html') // single-page app
+  if (!existsSync(file) || statSync(file).isDirectory()) {
+    // a missing file (a rules .json, an old asset) is a 404: answering with index.html makes the page fail to read it as JSON or code
+    if (extname(decoded)) { res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); return res.end('Not found.') }
+    file = join(DIST_DIR, 'index.html') // single-page app
+  }
   const ext = extname(file)
   const rel = file.slice(DIST_DIR.length + 1).replaceAll('\\', '/')
   const headers = { 'Content-Type': MIME[ext] ?? 'application/octet-stream' }
