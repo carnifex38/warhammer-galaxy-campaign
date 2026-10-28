@@ -47,6 +47,9 @@ echo 'GM_PASSWORD=pick-something' > .env
 docker compose up -d --build
 ```
 
+With Docker, `PORT` and `BIND_ADDRESS` in `.env` set where the container is published on the host (default `0.0.0.0:3000`),
+e.g. `BIND_ADDRESS=10.0.0.2` and `PORT=5172` to serve only on that address. The server inside the container always uses 3000.
+
 Settings (environment variables): `GM_PASSWORD` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (`./data`, holds
 `campaign.db`), `DIST_DIR` (`./dist`).
 
