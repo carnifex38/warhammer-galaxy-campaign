@@ -159,10 +159,13 @@ button { font: inherit; color: inherit; }
 .badge.in_play { color: var(--red); }
 
 .table-detail h3 { margin: 4px 0 8px; display: inline-block; margin-right: 8px; }
+.layout-image { margin: 12px 0; }
+.layout-image img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02); }
 .layout-placeholder {
-  margin: 12px 0; aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--muted);
+  aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--muted);
   border: 1px dashed var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.02);
 }
+.layout-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .primary {
   width: 100%; min-height: 48px; border: 0; border-radius: 10px; background: var(--gold); color: #1a1203; font-weight: 700; cursor: pointer;
 }

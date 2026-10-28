@@ -8,6 +8,7 @@ import type { EventApi } from './eventConfig'
 import type { Sector } from './data'
 import { isHulkId, openCount } from './data'
 import InfoPanel from './InfoPanel'
+import LayoutImage from './LayoutImage'
 import Seats from './Seats'
 import type { AuthApi } from '../auth'
 import type { ClaimsApi, Viewing } from '../claims'
@@ -425,7 +426,12 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
             <div className="table-detail">
               <h3>{planet.name} · {table.name}</h3>
               {winnerOf(table.id) ? <span className={`badge won team-${winnerOf(table.id)!.team}`}>{teams[winnerOf(table.id)!.team].name} won</span> : <span className={`badge ${table.status}`}>{table.status === 'open' ? 'Open' : 'In play'}</span>}
-              <div className="layout-placeholder">Battlezone layout image goes here</div>
+              <LayoutImage
+                url={events.infoFor(table.id, EMPTY_INFO).layout}
+                gmToken={events.token}
+                isGm={auth.session?.role === 'gm'}
+                onChange={(layout) => events.setInfo(table.id, { layout })}
+              />
               <p className="muted">{table.note}</p>
               <Seats tableId={table.id} where={`${planet.name} · ${table.name}`} auth={auth} claims={claims} onView={onViewList} />
             </div>

@@ -19,7 +19,7 @@ export default defineConfig({
   base,
   define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   // `npm run dev` proxies /api to the live-event server (`npm run serve`)
-  server: { host: true, proxy: { '/api': 'http://localhost:3000' } },
+  server: { host: true, proxy: { '/api': 'http://localhost:3000', '/media': 'http://localhost:3000' } },
   plugins: [
     react(),
     // dist/version.txt: the server announces it to open pages, so a page from an older build knows to update (src/updateReady.ts)
@@ -47,7 +47,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,webp,jpg}'],
         navigateFallbackDenylist: [/^\/api\//], // the service worker must never answer API calls with index.html
         // the army builder's rules files are big and change rarely: show the saved copy at once, refresh it in the background
-        runtimeCaching: [{ urlPattern: /\/data\/[^/]+\/.*\.json$/, handler: 'StaleWhileRevalidate', options: { cacheName: 'rules-data' } }],
+        runtimeCaching: [
+          { urlPattern: /\/data\/[^/]+\/.*\.json$/, handler: 'StaleWhileRevalidate', options: { cacheName: 'rules-data' } },
+          // uploaded pictures never change under the same name: keep them once seen, so they show offline too
+          { urlPattern: /\/media\/[0-9a-f]{32}\.\w+$/, handler: 'CacheFirst', options: { cacheName: 'media', expiration: { maxEntries: 200 }, cacheableResponse: { statuses: [200] } } },
+        ],
       },
       devOptions: { enabled: true },
     }),

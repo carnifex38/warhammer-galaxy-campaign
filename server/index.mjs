@@ -3,12 +3,12 @@
 //   GM_PASSWORD  required. The gamemaster password (checked here, never sent to browsers).
 //   PORT         default 3000
 //   HOST         default 0.0.0.0
-//   DATA_DIR     default ./data   (holds campaign.db, the SQLite database with everything the server keeps)
+//   DATA_DIR     default ./data   (holds campaign.db, the SQLite database with everything the server keeps, and media/, uploaded pictures)
 //   DIST_DIR     default ./dist
 import { createServer } from 'node:http'
-import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
-import { mkdirSync, readFileSync, renameSync, existsSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync, readdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { extname, join, normalize, resolve, sep } from 'node:path'
@@ -660,6 +660,57 @@ function importEvent(save, parts) {
   return report
 }
 
+// ---- media: pictures the gamemaster uploads (battlezone layouts) ----------------------------------------------------
+// Kept as files in DATA_DIR/media, so in the same Docker volume as the database. Each is named by a hash of its content: the same
+// picture uploaded twice is stored once, a name cannot be guessed, and a name never changes what it shows (so browsers may cache it
+// for good). Only PNG, JPEG, WebP and GIF are taken, recognised by their first bytes rather than by what the browser claims; no SVG,
+// which can carry script. They are public at /media/<name> to anyone who has the address, like the rest of the event.
+const MEDIA_DIR = join(DATA_DIR, 'media')
+mkdirSync(MEDIA_DIR, { recursive: true })
+const MAX_UPLOAD = 15_000_000
+const MAX_MEDIA = 2000
+const MEDIA_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
+const MEDIA_NAME = /^\/media\/([0-9a-f]{32}\.(?:png|jpg|webp|gif))$/
+
+/** The kind of picture in buf, from its first bytes, or null when it is not one we take. */
+function pictureType(buf) {
+  if (buf.length > 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png'
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg'
+  if (buf.length > 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') return 'webp'
+  if (buf.length > 6 && /^GIF8[79]a$/.test(buf.toString('latin1', 0, 6))) return 'gif'
+  return null
+}
+
+async function mediaApi(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed.' })
+  if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
+  const buf = await readRaw(req, MAX_UPLOAD).catch(() => null)
+  if (!buf) return json(res, 413, { error: 'That picture is too large (15 MB at most).' })
+  const ext = pictureType(buf)
+  if (!ext) return json(res, 415, { error: 'Upload a PNG, JPEG, WebP or GIF picture.' })
+  const name = `${createHash('sha256').update(buf).digest('hex').slice(0, 32)}.${ext}`
+  const file = join(MEDIA_DIR, name)
+  if (!existsSync(file)) {
+    if (readdirSync(MEDIA_DIR).length >= MAX_MEDIA) return json(res, 507, { error: 'There are too many pictures stored.' })
+    writeFileSync(file + '.tmp', buf)
+    renameSync(file + '.tmp', file)
+  }
+  return json(res, 201, { url: `/media/${name}` })
+}
+
+async function serveMedia(req, res, path) {
+  const m = MEDIA_NAME.exec(path)
+  const file = m && join(MEDIA_DIR, m[1])
+  if (!file || !existsSync(file)) { res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); return res.end('Not found.') }
+  res.writeHead(200, {
+    'Content-Type': MEDIA_TYPES[extname(file).slice(1)],
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; sandbox",
+  })
+  res.end(req.method === 'HEAD' ? undefined : await readFile(file))
+}
+
 // ---- live updates (server-sent events) ---------------------------------------------------------------------------
 // Every connection opens with `hello` naming the build of the app being served (dist/version.txt), so a page from an older build
 // can update itself after a deploy. When the server is told to stop, open pages get `shutdown` first (see the end of this file).
@@ -675,7 +726,7 @@ const json = (res, status, body) => {
   res.end(text)
 }
 
-const readBody = (req, limit = MAX_BODY) => new Promise((ok, fail) => {
+const readRaw = (req, limit) => new Promise((ok, fail) => {
   let size = 0
   const chunks = []
   req.on('data', (c) => {
@@ -683,9 +734,10 @@ const readBody = (req, limit = MAX_BODY) => new Promise((ok, fail) => {
     if (size > limit) { fail(new Error('too large')); req.destroy(); return }
     chunks.push(c)
   })
-  req.on('end', () => { try { ok(JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null')) } catch (e) { fail(e) } })
+  req.on('end', () => ok(Buffer.concat(chunks)))
   req.on('error', fail)
 })
+const readBody = async (req, limit = MAX_BODY) => JSON.parse((await readRaw(req, limit)).toString('utf8') || 'null')
 
 const gmFails = new Map()
 setInterval(() => gmFails.clear(), 60_000).unref()
@@ -748,6 +800,8 @@ async function api(req, res, path) {
     return json(res, 405, { error: 'Method not allowed.' })
   }
 
+  if (path === '/api/media') return mediaApi(req, res)
+
   if (path === '/api/profiles' || path === '/api/profile' || path === '/api/profile-login' || path.startsWith('/api/profiles/')) {
     const r = await profilesApi(req, res, path)
     if (r !== null) return r
@@ -798,6 +852,7 @@ const server = createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname
     if (path.startsWith('/api/')) return await api(req, res, path)
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end() }
+    if (path.startsWith('/media/')) return await serveMedia(req, res, path)
     if (!existsSync(join(DIST_DIR, 'index.html'))) { res.writeHead(503, { 'Content-Type': 'text/plain' }); return res.end('Run "npm run build" first.') }
     await serveStatic(req, res, path)
   } catch (e) {

@@ -226,6 +226,16 @@ export function useEventConfig(canHost = true, token?: string) {
     setConfig((c) => ({ ...c, [id]: { ...(c[id] ?? startOf(id)), ...change } }))
   const patchInfo = (id: string, change: Partial<InfoContent>) =>
     setInfoOverrides((o) => ({ ...o, [id]: { ...o[id], ...change } }))
+  /** Back to the built-in text for these windows; a battlezone keeps its layout picture. */
+  const resetText = (o: InfoOverrides, ids: string[]) => {
+    const next = { ...o }
+    for (const id of ids) {
+      const layout = next[id]?.layout
+      if (layout) next[id] = { layout }
+      else delete next[id]
+    }
+    return next
+  }
 
   return {
     sync,
@@ -256,7 +266,7 @@ export function useEventConfig(canHost = true, token?: string) {
       return hostPreview ? { ...c, infoHidden: false, intelHidden: false, missionHidden: false, zonesHidden: false } : c
     },
     /** Whether the host has changed this window from its built-in text. */
-    infoEdited: (id: string) => id in infoOverrides,
+    infoEdited: (id: string) => Object.keys(infoOverrides[id] ?? {}).some((k) => k !== 'layout'),
     setInfo: patchInfo,
     /** Write several windows at once (used to load the sample mission). */
     setInfoMany: (many: Record<string, Partial<InfoContent>>) =>
@@ -266,17 +276,8 @@ export function useEventConfig(canHost = true, token?: string) {
         return next
       }),
     /** Put several windows back to their built-in text. */
-    resetInfoMany: (ids: string[]) =>
-      setInfoOverrides((o) => {
-        const next = { ...o }
-        for (const id of ids) delete next[id]
-        return next
-      }),
-    resetInfo: (id: string) =>
-      setInfoOverrides((o) => {
-        const { [id]: _removed, ...rest } = o
-        return rest
-      }),
+    resetInfoMany: (ids: string[]) => setInfoOverrides((o) => resetText(o, ids)),
+    resetInfo: (id: string) => setInfoOverrides((o) => resetText(o, [id])),
 
     planetView(planet: Planet): PlanetView {
       const s = config[planet.id] ?? startOf(planet.id)

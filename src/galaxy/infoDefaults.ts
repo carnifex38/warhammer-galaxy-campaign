@@ -25,6 +25,8 @@ export interface InfoContent {
   missionHidden: boolean
   /** planets and hulks: the battlezones (and how many) are hidden from players */
   zonesHidden: boolean
+  /** battlezones: the layout picture the gamemaster uploaded (its /media/ address). Not part of the text: resetting keeps it. */
+  layout?: string
 }
 
 export const EMPTY_INFO: InfoContent = { summary: '', intel: '', objectives: [], rewards: [], infoHidden: false, intelHidden: false, missionHidden: false, zonesHidden: false }

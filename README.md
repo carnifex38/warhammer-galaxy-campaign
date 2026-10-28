@@ -57,11 +57,12 @@ server, so failed logins are counted per player address from `X-Forwarded-For` r
 **Where things are saved.** Everything the server keeps (the map setup, player profiles and their army lists, battlezone claims
 and the calendar) is in one SQLite database, `campaign.db` in `DATA_DIR`. Nothing extra needs installing. A server that used the
 older JSON files (`state.json`, `profiles.json`, `claims.json`, `calendar.json`) moves them into the database on its first start
-and renames them `*.migrated`.
+and renames them `*.migrated`. Battlezone layout pictures the gamemaster uploads are files in `media/` in `DATA_DIR` (with Docker,
+in the same volume), and the event keeps their addresses.
 
 To back up, copy `campaign.db` while the server is stopped, or while it runs use
-`sqlite3 data/campaign.db ".backup backup.db"`. The Host tab's event save is a backup of the event too, though it leaves out
-players' profiles.
+`sqlite3 data/campaign.db ".backup backup.db"`, and copy `media/`. The Host tab's event save is a backup of the event too, though
+it leaves out players' profiles and the pictures themselves.
 
 **Reaching it from outside your home.** Players need a public https address (https is also required to install the app on a
 phone). The easiest options that need no router changes: a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)

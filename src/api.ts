@@ -67,6 +67,11 @@ export const saveProfile = (gmToken: string, id: string, armies: Army[]) =>
 export const createDummyProfile = (gmToken: string) => profileCall<{ profile: Profile }>('/api/profiles/dummy', { method: 'POST', headers: authHeader(gmToken) }).then((r) => r.profile)
 export const deleteProfile = (gmToken: string, id: string) => profileCall<unknown>(`/api/profiles/${id}`, { method: 'DELETE', headers: authHeader(gmToken) })
 
+/** The gamemaster uploads a picture (PNG, JPEG, WebP or GIF). Returns its address on the server, /media/<name>. */
+export async function uploadMedia(gmToken: string, picture: Blob): Promise<string> {
+  return (await profileCall<{ url: string }>('/api/media', { method: 'POST', headers: { 'Content-Type': picture.type || 'application/octet-stream', ...authHeader(gmToken) }, body: picture })).url
+}
+
 /** The event state: everything for the gamemaster (with a token), only what players may see otherwise. null = nothing saved yet. */
 export async function getState(token?: string): Promise<ServerState | null> {
   const r = await fetch('/api/state', { headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: 'no-store' })
