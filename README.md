@@ -29,7 +29,7 @@ npm run build    # production build
 
 ## Host it for your players
 
-`server/index.mjs` is a small dependency-free Node server (Node 20+). It serves the built app and keeps the event state:
+`server/index.mjs` is a small dependency-free Node server (Node 22.13+; it uses Node's built-in SQLite). It serves the built app and keeps the event state:
 the gamemaster's changes are saved on the server and appear on every player's screen within a moment, no reload needed.
 It checks the gamemaster password itself, and the text of any section you have hidden (and anything about hidden planets) is
 stripped before the event is sent to players.
@@ -47,8 +47,21 @@ echo 'GM_PASSWORD=pick-something' > .env
 docker compose up -d --build
 ```
 
+With Docker, `PORT` and `BIND_ADDRESS` in `.env` set where the container is published on the host (default `0.0.0.0:3000`),
+e.g. `BIND_ADDRESS=10.0.0.2` and `PORT=5172` to serve only on that address. The server inside the container always uses 3000.
+
 Settings (environment variables): `GM_PASSWORD` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (`./data`, holds
-`state.json`), `DIST_DIR` (`./dist`). To back up an event, copy `state.json`.
+`campaign.db`), `DIST_DIR` (`./dist`), `TRUST_PROXY` (off; set it to `1` only when a reverse proxy is the only way to reach the
+server, so failed logins are counted per player address from `X-Forwarded-For` rather than all players sharing the proxy's).
+
+**Where things are saved.** Everything the server keeps (the map setup, player profiles and their army lists, battlezone claims
+and the calendar) is in one SQLite database, `campaign.db` in `DATA_DIR`. Nothing extra needs installing. A server that used the
+older JSON files (`state.json`, `profiles.json`, `claims.json`, `calendar.json`) moves them into the database on its first start
+and renames them `*.migrated`.
+
+To back up, copy `campaign.db` while the server is stopped, or while it runs use
+`sqlite3 data/campaign.db ".backup backup.db"`. The Host tab's event save is a backup of the event too, though it leaves out
+players' profiles.
 
 **Reaching it from outside your home.** Players need a public https address (https is also required to install the app on a
 phone). The easiest options that need no router changes: a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)

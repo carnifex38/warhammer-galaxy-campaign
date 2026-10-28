@@ -1,17 +1,18 @@
 // Live-event server: serves the built app (dist/) and keeps the event state that the gamemaster edits and players read.
-// No dependencies, Node 20+. Configure with environment variables:
+// No dependencies, Node 22.13+ (it uses the built-in node:sqlite). Configure with environment variables:
 //   GM_PASSWORD  required. The gamemaster password (checked here, never sent to browsers).
 //   PORT         default 3000
 //   HOST         default 0.0.0.0
-//   DATA_DIR     default ./data   (state.json, profiles.json, claims.json and calendar.json live here)
+//   DATA_DIR     default ./data   (holds campaign.db, the SQLite database with everything the server keeps)
 //   DIST_DIR     default ./dist
 import { createServer } from 'node:http'
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync, unlinkSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { extname, join, normalize, resolve, sep } from 'node:path'
+import { openStore } from './db.mjs'
 
 const GM_PASSWORD = process.env.GM_PASSWORD
 if (!GM_PASSWORD) {
@@ -22,11 +23,10 @@ const PORT = Number(process.env.PORT ?? 3000)
 const HOST = process.env.HOST ?? '0.0.0.0'
 const DATA_DIR = resolve(process.env.DATA_DIR ?? 'data')
 const DIST_DIR = resolve(process.env.DIST_DIR ?? 'dist')
-const STATE_FILE = join(DATA_DIR, 'state.json')
-const PROFILES_FILE = join(DATA_DIR, 'profiles.json')
 const MAX_BODY = 1_000_000
 
 mkdirSync(DATA_DIR, { recursive: true })
+const store = openStore(DATA_DIR)
 
 /**
  * Reads a saved file. A file that is missing gives `empty`. One that cannot be read, or has the wrong shape, is kept aside as
@@ -52,15 +52,33 @@ let version = 0
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const validTeam = (t) => isObj(t) && typeof t.name === 'string' && t.name.length <= 24 && /^#[0-9a-f]{6}$/i.test(t.color)
 const validState = (s) => isObj(s) && isObj(s.config) && isObj(s.hulks) && isObj(s.info) && Array.isArray(s.locked) && (s.teams === undefined || s.teams === null || (isObj(s.teams) && validTeam(s.teams.A) && validTeam(s.teams.B)))
-let state = loadJson(STATE_FILE, validState, null)
 /** A map keyed by text that comes from a request: no prototype, so a key like "constructor" is just a key. */
 const keyed = (o = {}) => Object.assign(Object.create(null), o)
 
-function persist() {
-  const tmp = STATE_FILE + '.tmp'
-  writeFileSync(tmp, JSON.stringify(state))
-  renameSync(tmp, STATE_FILE)
+// Before SQLite the server kept its data in JSON files. The first start with an empty database moves them in (in one transaction)
+// and renames them *.migrated, so they stay as a backup but are not read again.
+const LEGACY = { state: 'state.json', profiles: 'profiles.json', claims: 'claims.json', calendar: 'calendar.json' }
+for (const k of Object.keys(LEGACY)) LEGACY[k] = join(DATA_DIR, LEGACY[k])
+const str = (v) => typeof v === 'string'
+if (Object.values(LEGACY).some(existsSync)) {
+  if (!store.isEmpty()) console.error(`Found old JSON files in ${DATA_DIR} but campaign.db already has data: left them alone.`)
+  else {
+    store.transaction(() => {
+      const s = loadJson(LEGACY.state, validState, null)
+      if (s) store.saveState(s)
+      for (const p of Object.values(loadJson(LEGACY.profiles, isObj, {}))) {
+        if (isObj(p) && str(p.id) && str(p.name) && str(p.key) && str(p.salt) && str(p.hash)) store.saveProfile({ ...p, created: p.created ?? 0, updated: p.updated ?? 0 })
+      }
+      store.saveClaims(Object.fromEntries(Object.entries(loadJson(LEGACY.claims, isObj, {})).filter(([, t]) => isObj(t) && Array.isArray(t.seats))))
+      store.saveCalendar(loadJson(LEGACY.calendar, Array.isArray, []).filter((e) => isObj(e) && str(e.id) && str(e.name) && str(e.date) && Array.isArray(e.planets)))
+    })
+    for (const f of Object.values(LEGACY)) if (existsSync(f)) renameSync(f, f + '.migrated')
+    console.log(`Moved the old JSON files in ${DATA_DIR} into campaign.db (kept as *.migrated).`)
+  }
 }
+
+let state = store.loadState()
+const persist = () => store.saveState(state)
 
 /** What a player may see: the text of sections the gamemaster has hidden is removed, and so is anything about hidden planets. */
 function forPlayers(s) {
@@ -95,13 +113,14 @@ const scryptAsync = promisify(scrypt)
 const MAX_PROFILES = 300
 const MAX_ARMIES_BYTES = 200_000
 /** id -> { id, name, key (lower-case name), salt, hash, created, updated, armies } */
-let profiles = keyed(loadJson(PROFILES_FILE, isObj, {}))
+let profiles = keyed(Object.fromEntries(store.loadProfiles().map((p) => [p.id, p])))
 
-function persistProfiles() {
-  const tmp = PROFILES_FILE + '.tmp'
-  writeFileSync(tmp, JSON.stringify(profiles))
-  renameSync(tmp, PROFILES_FILE)
-}
+/** Removes a profile and everything that points at it (seats, sign-ups), all in one transaction. */
+const removeProfile = (p) => store.transaction(() => {
+  delete profiles[p.id]
+  store.deleteProfile(p.id)
+  dropSeatsOf(p.id)
+})
 
 const hashPassword = async (password, salt) => (await scryptAsync(password, salt, 32)).toString('hex')
 const profileToken = (p) => `${p.id}.${createHmac('sha256', GM_PASSWORD).update(`profile-v1:${p.id}:${p.hash}`).digest('hex')}`
@@ -152,7 +171,7 @@ async function profilesApi(req, res, path) {
     if (Object.keys(profiles).length >= MAX_PROFILES) return json(res, 507, { error: 'There are too many profiles.' })
     const p = { id, name, key: name.toLowerCase(), salt, hash, created: now, updated: now, armies: [] }
     profiles[id] = p
-    persistProfiles()
+    store.saveProfile(p)
     return json(res, 201, { token: profileToken(p), profile: full(p) })
   }
 
@@ -178,13 +197,11 @@ async function profilesApi(req, res, path) {
       if (!validArmies(body?.armies)) return json(res, 400, { error: 'Bad army lists.' })
       p.armies = body.armies
       p.updated = Date.now()
-      persistProfiles()
+      store.saveProfile(p)
       return json(res, 200, { profile: full(p) })
     }
     if (m === 'DELETE') {
-      delete profiles[p.id]
-      dropSeatsOf(p.id)
-      persistProfiles()
+      removeProfile(p)
       return json(res, 200, { ok: true })
     }
     return null
@@ -205,7 +222,7 @@ async function profilesApi(req, res, path) {
     ]
     const p = { id, name, key: name.toLowerCase(), salt, hash: await hashPassword('dummy', salt), created: now, updated: now, armies }
     profiles[id] = p
-    persistProfiles()
+    store.saveProfile(p)
     return json(res, 201, { profile: full(p) })
   }
 
@@ -225,13 +242,11 @@ async function profilesApi(req, res, path) {
       if (!validArmies(body?.armies)) return json(res, 400, { error: 'Bad army lists.' })
       p.armies = body.armies
       p.updated = Date.now()
-      persistProfiles()
+      store.saveProfile(p)
       return json(res, 200, { profile: full(p) })
     }
     if (m === 'DELETE') {
-      delete profiles[p.id]
-      dropSeatsOf(p.id)
-      persistProfiles()
+      removeProfile(p)
       return json(res, 200, { ok: true })
     }
   }
@@ -244,15 +259,10 @@ async function profilesApi(req, res, path) {
 // who is there, their side, and the list's name, era and points; the list itself is readable by signed-in players and the
 // gamemaster, and only through a seat. The list is live while the battlezone is open; when the gamemaster marks it in play a
 // copy is frozen, and reopening it unfreezes it. Seats of a deleted profile disappear.
-const CLAIMS_FILE = join(DATA_DIR, 'claims.json')
 /** tableId -> { status: 'open' | 'in_play', seats: [{ profileId, team, armyId, claimedAt, snapshot? }] } */
-let claims = keyed(loadJson(CLAIMS_FILE, isObj, {}))
+let claims = keyed(store.loadClaims())
 
-function persistClaims() {
-  const tmp = CLAIMS_FILE + '.tmp'
-  writeFileSync(tmp, JSON.stringify(claims))
-  renameSync(tmp, CLAIMS_FILE)
-}
+const persistClaims = () => store.saveClaims(claims)
 const changed = () => { persistClaims(); version++; broadcast() }
 
 function dropSeatsOf(profileId) {
@@ -412,16 +422,13 @@ async function claimsApi(req, res, path) {
 // ---- calendar -----------------------------------------------------------------------------------------------------
 // The gamemaster schedules events: a date, a name, and the planets that will be fought over (each with how many players are wanted).
 // Players with a profile sign up for one planet per event; everyone can read the calendar. Signed-up players are shown by name.
-const CALENDAR_FILE = join(DATA_DIR, 'calendar.json')
 /** [{ id, name, date: 'YYYY-MM-DD', notes, planets: [{ planetId, target, signups: [profileId] }] }] */
-let calendar = loadJson(CALENDAR_FILE, Array.isArray, [])
+let calendar = store.loadCalendar()
 
 const MAX_EVENTS = 500
 const MAX_PLANETS_PER_EVENT = 24
 const calendarChanged = () => {
-  const tmp = CALENDAR_FILE + '.tmp'
-  writeFileSync(tmp, JSON.stringify(calendar))
-  renameSync(tmp, CALENDAR_FILE)
+  store.saveCalendar(calendar)
   version++
   broadcast()
 }
@@ -643,15 +650,13 @@ function importEvent(save, parts) {
     }
   }
 
-  // put it all in place
-  if (want.setup) {
-    state = nextState
-    if (state) persist()
-    else { try { unlinkSync(STATE_FILE) } catch { /* there was none */ } }
-  }
-  if (want.battlezones) { claims = nextClaims; persistClaims() }
-  if (want.calendar) calendar = nextCalendar
-  calendarChanged() // saves the calendar, and tells every screen that something changed
+  // put it all in place, in one transaction
+  store.transaction(() => {
+    if (want.setup) { state = nextState; persist() }
+    if (want.battlezones) { claims = nextClaims; persistClaims() }
+    if (want.calendar) calendar = nextCalendar
+    calendarChanged() // saves the calendar, and tells every screen that something changed
+  })
   return report
 }
 
@@ -763,7 +768,11 @@ async function serveStatic(req, res, path) {
   try { decoded = decodeURIComponent(path) } catch { res.writeHead(400); return res.end() }
   let file = normalize(join(DIST_DIR, decoded))
   if (file !== DIST_DIR && !file.startsWith(DIST_DIR + sep)) { res.writeHead(403); return res.end() }
-  if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST_DIR, 'index.html') // single-page app
+  if (!existsSync(file) || statSync(file).isDirectory()) {
+    // a missing file (a rules .json, an old asset) is a 404: answering with index.html makes the page fail to read it as JSON or code
+    if (extname(decoded)) { res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); return res.end('Not found.') }
+    file = join(DIST_DIR, 'index.html') // single-page app
+  }
   const ext = extname(file)
   const rel = file.slice(DIST_DIR.length + 1).replaceAll('\\', '/')
   const headers = { 'Content-Type': MIME[ext] ?? 'application/octet-stream' }
@@ -795,4 +804,7 @@ const server = createServer(async (req, res) => {
   }
 })
 
-server.listen(PORT, HOST, () => console.log(`Galaxy Campaign on http://${HOST}:${PORT}  (data: ${DATA_DIR})`))
+server.listen(PORT, HOST, () => console.log(`Galaxy Campaign on http://${HOST}:${PORT}  (data: ${join(DATA_DIR, 'campaign.db')})`))
+
+// close the database cleanly on Ctrl+C and on `docker compose down`
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { store.close(); process.exit(0) })

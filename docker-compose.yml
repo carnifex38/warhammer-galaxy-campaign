@@ -7,10 +7,15 @@ services:
         GIT_HASH: ${GIT_HASH:-unknown}
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # where it is published on this machine, from .env:  BIND_ADDRESS=10.0.0.2  PORT=5172  (default: every address, port 3000).
+      # Inside the container the server always listens on 3000.
+      - "${BIND_ADDRESS:-0.0.0.0}:${PORT:-3000}:3000"
     environment:
       # set in a .env file next to this one:  GM_PASSWORD=something-only-you-know
       GM_PASSWORD: ${GM_PASSWORD:?set GM_PASSWORD in .env}
+      # TRUST_PROXY=1 in .env when a reverse proxy (Caddy, nginx...) is the only way in: login attempts are then limited per player
+      # address (from X-Forwarded-For) instead of all players sharing the proxy's one address
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
       - campaign-data:/data
 

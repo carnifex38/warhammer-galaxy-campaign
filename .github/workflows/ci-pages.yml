@@ -48,6 +48,21 @@ jobs:
         with:
           path: dist
 
+  # After a push to main passes the checks, asks the event server (norberta) to pull and rebuild. The hook answers straight away
+  # and the build runs there; its log is warhammer-deploy/deploy.log next to the checkout. Needs the DEPLOY_TOKEN secret.
+  deploy-server:
+    name: Deploy to the event server
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the deploy hook
+        env:
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$DEPLOY_TOKEN" ]; then echo "No DEPLOY_TOKEN secret: not deploying."; exit 0; fi
+          curl -fsS --retry 3 --retry-all-errors --max-time 20 -X POST -H "Authorization: Bearer $DEPLOY_TOKEN" https://deploy.warhammer.dropzone.im/
+
   deploy:
     name: Publish to GitHub Pages
     needs: check
