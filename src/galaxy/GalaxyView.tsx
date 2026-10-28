@@ -322,10 +322,10 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
           {sector && (
             <button className="back" onClick={back} aria-label="Back">‹</button>
           )}
-          <button onClick={goGalaxy} className={!sector ? 'here' : ''}>Galaxy</button>
-          {sector && <><span>›</span><button onClick={() => goSector(sector.id)} className={!planet ? 'here' : ''}>{sector.name.replace('Segmentum ', '')}</button></>}
-          {planet && <><span>›</span><button onClick={clearTable} className={!table ? 'here' : ''}>{planet.name}</button></>}
-          {table && <><span>›</span><span className="here">{table.name}</span></>}
+          <button onClick={goGalaxy} className={`step${!sector ? ' here' : ''}`} title="Galaxy">Galaxy</button>
+          {sector && <><span>›</span><button onClick={() => goSector(sector.id)} className={`step${!planet ? ' here' : ''}`} title={sector.name}>{sector.name.replace('Segmentum ', '')}</button></>}
+          {planet && <><span>›</span><button onClick={clearTable} className={`step${!table ? ' here' : ''}`} title={planet.name}>{planet.name}</button></>}
+          {table && <><span>›</span><span className="step here" title={table.name}>{table.name}</span></>}
         </div>
 
         <div className="sheet-body">
