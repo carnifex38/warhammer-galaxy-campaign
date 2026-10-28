@@ -9,6 +9,7 @@ import { useCalendar } from './calendar'
 import { useServerRestarting, useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
 import { TeamsProvider, setTeamsNow, teamVars } from './teams'
+import { loadPlace, savePlace } from './lastPlace'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
@@ -47,7 +48,9 @@ function useOnline() {
 export default function App() {
   const auth = useAuth()
   const role = auth.session?.role
-  const [tab, setTab] = useState<TabId>('galaxy')
+  // a reload puts the player back where they were (see lastPlace.ts)
+  const [saved] = useState(loadPlace)
+  const [tab, setTab] = useState<TabId>(saved.tab as TabId) // one this role cannot open falls back to the galaxy (activeId below)
   const events = useEventConfig(role === 'gm', auth.session?.token)
   const claims = useClaims(auth)
   const calendar = useCalendar(auth)
@@ -56,10 +59,12 @@ export default function App() {
   // a calendar event to open when the Calendar tab comes up (chosen from a planet's screen in the galaxy)
   const [calendarFocus, setCalendarFocus] = useState<string | null>(null)
   // which team's tab the Territory page opens on (chosen from the key on the galaxy map)
-  const [territoryTeam, setTerritoryTeam] = useState<'A' | 'B'>('A')
+  const [territoryTeam, setTerritoryTeam] = useState<'A' | 'B'>(saved.territoryTeam ?? 'A')
   // a player's list opened from a battlezone: shown in the Army Lists tab, with a way back to where they were
-  const [viewing, setViewing] = useState<Viewing | null>(null)
-  const galaxySel = useRef<GalaxySelection | undefined>(undefined)
+  const [viewing, setViewing] = useState<Viewing | null>(saved.viewing ?? null)
+  const galaxySel = useRef<GalaxySelection | undefined>(saved.galaxy)
+  const remember = () => savePlace({ tab, galaxy: galaxySel.current, territoryTeam, viewing })
+  useEffect(remember, [tab, territoryTeam, viewing]) // eslint-disable-line react-hooks/exhaustive-deps
   const online = useOnline()
   useEffect(() => { preloadGalaxy() }, [])
   const serverUp = events.sync !== 'offline'
@@ -94,7 +99,7 @@ export default function App() {
             <b>{auth.session.name}</b>
             <i>{ROLE_LABEL[auth.session.role]}</i>
           </span>
-          <button className="ghost logout" onClick={() => { setTab('galaxy'); setViewing(null); galaxySel.current = undefined; auth.logout() }}>Log out</button>
+          <button className="ghost logout" onClick={() => { setTab('galaxy'); setViewing(null); galaxySel.current = undefined; savePlace({ tab: 'galaxy' }); auth.logout() }}>Log out</button>
           <span className={`status ${online && serverUp && !restarting ? 'on' : 'off'}`}>{!online ? 'Offline' : restarting ? 'Restarting…' : serverUp ? 'Online' : 'No server'}</span>
         </div>
       </header>
@@ -125,7 +130,7 @@ export default function App() {
               onOpenEvent={(id) => { setCalendarFocus(id); setTab('calendar') }}
               onOpenHeld={(team) => { setTerritoryTeam(team); setTab('territory') }}
               getInitial={() => galaxySel.current}
-              onSelect={(s) => { galaxySel.current = s }}
+              onSelect={(s) => { galaxySel.current = s; remember() }}
               onViewList={(v) => { setViewing(v); setTab('lists') }}
             />
           </Suspense>
