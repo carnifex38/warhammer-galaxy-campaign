@@ -9,6 +9,9 @@ services:
     environment:
       # set in a .env file next to this one:  GM_PASSWORD=something-only-you-know
       GM_PASSWORD: ${GM_PASSWORD:?set GM_PASSWORD in .env}
+      # TRUST_PROXY=1 in .env when a reverse proxy (Caddy, nginx...) is the only way in: login attempts are then limited per player
+      # address (from X-Forwarded-For) instead of all players sharing the proxy's one address
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     volumes:
       - campaign-data:/data
 

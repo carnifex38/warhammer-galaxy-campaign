@@ -51,7 +51,8 @@ With Docker, `PORT` and `BIND_ADDRESS` in `.env` set where the container is publ
 e.g. `BIND_ADDRESS=10.0.0.2` and `PORT=5172` to serve only on that address. The server inside the container always uses 3000.
 
 Settings (environment variables): `GM_PASSWORD` (required), `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (`./data`, holds
-`campaign.db`), `DIST_DIR` (`./dist`).
+`campaign.db`), `DIST_DIR` (`./dist`), `TRUST_PROXY` (off; set it to `1` only when a reverse proxy is the only way to reach the
+server, so failed logins are counted per player address from `X-Forwarded-For` rather than all players sharing the proxy's).
 
 **Where things are saved.** Everything the server keeps (the map setup, player profiles and their army lists, battlezone claims
 and the calendar) is in one SQLite database, `campaign.db` in `DATA_DIR`. Nothing extra needs installing. A server that used the
