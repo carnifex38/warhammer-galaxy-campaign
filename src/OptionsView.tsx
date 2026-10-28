@@ -91,6 +91,7 @@ export default function OptionsView() {
           )}
         </section>
       </div>
+      <p className="version">Version {__APP_VERSION__}</p>
     </div>
   )
 }

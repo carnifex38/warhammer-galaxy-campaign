@@ -933,3 +933,9 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .team-title { font-weight: 600; }
 .host-sector > .hulk-controls { padding: 10px 14px; }
 .host-sector > .hulk-controls + .hulk-controls { padding-top: 0; }
+
+/* the build's git hash: at the foot of the side menu (wide screens) and of the Options page */
+.version { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.nav .version { display: none; }
+.options > .version { margin: 24px 0 0; }
+@media (min-width: 768px) { .nav .version { display: block; margin-top: auto; padding: 8px 14px 0; } }

@@ -3,7 +3,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# the build has no git history (.dockerignore): pass the commit in with --build-arg GIT_HASH=$(git rev-parse HEAD)
+ARG GIT_HASH=unknown
+RUN GIT_HASH=$GIT_HASH npm run build
 
 FROM node:22-alpine
 WORKDIR /app

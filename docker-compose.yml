@@ -1,6 +1,10 @@
 services:
   campaign:
-    build: .
+    build:
+      context: .
+      args:
+        # the version shown in the app; run with  GIT_HASH=$(git rev-parse HEAD) docker compose up --build
+        GIT_HASH: ${GIT_HASH:-unknown}
     restart: unless-stopped
     ports:
       - "3000:3000"

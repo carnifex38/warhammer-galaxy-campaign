@@ -110,6 +110,7 @@ export default function App() {
             <span>{t.label}</span>
           </button>
         ))}
+        <span className="version" title="The version of the app you are using">Version {__APP_VERSION__}</span>
       </nav>
 
       {activeId === 'galaxy' ? (
