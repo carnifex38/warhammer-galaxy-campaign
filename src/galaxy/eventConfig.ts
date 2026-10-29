@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { getState, patchState, watchState, Unauthorized, type ServerState } from '../api'
-import { applyOps, diffSetup, type Op, type Setup } from '../../server/statePatch.mjs'
+import { applyOps, diffSetup, type Setup } from '../../server/statePatch.mjs'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
 import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, planetGroup, type GameTable, type Planet, type PlanetGroup, type Sector } from './data'
 import { DEFAULT_TEAMS, parseTeams, type TeamId, type TeamLook, type Teams } from '../teams'
@@ -167,9 +167,20 @@ export function useEventConfig(canHost = true, token?: string) {
     teams: parseTeams(s.teams),
   })
   const keep = <T,>(now: T, fresh: T): T => (JSON.stringify(now) === JSON.stringify(fresh) ? now : fresh)
+  /** Show a setup (players, who have nothing of their own to keep). */
   const show = (n: Setup) => {
     setConfig((c) => keep(c, n.config as EventConfig)); setHulks((h) => keep(h, n.hulks as HulkCounts)); setInfoOverrides((o) => keep(o, n.info as InfoOverrides))
     setLocked((l) => keep(l, n.locked)); setTeams((t) => keep(t, n.teams as Teams))
+  }
+  /**
+   * What one part of the setup should become when the server's setup arrives: the server's, with this gamemaster's changes since `from` laid on
+   * top. This runs inside the state update, so it sees every keystroke so far (a copy kept from the last render could be a keystroke behind,
+   * and the newest letters would be lost).
+   */
+  const rebased = <K extends keyof Setup>(key: K, server: Setup, from: Setup | null, cur: Setup[K]): Setup[K] => {
+    if (!from) return server[key]
+    const [was, now] = [{ ...from }, { ...from, [key]: cur }]
+    return applyOps(server, diffSetup(was, now))[key] as Setup[K]
   }
   // the newest setup this device has taken from the server: an answer that left the server earlier but arrives later is out of date
   const latest = useRef({ epoch: '', version: -1 })
@@ -178,10 +189,12 @@ export function useEventConfig(canHost = true, token?: string) {
     latest.current = { epoch: r.epoch, version: r.version }
     return true
   }
-  /** Take the server's setup as the new base and show it with this gamemaster's own changes (`ops`) kept on top. */
-  const adopt = (server: Setup, ops: Op[]) => {
+  /** Take the server's setup as the new base and show it with this gamemaster's changes since `from` kept on top (`null`: none to keep). */
+  const adopt = (server: Setup, from: Setup | null) => {
     baseRef.current = server
-    show(applyOps(server, ops) as Setup)
+    setConfig((c) => keep(c, rebased('config', server, from, c) as EventConfig)); setHulks((h) => keep(h, rebased('hulks', server, from, h) as HulkCounts))
+    setInfoOverrides((o) => keep(o, rebased('info', server, from, o) as InfoOverrides)); setLocked((l) => keep(l, rebased('locked', server, from, l)))
+    setTeams((t) => keep(t, rebased('teams', server, from, t) as Teams))
   }
 
   // pull the event from the server: once for the gamemaster, and live for everyone else
@@ -202,9 +215,9 @@ export function useEventConfig(canHost = true, token?: string) {
         if (gmToken) {
           // a gamemaster keeps what they changed and have not saved yet. The first time, the server's setup replaces the copy saved in this
           // browser; when the server has no event yet, this browser's copy becomes it.
-          const pending = loaded.current ? diffSetup(baseRef.current ?? EMPTY_SETUP, mineRef.current) : s ? [] : diffSetup(EMPTY_SETUP, mineRef.current)
+          const from = loaded.current ? baseRef.current ?? EMPTY_SETUP : s ? null : EMPTY_SETUP
           loaded.current = true
-          adopt(s ? parseSetup(s) : EMPTY_SETUP, pending)
+          adopt(s ? parseSetup(s) : EMPTY_SETUP, from)
         } else if (s) {
           const next = parseSetup(s)
           baseRef.current = next
@@ -237,7 +250,7 @@ export function useEventConfig(canHost = true, token?: string) {
     const ops = diffSetup(baseRef.current ?? EMPTY_SETUP, sent)
     if (ops.length === 0) return
     patchState(gmToken, ops).then(
-      (got) => { if (fresh(got)) adopt(parseSetup(got.state as ServerState), diffSetup(sent, mineRef.current)); setSync('live') },
+      (got) => { if (fresh(got)) adopt(parseSetup(got.state as ServerState), sent); setSync('live') },
       (e) => setSync(e instanceof Unauthorized ? 'denied' : 'offline'),
     )
   }
