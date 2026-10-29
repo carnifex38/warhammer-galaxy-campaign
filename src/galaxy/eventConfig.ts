@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getState, putState, watchState, Unauthorized } from '../api'
+import { getState, patchState, watchState, Unauthorized, type ServerState } from '../api'
+import { applyOps, diffSetup, type Setup } from '../../server/statePatch.mjs'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
 import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, planetGroup, type GameTable, type Planet, type PlanetGroup, type Sector } from './data'
 import { DEFAULT_TEAMS, parseTeams, type TeamId, type TeamLook, type Teams } from '../teams'
@@ -116,6 +117,9 @@ const PRESETS: Record<Exclude<RevealPreset, 'hidden'>, { enabled: boolean; info:
 /** Where this device's copy of the event stands with the live-event server. 'denied' = the gamemaster login is no longer valid. */
 export type SyncStatus = 'loading' | 'live' | 'offline' | 'denied'
 
+/** What a server with no event yet holds: the built-in galaxy. */
+const EMPTY_SETUP: Setup = { config: {}, hulks: DEFAULT_HULKS, info: {}, locked: [], teams: DEFAULT_TEAMS }
+
 /**
  * The event is kept on the live-event server: the gamemaster (`token`) writes it, everyone else reads it and follows
  * changes live. The browser's own copy is only a cache so the app still opens when the server cannot be reached.
@@ -127,8 +131,7 @@ export function useEventConfig(canHost = true, token?: string) {
   const [locked, setLocked] = useState<string[]>(loadLocked)
   const [teams, setTeams] = useState<Teams>(loadTeams)
   const [sync, setSync] = useState<SyncStatus>('loading')
-  // the last state this device and the server agree on (as JSON), and whether the gamemaster has caught up with the server
-  const synced = useRef('')
+  // whether the gamemaster has caught up with the server
   const [caughtUp, setCaughtUp] = useState(false)
   const gmToken = canHost ? token : undefined
   // the host sees everything, whatever is hidden or locked for players
@@ -148,34 +151,80 @@ export function useEventConfig(canHost = true, token?: string) {
   useEffect(() => save(TEAMS_KEY, teams), [teams])
   useEffect(() => { try { localStorage.setItem(PREVIEW_KEY, previewOn ? 'yes' : 'no') } catch { /* not remembered */ } }, [previewOn])
 
+  // what this device has right now (kept current for the sync code below, which runs outside of renders)
+  const mine: Setup = { config, hulks, info: infoOverrides, locked, teams }
+  const mineRef = useRef(mine)
+  useEffect(() => { mineRef.current = mine }) // after every render (before the effects below)
+  // the setup as the server last told us (gamemasters only): what this gamemaster has changed since is the difference
+  const baseRef = useRef<Setup | null>(null)
+  const loaded = useRef(false) // the first answer from the server has been taken
+
+  const parseSetup = (s: ServerState): Setup => ({
+    config: parseConfig(s.config as Record<string, Partial<PlanetSetting>>),
+    hulks: parseHulks(s.hulks as Record<string, number>),
+    info: s.info as InfoOverrides,
+    locked: parseLocked(s.locked as string[]),
+    teams: parseTeams(s.teams),
+  })
+  const keep = <T,>(now: T, fresh: T): T => (JSON.stringify(now) === JSON.stringify(fresh) ? now : fresh)
+  /** Show a setup (players, who have nothing of their own to keep). */
+  const show = (n: Setup) => {
+    setConfig((c) => keep(c, n.config as EventConfig)); setHulks((h) => keep(h, n.hulks as HulkCounts)); setInfoOverrides((o) => keep(o, n.info as InfoOverrides))
+    setLocked((l) => keep(l, n.locked)); setTeams((t) => keep(t, n.teams as Teams))
+  }
+  /**
+   * What one part of the setup should become when the server's setup arrives: the server's, with this gamemaster's changes since `from` laid on
+   * top. This runs inside the state update, so it sees every keystroke so far (a copy kept from the last render could be a keystroke behind,
+   * and the newest letters would be lost).
+   */
+  const rebased = <K extends keyof Setup>(key: K, server: Setup, from: Setup | null, cur: Setup[K]): Setup[K] => {
+    if (!from) return server[key]
+    const [was, now] = [{ ...from }, { ...from, [key]: cur }]
+    return applyOps(server, diffSetup(was, now))[key] as Setup[K]
+  }
+  // the newest setup this device has taken from the server: an answer that left the server earlier but arrives later is out of date
+  const latest = useRef({ epoch: '', version: -1 })
+  const fresh = (r: { epoch: string; version: number }) => {
+    if (r.epoch === latest.current.epoch && r.version < latest.current.version) return false
+    latest.current = { epoch: r.epoch, version: r.version }
+    return true
+  }
+  /** Take the server's setup as the new base and show it with this gamemaster's changes since `from` kept on top (`null`: none to keep). */
+  const adopt = (server: Setup, from: Setup | null) => {
+    baseRef.current = server
+    setConfig((c) => keep(c, rebased('config', server, from, c) as EventConfig)); setHulks((h) => keep(h, rebased('hulks', server, from, h) as HulkCounts))
+    setInfoOverrides((o) => keep(o, rebased('info', server, from, o) as InfoOverrides)); setLocked((l) => keep(l, rebased('locked', server, from, l)))
+    setTeams((t) => keep(t, rebased('teams', server, from, t) as Teams))
+  }
+
   // pull the event from the server: once for the gamemaster, and live for everyone else
   useEffect(() => {
     let stopped = false
     let retry: ReturnType<typeof setTimeout> | undefined
     setCaughtUp(false)
     setSync('loading')
+    loaded.current = false
+    baseRef.current = null
 
     const pull = async () => {
       try {
-        const s = await getState(gmToken)
+        const got = await getState(gmToken)
         if (stopped) return
-        if (s) {
-          const next = {
-            config: parseConfig(s.config as Record<string, Partial<PlanetSetting>>),
-            hulks: parseHulks(s.hulks as Record<string, number>),
-            info: s.info as InfoOverrides,
-            locked: parseLocked(s.locked as string[]),
-            teams: parseTeams(s.teams),
-          }
-          synced.current = JSON.stringify(next)
-          const keep = <T,>(now: T, fresh: T): T => (JSON.stringify(now) === JSON.stringify(fresh) ? now : fresh)
-          setConfig((c) => keep(c, next.config)); setHulks((h) => keep(h, next.hulks)); setInfoOverrides((o) => keep(o, next.info)); setLocked((l) => keep(l, next.locked)); setTeams((t) => keep(t, next.teams))
-        } else if (!gmToken) {
-          // nothing published yet: players see the built-in galaxy, not a stale copy
-          synced.current = ''
-          setConfig({}); setHulks(DEFAULT_HULKS); setInfoOverrides({}); setLocked([]); setTeams(DEFAULT_TEAMS)
+        if (!fresh(got)) return
+        const s = got.state
+        if (gmToken) {
+          // a gamemaster keeps what they changed and have not saved yet. The first time, the server's setup replaces the copy saved in this
+          // browser; when the server has no event yet, this browser's copy becomes it.
+          const from = loaded.current ? baseRef.current ?? EMPTY_SETUP : s ? null : EMPTY_SETUP
+          loaded.current = true
+          adopt(s ? parseSetup(s) : EMPTY_SETUP, from)
+        } else if (s) {
+          const next = parseSetup(s)
+          baseRef.current = next
+          show(next)
         } else {
-          synced.current = '' // the server is empty: this gamemaster device's saved setup becomes the event
+          // nothing published yet: players see the built-in galaxy, not a stale copy
+          show(EMPTY_SETUP)
         }
         setCaughtUp(true)
         setSync('live')
@@ -187,25 +236,29 @@ export function useEventConfig(canHost = true, token?: string) {
       }
     }
 
-    if (gmToken) void pull()
-    const unwatch = gmToken ? undefined : watchState(() => void pull())
-    return () => { stopped = true; clearTimeout(retry); unwatch?.() }
-  }, [gmToken])
+    void pull()
+    const unwatch = watchState(() => void pull()) // gamemasters follow each other's changes live, as players follow theirs
+    return () => { stopped = true; clearTimeout(retry); unwatch() }
+  }, [gmToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // gamemaster: send every change to the server
+  // gamemaster: send what changed (not the whole setup, so another gamemaster's changes are not wiped out). A change goes out within 400 ms,
+  // and keeps going out while the gamemaster is still typing (the timer is not restarted by every keystroke).
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const flush = () => {
+    if (!gmToken) return
+    const sent = mineRef.current
+    const ops = diffSetup(baseRef.current ?? EMPTY_SETUP, sent)
+    if (ops.length === 0) return
+    patchState(gmToken, ops).then(
+      (got) => { if (fresh(got)) adopt(parseSetup(got.state as ServerState), sent); setSync('live') },
+      (e) => setSync(e instanceof Unauthorized ? 'denied' : 'offline'),
+    )
+  }
   useEffect(() => {
-    if (!gmToken || !caughtUp) return
-    const state = { config, hulks, info: infoOverrides, locked, teams }
-    const json = JSON.stringify(state)
-    if (json === synced.current) return
-    const t = setTimeout(() => {
-      putState(gmToken, state).then(
-        () => { synced.current = json; setSync('live') },
-        (e) => setSync(e instanceof Unauthorized ? 'denied' : 'offline'),
-      )
-    }, 400)
-    return () => clearTimeout(t)
-  }, [gmToken, caughtUp, config, hulks, infoOverrides, locked, teams])
+    if (!gmToken || !caughtUp || timer.current) return
+    timer.current = setTimeout(() => { timer.current = undefined; flush() }, 400)
+  }, [gmToken, caughtUp, config, hulks, infoOverrides, locked, teams]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { clearTimeout(timer.current); timer.current = undefined }, [gmToken])
 
   // every sector as this event has it, hulks included (this is what the host edits)
   const sectors = useMemo<Sector[]>(

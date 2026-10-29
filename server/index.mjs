@@ -13,6 +13,7 @@ import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { openStore } from './db.mjs'
+import { applyOps, validOps } from './statePatch.mjs'
 
 const GM_PASSWORD = process.env.GM_PASSWORD
 if (!GM_PASSWORD) {
@@ -48,9 +49,16 @@ function loadJson(file, valid, empty) {
 // ---- state -----------------------------------------------------------------------------------------------------
 // { config, hulks, info, locked, teams } exactly as the client's useEventConfig keeps it, or null before the gamemaster saves.
 let version = 0
+// names this run of the server: a browser compares the version numbers it gets only within one run (they start again after a restart)
+const EPOCH = randomBytes(4).toString('hex')
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 const validTeam = (t) => isObj(t) && typeof t.name === 'string' && t.name.length <= 24 && /^#[0-9a-f]{6}$/i.test(t.color)
+const DEFAULT_TEAMS = { A: { name: 'Team A', color: '#3d8bff' }, B: { name: 'Team B', color: '#ff4141' } }
+const cleanTeams = (t) => Object.fromEntries(['A', 'B'].map((id) => [id, {
+  name: typeof t[id]?.name === 'string' && t[id].name.trim() ? t[id].name.trim().slice(0, 24) : DEFAULT_TEAMS[id].name,
+  color: typeof t[id]?.color === 'string' && /^#[0-9a-f]{6}$/i.test(t[id].color) ? t[id].color : DEFAULT_TEAMS[id].color,
+}]))
 const validState = (s) => isObj(s) && isObj(s.config) && isObj(s.hulks) && isObj(s.info) && Array.isArray(s.locked) && (s.teams === undefined || s.teams === null || (isObj(s.teams) && validTeam(s.teams.A) && validTeam(s.teams.B)))
 /** A map keyed by text that comes from a request: no prototype, so a key like "constructor" is just a key. */
 const keyed = (o = {}) => Object.assign(Object.create(null), o)
@@ -754,19 +762,33 @@ async function api(req, res, path) {
   if (path === '/api/state' && req.method === 'GET') {
     const t = bearer(req)
     if (t !== null && !safeEq(t, GM_TOKEN)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
-    return json(res, 200, { version, state: t === null ? forPlayers(state) : state })
+    return json(res, 200, { version, epoch: EPOCH, state: t === null ? forPlayers(state) : state })
   }
 
   if (path === '/api/state' && req.method === 'PUT') {
     const t = bearer(req)
     if (t === null || !safeEq(t, GM_TOKEN)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
     const body = await readBody(req).catch(() => null)
+    if (isObj(body) && body.patch !== undefined) {
+      // a gamemaster's changes (see statePatch.mjs), laid on whatever the setup is now, so several gamemasters do not wipe out each other
+      if (!validOps(body.patch)) return json(res, 400, { error: 'Bad changes.' })
+      const next = applyOps(state, body.patch)
+      if (isObj(next.teams)) next.teams = cleanTeams(next.teams) // a change to one part of a team (its name) must leave a complete team
+      if (!validState(next)) return json(res, 400, { error: 'Bad state.' })
+      if (JSON.stringify(next) !== JSON.stringify(state)) {
+        state = next
+        version++
+        persist()
+        broadcast()
+      }
+      return json(res, 200, { version, epoch: EPOCH, state })
+    }
     if (!isObj(body) || !validState(body.state)) return json(res, 400, { error: 'Bad state.' })
     state = body.state
     version++
     persist()
     broadcast()
-    return json(res, 200, { version })
+    return json(res, 200, { version, epoch: EPOCH, state })
   }
 
   if (path === '/api/stream' && req.method === 'GET') {
