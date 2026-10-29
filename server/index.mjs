@@ -8,7 +8,7 @@
 import { createServer } from 'node:http'
 import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync, readdirSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync, readdirSync, unlinkSync, rmdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { extname, join, normalize, resolve, sep } from 'node:path'
@@ -95,9 +95,9 @@ function forPlayers(s) {
   for (const [id, o] of Object.entries(s.info)) {
     if (!isObj(o) || s.config[id]?.visible === false) continue
     const c = { ...o }
-    if (c.infoHidden) delete c.summary
-    if (c.intelHidden) delete c.intel
-    if (c.missionHidden) { delete c.objectives; delete c.rewards }
+    if (c.infoHidden) { delete c.summary; delete c.infoBlocks }
+    if (c.intelHidden) { delete c.intel; delete c.intelBlocks }
+    if (c.missionHidden) { delete c.objectives; delete c.rewards; delete c.missionBlocks }
     info[id] = c
   }
   return { ...s, info }
@@ -669,16 +669,45 @@ function importEvent(save, parts) {
 }
 
 // ---- media: pictures the gamemaster uploads (battlezone layouts) ----------------------------------------------------
-// Kept as files in DATA_DIR/media, so in the same Docker volume as the database. Each is named by a hash of its content: the same
-// picture uploaded twice is stored once, a name cannot be guessed, and a name never changes what it shows (so browsers may cache it
-// for good). Only PNG, JPEG, WebP and GIF are taken, recognised by their first bytes rather than by what the browser claims; no SVG,
-// which can carry script. They are public at /media/<name> to anyone who has the address, like the rest of the event.
+// Kept as files in DATA_DIR/media (in folders the gamemaster makes), so in the same Docker volume as the database. A name ends in a
+// hash of the picture's content: the same picture uploaded twice to one folder is stored once, and a name never changes what it shows
+// (so browsers may cache it for good). Only PNG, JPEG, WebP and GIF are taken, recognised by their first bytes rather than by what the
+// browser claims; no SVG, which can carry script. They are public at /media/<folder>/<name> to anyone who has the address, like the
+// rest of the event. Listing, making folders and deleting are for the gamemaster only (mediaApi).
 const MEDIA_DIR = join(DATA_DIR, 'media')
 mkdirSync(MEDIA_DIR, { recursive: true })
 const MAX_UPLOAD = 15_000_000
 const MAX_MEDIA = 2000
 const MEDIA_TYPES = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }
-const MEDIA_NAME = /^\/media\/([0-9a-f]{32}\.(?:png|jpg|webp|gif))$/
+// Folders: real directories inside media/ (never anywhere else). Names are letters, digits, spaces, - and _ only, so a path cannot climb
+// out of media/ or reach a hidden file. A picture keeps a readable name (its own, cleaned) with a few characters of its content hash.
+// (no space at the end, and none of the names Windows treats as devices, in case the server is ever run on Windows)
+const FOLDER_NAME = /^(?!(?:con|prn|aux|nul|com\d|lpt\d)$)[A-Za-z0-9](?:[A-Za-z0-9 _-]{0,38}[A-Za-z0-9_-])?$/i
+const FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,90}\.(?:png|jpg|webp|gif)$/
+const MAX_DEPTH = 4
+
+/** The folder named by a path like "maps/round 1" as its parts, or null when it is not a valid folder path. '' is the top. */
+function folderParts(path) {
+  if (typeof path !== 'string') return null
+  const parts = path.split('/').filter((p) => p !== '')
+  if (parts.length > MAX_DEPTH || !parts.every((p) => FOLDER_NAME.test(p))) return null
+  return parts
+}
+const folderDir = (parts) => join(MEDIA_DIR, ...parts)
+const isDir = (p) => existsSync(p) && statSync(p).isDirectory()
+
+/** Every picture stored, as { path: 'folder/name.png', size, time }. */
+function allPictures(parts = []) {
+  const out = []
+  for (const e of readdirSync(folderDir(parts), { withFileTypes: true })) {
+    if (e.isDirectory() && FOLDER_NAME.test(e.name)) out.push(...allPictures([...parts, e.name]))
+    else if (e.isFile() && FILE_NAME.test(e.name)) {
+      const s = statSync(join(folderDir(parts), e.name))
+      out.push({ path: [...parts, e.name].join('/'), size: s.size, time: s.mtimeMs })
+    }
+  }
+  return out
+}
 
 /** The kind of picture in buf, from its first bytes, or null when it is not one we take. */
 function pictureType(buf) {
@@ -689,26 +718,100 @@ function pictureType(buf) {
   return null
 }
 
-async function mediaApi(req, res) {
-  if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed.' })
+/** A readable file name part from what the browser called the picture ("Table 3 (final).PNG" -> "table-3-final"), or ''. */
+const slugOf = (name) => String(name ?? '').replace(/\.[A-Za-z0-9]{1,5}$/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50)
+
+/** The picture a /media/... address names, as { parts, name } when it is a valid one, else null. */
+function mediaTarget(url) {
+  if (typeof url !== 'string' || !url.startsWith('/media/')) return null
+  const segs = url.slice('/media/'.length).split('/')
+  const name = segs.pop()
+  const parts = folderParts(segs.join('/'))
+  return parts && segs.every((s) => s !== '') && FILE_NAME.test(name ?? '') ? { parts, name } : null
+}
+
+const LEGACY_NAME = /^[0-9a-f]{32}\.(?:png|jpg|webp|gif)$/
+
+/** The gamemaster's media library: list a folder, upload into it, make folders, delete pictures and empty folders. */
+async function mediaApi(req, res, url) {
   if (!isGm(req)) return json(res, 401, { error: 'Not signed in as gamemaster.' })
-  const buf = await readRaw(req, MAX_UPLOAD).catch(() => null)
-  if (!buf) return json(res, 413, { error: 'That picture is too large (15 MB at most).' })
-  const ext = pictureType(buf)
-  if (!ext) return json(res, 415, { error: 'Upload a PNG, JPEG, WebP or GIF picture.' })
-  const name = `${createHash('sha256').update(buf).digest('hex').slice(0, 32)}.${ext}`
-  const file = join(MEDIA_DIR, name)
-  if (!existsSync(file)) {
-    if (readdirSync(MEDIA_DIR).length >= MAX_MEDIA) return json(res, 507, { error: 'There are too many pictures stored.' })
-    writeFileSync(file + '.tmp', buf)
-    renameSync(file + '.tmp', file)
+  const q = url.searchParams
+  const parts = folderParts(q.get('folder') ?? '')
+  if (!parts) return json(res, 400, { error: 'That folder name is not allowed.' })
+  const dir = folderDir(parts)
+
+  if (req.method === 'GET') {
+    if (!isDir(dir)) return json(res, 404, { error: 'That folder does not exist.' })
+    const used = JSON.stringify(state ?? {})
+    const folders = [], files = []
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory() && FOLDER_NAME.test(e.name)) {
+        const inside = allPictures([...parts, e.name])
+        folders.push({ name: e.name, pictures: inside.length, bytes: inside.reduce((a, p) => a + p.size, 0) })
+      } else if (e.isFile() && FILE_NAME.test(e.name)) {
+        const s = statSync(join(dir, e.name))
+        const address = `/media/${[...parts, e.name].join('/')}`
+        files.push({ name: e.name, url: address, size: s.size, time: s.mtimeMs, used: used.includes(address) })
+      }
+    }
+    folders.sort((a, b) => a.name.localeCompare(b.name))
+    files.sort((a, b) => b.time - a.time)
+    const everything = allPictures()
+    return json(res, 200, { folder: parts.join('/'), folders, files, total: { pictures: everything.length, bytes: everything.reduce((a, p) => a + p.size, 0) } })
   }
-  return json(res, 201, { url: `/media/${name}` })
+
+  if (req.method === 'POST') {
+    if (q.get('make') !== null) { // a new folder: POST /api/media?folder=<where>&make=<name>
+      const name = (q.get('make') ?? '').trim()
+      if (!FOLDER_NAME.test(name)) return json(res, 400, { error: 'Folder names use letters, numbers, spaces, - and _ (up to 40 characters).' })
+      if (parts.length >= MAX_DEPTH) return json(res, 400, { error: `Folders can go ${MAX_DEPTH} deep at most.` })
+      if (!isDir(dir)) return json(res, 404, { error: 'That folder does not exist.' })
+      const made = join(dir, name)
+      if (readdirSync(dir).some((n) => n.toLowerCase() === name.toLowerCase())) return json(res, 409, { error: 'There is already something with that name here.' })
+      mkdirSync(made)
+      return json(res, 201, { folder: [...parts, name].join('/') })
+    }
+    if (!isDir(dir)) return json(res, 404, { error: 'That folder does not exist.' })
+    const buf = await readRaw(req, MAX_UPLOAD).catch(() => null)
+    if (!buf) return json(res, 413, { error: 'That picture is too large (15 MB at most).' })
+    const ext = pictureType(buf)
+    if (!ext) return json(res, 415, { error: 'Upload a PNG, JPEG, WebP or GIF picture.' })
+    const hash = createHash('sha256').update(buf).digest('hex')
+    const slug = slugOf(q.get('name'))
+    const name = slug ? `${slug}-${hash.slice(0, 10)}.${ext}` : `${hash.slice(0, 32)}.${ext}`
+    const file = join(dir, name)
+    if (!existsSync(file)) {
+      if (allPictures().length >= MAX_MEDIA) return json(res, 507, { error: 'There are too many pictures stored.' })
+      writeFileSync(file + '.tmp', buf)
+      renameSync(file + '.tmp', file)
+    }
+    return json(res, 201, { url: `/media/${[...parts, name].join('/')}` })
+  }
+
+  if (req.method === 'DELETE') {
+    const target = q.get('file')
+    if (target !== null) { // one picture, for good
+      const t = mediaTarget(target)
+      const file = t && join(folderDir(t.parts), t.name)
+      if (!file || !existsSync(file)) return json(res, 404, { error: 'That picture is not there.' })
+      unlinkSync(file)
+      return json(res, 200, { deleted: target })
+    }
+    if (parts.length === 0) return json(res, 400, { error: 'The top folder cannot be deleted.' })
+    if (!isDir(dir)) return json(res, 404, { error: 'That folder does not exist.' })
+    if (readdirSync(dir).length) return json(res, 409, { error: 'That folder is not empty. Delete or move its pictures first.' })
+    rmdirSync(dir)
+    return json(res, 200, { deleted: parts.join('/') })
+  }
+
+  return json(res, 405, { error: 'Method not allowed.' })
 }
 
 async function serveMedia(req, res, path) {
-  const m = MEDIA_NAME.exec(path)
-  const file = m && join(MEDIA_DIR, m[1])
+  let decoded
+  try { decoded = decodeURIComponent(path) } catch { decoded = '' }
+  const t = mediaTarget(decoded) ?? (LEGACY_NAME.test(decoded.slice('/media/'.length)) ? { parts: [], name: decoded.slice('/media/'.length) } : null)
+  const file = t && join(folderDir(t.parts), t.name)
   if (!file || !existsSync(file)) { res.writeHead(404, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); return res.end('Not found.') }
   res.writeHead(200, {
     'Content-Type': MEDIA_TYPES[extname(file).slice(1)],
@@ -822,7 +925,7 @@ async function api(req, res, path) {
     return json(res, 405, { error: 'Method not allowed.' })
   }
 
-  if (path === '/api/media') return mediaApi(req, res)
+  if (path === '/api/media') return mediaApi(req, res, new URL(req.url ?? '/', 'http://x'))
 
   if (path === '/api/profiles' || path === '/api/profile' || path === '/api/profile-login' || path.startsWith('/api/profiles/')) {
     const r = await profilesApi(req, res, path)

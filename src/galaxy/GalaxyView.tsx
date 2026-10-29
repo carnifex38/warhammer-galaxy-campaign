@@ -12,7 +12,8 @@ import LayoutImage from './LayoutImage'
 import Seats from './Seats'
 import type { AuthApi } from '../auth'
 import type { ClaimsApi, Viewing } from '../claims'
-import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
+import { EMPTY_INFO, defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo, type InfoContent } from './infoDefaults'
+import type { RevealField } from './InfoEditor'
 import { useTeams } from '../teams'
 
 const ERA_KEY = 'galaxy-era'
@@ -215,6 +216,15 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
       if (z) zoneOwner = { sector: s, planet: p, zone: z }
     }
   }
+  // gamemasters get an Edit button in the information window; it writes to the same place as the Host tab
+  const gmFor = (id: string, base: InfoContent, reveal: RevealField[]) => auth.session?.role !== 'gm' ? undefined : {
+    token: events.token,
+    full: events.infoFor(id, base),
+    edited: events.infoEdited(id),
+    reveal,
+    onChange: (c: Partial<InfoContent>) => events.setInfo(id, c),
+    onReset: () => events.resetInfo(id),
+  }
   let infoPanel: React.ReactNode = null
   if (zoneOwner) {
     const { sector: zs, planet: zp, zone: zz } = zoneOwner
@@ -227,6 +237,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
         content={events.infoForPlayer(zz.id, defaultZoneInfo(zz.note))}
         status={zz.status === 'open' ? 'Open for battle' : 'Battle in progress'}
         onClose={() => setInfo(null)}
+        gm={gmFor(zz.id, defaultZoneInfo(zz.note), ['info', 'intel', 'mission'])}
       />
     )
   } else if (infoSector) {
@@ -241,6 +252,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
         content={events.infoForPlayer(infoSector.id, defaultSectorInfo(infoSector.id))}
         status={locked ? 'Sector locked' : `${open} battlezones open`}
         onClose={() => setInfo(null)}
+        gm={gmFor(infoSector.id, defaultSectorInfo(infoSector.id), ['info', 'intel', 'mission'])}
       />
     )
   } else if (infoPlanet && infoPlanetSector) {
@@ -255,6 +267,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
         content={events.infoForPlayer(infoPlanet.id, defaultPlanetInfo(infoPlanet.name, era, isHulk))}
         status={!pi.enabled ? 'Access restricted' : pi.zonesHidden ? 'Battlezones classified' : `${pi.open} of ${pi.total} battlezones open`}
         onClose={() => setInfo(null)}
+        gm={gmFor(infoPlanet.id, defaultPlanetInfo(infoPlanet.name, era, isHulk), ['info', 'intel', 'mission', 'zones'])}
       />
     )
   }

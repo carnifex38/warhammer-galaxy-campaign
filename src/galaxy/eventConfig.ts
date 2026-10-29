@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { getState, patchState, watchState, Unauthorized, type ServerState } from '../api'
 import { applyOps, diffSetup, type Setup } from '../../server/statePatch.mjs'
 import { EMPTY_INFO, type InfoContent } from './infoDefaults'
+import { BLOCK_FIELDS, hasTextBlock, picturesOnly } from './blockModel'
 import { DEFAULT_TABLES, MAX_HULKS, SECTORS, makeHulkPlanets, makeTables, planetGroup, type GameTable, type Planet, type PlanetGroup, type Sector } from './data'
 import { DEFAULT_TEAMS, parseTeams, type TeamId, type TeamLook, type Teams } from '../teams'
 
@@ -279,12 +280,14 @@ export function useEventConfig(canHost = true, token?: string) {
     setConfig((c) => ({ ...c, [id]: { ...(c[id] ?? startOf(id)), ...change } }))
   const patchInfo = (id: string, change: Partial<InfoContent>) =>
     setInfoOverrides((o) => ({ ...o, [id]: { ...o[id], ...change } }))
-  /** Back to the built-in text for these windows; a battlezone keeps its layout picture. */
+  /** Back to the built-in text for these windows; the pictures (a battlezone's layout, the pictures added under each tab) are kept, the added text is not. */
   const resetText = (o: InfoOverrides, ids: string[]) => {
     const next = { ...o }
     for (const id of ids) {
-      const layout = next[id]?.layout
-      if (layout) next[id] = { layout }
+      const kept: Partial<InfoContent> = {}
+      if (next[id]?.layout) kept.layout = next[id].layout
+      for (const f of BLOCK_FIELDS) { const pics = picturesOnly(next[id]?.[f]); if (pics) kept[f] = pics }
+      if (Object.keys(kept).length) next[id] = kept
       else delete next[id]
     }
     return next
@@ -319,7 +322,7 @@ export function useEventConfig(canHost = true, token?: string) {
       return hostPreview ? { ...c, infoHidden: false, intelHidden: false, missionHidden: false, zonesHidden: false } : c
     },
     /** Whether the host has changed this window from its built-in text. */
-    infoEdited: (id: string) => Object.keys(infoOverrides[id] ?? {}).some((k) => k !== 'layout'),
+    infoEdited: (id: string) => Object.keys(infoOverrides[id] ?? {}).some((k) => k !== 'layout' && !(BLOCK_FIELDS as readonly string[]).includes(k)) || BLOCK_FIELDS.some((f) => hasTextBlock(infoOverrides[id]?.[f])),
     setInfo: patchInfo,
     /** Write several windows at once (used to load the sample mission). */
     setInfoMany: (many: Record<string, Partial<InfoContent>>) =>

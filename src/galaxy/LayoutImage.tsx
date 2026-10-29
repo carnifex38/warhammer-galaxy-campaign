@@ -1,28 +1,7 @@
 import { useRef, useState } from 'react'
 import { uploadMedia, ProfileError } from '../api'
-
-/** Larger pictures (a phone photo of a table, say) are scaled down to this many pixels on the long side before uploading. */
-const MAX_SIDE = 2560
-/** A picture smaller than this, and no larger than MAX_SIDE, is uploaded as it is. */
-const KEEP_BYTES = 2_500_000
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
-
-/** The picture to upload: as chosen when it is small enough (and always for a GIF, which may move), otherwise scaled down. */
-async function prepare(file: File): Promise<Blob> {
-  if (file.type === 'image/gif') return file
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height))
-  if (scale === 1 && file.size <= KEEP_BYTES) { bitmap.close(); return file }
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.round(bitmap.width * scale)
-  canvas.height = Math.round(bitmap.height * scale)
-  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  bitmap.close()
-  const encode = (type: string) => new Promise<Blob | null>((ok) => canvas.toBlob(ok, type, 0.85))
-  // WebP keeps transparency; a browser that cannot write it (it hands back a PNG instead) gets JPEG
-  const webp = await encode('image/webp')
-  return webp?.type === 'image/webp' ? webp : ((await encode('image/jpeg')) ?? file)
-}
+import MediaLibrary from './MediaLibrary'
+import { IMAGE_ACCEPT as ACCEPT, prepareImage as prepare } from './prepareImage'
 
 /**
  * A battlezone's layout picture. Everyone sees it once there is one (a click opens it full size). The gamemaster uploads, replaces
@@ -38,13 +17,14 @@ export default function LayoutImage({ url, gmToken, isGm, onChange }: {
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [library, setLibrary] = useState(false)
 
   const pick = async (file: File | undefined) => {
     if (!file || !gmToken) return
     setBusy(true)
     setError('')
     try {
-      onChange(await uploadMedia(gmToken, await prepare(file)))
+      onChange(await uploadMedia(gmToken, await prepare(file), '', file.name))
     } catch (e) {
       setError(e instanceof ProfileError ? e.message : 'That picture could not be uploaded.')
     } finally {
@@ -64,7 +44,9 @@ export default function LayoutImage({ url, gmToken, isGm, onChange }: {
           {gmToken ? (
             <>
               <button className="ghost" onClick={() => input.current?.click()} disabled={busy}>{busy ? 'Uploading…' : url ? 'Replace layout image' : 'Upload layout image'}</button>
+              <button className="ghost" onClick={() => setLibrary(true)} disabled={busy}>Choose from library</button>
               {url && <button className="ghost" onClick={() => onChange(undefined)} disabled={busy}>Remove</button>}
+              {library && <MediaLibrary gmToken={gmToken} onPick={onChange} onClose={() => setLibrary(false)} />}
             </>
           ) : (
             <span className="muted">Uploading needs the gamemaster login on the server.</span>

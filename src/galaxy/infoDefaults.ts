@@ -1,4 +1,5 @@
 import type { Era } from './planetLooks'
+import type { BlockMap } from './blockModel'
 
 // The text shown in each sector's and planet's information window. These are only starting points:
 // the event host can rewrite any of it (and add objectives and rewards) from the Host tab.
@@ -27,6 +28,10 @@ export interface InfoContent {
   zonesHidden: boolean
   /** battlezones: the layout picture the gamemaster uploaded (its /media/ address). Not part of the text: resetting keeps it. */
   layout?: string
+  /** what the gamemaster added after each tab's first text: more text and pictures, in order (see blockModel.ts). Resetting to the default text keeps the pictures. */
+  infoBlocks?: BlockMap
+  intelBlocks?: BlockMap
+  missionBlocks?: BlockMap
 }
 
 export const EMPTY_INFO: InfoContent = { summary: '', intel: '', objectives: [], rewards: [], infoHidden: false, intelHidden: false, missionHidden: false, zonesHidden: false }

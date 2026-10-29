@@ -68,10 +68,26 @@ export const saveProfile = (gmToken: string, id: string, armies: Army[]) =>
 export const createDummyProfile = (gmToken: string) => profileCall<{ profile: Profile }>('/api/profiles/dummy', { method: 'POST', headers: authHeader(gmToken) }).then((r) => r.profile)
 export const deleteProfile = (gmToken: string, id: string) => profileCall<unknown>(`/api/profiles/${id}`, { method: 'DELETE', headers: authHeader(gmToken) })
 
-/** The gamemaster uploads a picture (PNG, JPEG, WebP or GIF). Returns its address on the server, /media/<name>. */
-export async function uploadMedia(gmToken: string, picture: Blob): Promise<string> {
-  return (await profileCall<{ url: string }>('/api/media', { method: 'POST', headers: { 'Content-Type': picture.type || 'application/octet-stream', ...authHeader(gmToken) }, body: picture })).url
+/** The gamemaster uploads a picture (PNG, JPEG, WebP or GIF) into a folder of the media library. Returns its address on the server, /media/... */
+export async function uploadMedia(gmToken: string, picture: Blob, folder = '', name = ''): Promise<string> {
+  const q = new URLSearchParams({ folder, name })
+  return (await profileCall<{ url: string }>(`/api/media?${q}`, { method: 'POST', headers: { 'Content-Type': picture.type || 'application/octet-stream', ...authHeader(gmToken) }, body: picture })).url
 }
+
+export interface MediaFolder { name: string; pictures: number; bytes: number }
+export interface MediaFile { name: string; url: string; size: number; time: number; /** the event setup shows it somewhere */ used: boolean }
+export interface MediaListing { folder: string; folders: MediaFolder[]; files: MediaFile[]; total: { pictures: number; bytes: number } }
+
+const mediaCall = <T>(gmToken: string, folder: string, extra: Record<string, string>, method: string) =>
+  profileCall<T>(`/api/media?${new URLSearchParams({ folder, ...extra })}`, { method, headers: authHeader(gmToken) })
+
+/** What is in one folder of the media library (the top folder is ''). */
+export const listMedia = (gmToken: string, folder: string) => mediaCall<MediaListing>(gmToken, folder, {}, 'GET')
+export const makeMediaFolder = (gmToken: string, inside: string, name: string) => mediaCall<{ folder: string }>(gmToken, inside, { make: name }, 'POST')
+/** Deletes one picture from the server for good. */
+export const deleteMediaFile = (gmToken: string, url: string) => mediaCall<unknown>(gmToken, '', { file: url }, 'DELETE')
+/** Deletes an empty folder. */
+export const deleteMediaFolder = (gmToken: string, folder: string) => mediaCall<unknown>(gmToken, folder, {}, 'DELETE')
 
 /** The event state: everything for the gamemaster (with a token), only what players may see otherwise. null = nothing saved yet. */
 /** A setup together with when the server had it: `version` rises with every change, `epoch` names the run of the server (versions start again after a restart). */

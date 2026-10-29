@@ -3,6 +3,7 @@ import { MAX_HULKS, isHulkId } from './data'
 import InfoEditor from './InfoEditor'
 import SaveLoad from './SaveLoad'
 import TeamsEditor from './TeamsEditor'
+import MediaLibrary from './MediaLibrary'
 import { MARS_SAMPLE } from './sampleMissions'
 import { defaultPlanetInfo, defaultSectorInfo, defaultZoneInfo } from './infoDefaults'
 import type { Era } from './planetLooks'
@@ -27,6 +28,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
   const [editing, setEditing] = useState<string | null>(null)
   // which battlezone is open for editing inside a planet
   const [editing2, setEditing2] = useState<string | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   // which sectors are expanded (all start folded, so the page stays short)
   const [openSectors, setOpenSectors] = useState<string[]>([])
   const toggleSector = (id: string) => setOpenSectors((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))
@@ -62,6 +64,19 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
       </section>
 
       <TeamsEditor events={events} />
+
+      <section className="host-sector">
+        <div className="hulk-controls">
+          <span className="pname">
+            Media library
+            <small className="muted" style={{ display: 'block' }}>The pictures uploaded to the server (battlezone layouts). Browse folders, make new ones, upload, and delete pictures for good to free up room.</small>
+          </span>
+          {events.token
+            ? <button className="ghost" onClick={() => setLibraryOpen(true)}>Open media library</button>
+            : <span className="muted">Needs the gamemaster login on the server.</span>}
+        </div>
+      </section>
+      {libraryOpen && events.token && <MediaLibrary gmToken={events.token} onClose={() => setLibraryOpen(false)} />}
 
       <section className="host-sector">
         {([['extra', 'Extra map planets', 'The planets from the Horus Heresy map that are not in the original set.'], ['forge', 'Added forge worlds', 'The forge worlds added from the map (Voss, Phaeton, Anvillus, Sarum, Tigrus, Accatran).']] as const).map(([g, label, note]) => (
@@ -137,6 +152,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
                 content={events.infoFor(s.id, defaultSectorInfo(s.id))}
                 edited={events.infoEdited(s.id)}
                 reveal={['info', 'intel', 'mission']}
+                token={events.token}
                 onChange={(c) => events.setInfo(s.id, c)}
                 onReset={() => events.resetInfo(s.id)}
               />
@@ -204,6 +220,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
                           content={events.infoFor(p.id, defaultPlanetInfo(p.name, era, hulk))}
                           edited={events.infoEdited(p.id)}
                           reveal={['info', 'intel', 'mission', 'zones']}
+                          token={events.token}
                           onChange={(c) => events.setInfo(p.id, c)}
                           onReset={() => events.resetInfo(p.id)}
                         />
@@ -225,6 +242,7 @@ export default function HostView({ events, claims }: { events: EventApi; claims:
                                     content={zi}
                                     edited={events.infoEdited(t.id)}
                                     reveal={['info', 'intel', 'mission']}
+                                    token={events.token}
                                     onChange={(c) => events.setInfo(t.id, c)}
                                     onReset={() => events.resetInfo(t.id)}
                                   />

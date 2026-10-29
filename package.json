@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "serve": "node server/index.mjs",
     "data": "node scripts/update-data.mjs",
-    "test:gamemasters": "node scripts/test-multi-gm.mjs"
+    "test:gamemasters": "node scripts/test-multi-gm.mjs",
+    "test:media": "node scripts/test-media.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

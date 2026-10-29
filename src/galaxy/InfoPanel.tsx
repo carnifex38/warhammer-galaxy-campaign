@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { InfoContent } from './infoDefaults'
+import InfoEditor, { type RevealField } from './InfoEditor'
+import { BlockView } from './Blocks'
+import { sortedBlocks } from './blockModel'
 
 type Tab = 'info' | 'intel' | 'mission'
 
@@ -20,6 +23,16 @@ export interface InfoPanelProps {
   /** a line of live facts shown along the bottom, e.g. "3 of 4 tables open" */
   status: string
   onClose: () => void
+  /** given to gamemasters: shows an Edit button that changes this window's text and pictures right here (the same as in the Host tab) */
+  gm?: {
+    token?: string
+    /** everything, hidden sections included (what `content` leaves out for players) */
+    full: InfoContent
+    edited: boolean
+    reveal: RevealField[]
+    onChange: (change: Partial<InfoContent>) => void
+    onReset: () => void
+  }
 }
 
 /** What players see when the host has not revealed a section yet. */
@@ -39,11 +52,12 @@ const paragraphs = (text: string) => text.split(/\n{2,}/).map((p) => p.trim()).f
  * The information window for a sector, planet or space hulk: a briefing, intelligence and the mission the event
  * sets there. A side panel on desktop; on tablets and phones it floats over a darkened map.
  */
-export default function InfoPanel({ kind, title, subtitle, color, content, status, onClose }: InfoPanelProps) {
+export default function InfoPanel({ kind, title, subtitle, color, content, status, onClose, gm }: InfoPanelProps) {
   const [tab, setTab] = useState<Tab>('info')
+  const [editing, setEditing] = useState(false)
 
   // start on the first page whenever a different place is shown
-  useEffect(() => { setTab('info') }, [title])
+  useEffect(() => { setTab('info'); setEditing(false) }, [title])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -53,7 +67,8 @@ export default function InfoPanel({ kind, title, subtitle, color, content, statu
 
   const objectives = content.objectives.filter((o) => o.trim())
   const rewards = content.rewards.filter((o) => o.trim())
-  const hasMission = (objectives.length > 0 || rewards.length > 0) && !content.missionHidden
+  const hasMission = (objectives.length > 0 || rewards.length > 0 || sortedBlocks(content.missionBlocks).length > 0) && !content.missionHidden
+  const editor = gm && editing ? gm : null
 
   return (
     <>
@@ -61,7 +76,10 @@ export default function InfoPanel({ kind, title, subtitle, color, content, statu
       <section className="info" role="dialog" aria-label={`${title} information`} style={{ ['--accent' as string]: color }}>
         <header className="info-head">
           <span className="info-kind">◆ {kind}</span>
-          <button className="info-close" onClick={onClose} aria-label="Close information">✕</button>
+          <span className="info-head-tools">
+            {gm && <button className={`info-edit${editing ? ' on' : ''}`} onClick={() => setEditing((e) => !e)}>{editing ? '✓ Done' : '✎ Edit'}</button>}
+            <button className="info-close" onClick={onClose} aria-label="Close information">✕</button>
+          </span>
         </header>
 
         <div className="info-title">
@@ -82,18 +100,30 @@ export default function InfoPanel({ kind, title, subtitle, color, content, statu
         </div>
 
         <div className="info-body">
-          {tab === 'info' && content.infoHidden && <Classified what="briefing notes" />}
-          {tab === 'info' && !content.infoHidden && paragraphs(content.summary).map((p, i) => <p key={i}>{p}</p>)}
-
-          {tab === 'intel' && content.intelHidden && <Classified what="intelligence" />}
-          {tab === 'intel' && !content.intelHidden && (
-            content.intel.trim()
-              ? paragraphs(content.intel).map((p, i) => <p key={i}>{p}</p>)
-              : <p className="info-empty">No intelligence has been gathered yet.</p>
+          {editor && (
+            <InfoEditor content={editor.full} edited={editor.edited} reveal={editor.reveal} only={tab} token={editor.token} onChange={editor.onChange} onReset={editor.onReset} />
           )}
 
-          {tab === 'mission' && content.missionHidden && <Classified what="orders" />}
-          {tab === 'mission' && !content.missionHidden && (
+          {!editor && tab === 'info' && content.infoHidden && <Classified what="briefing notes" />}
+          {!editor && tab === 'info' && !content.infoHidden && (
+            <>
+              {paragraphs(content.summary).map((p, i) => <p key={i}>{p}</p>)}
+              <BlockView blocks={content.infoBlocks} />
+            </>
+          )}
+
+          {!editor && tab === 'intel' && content.intelHidden && <Classified what="intelligence" />}
+          {!editor && tab === 'intel' && !content.intelHidden && (
+            <>
+              {content.intel.trim()
+                ? paragraphs(content.intel).map((p, i) => <p key={i}>{p}</p>)
+                : sortedBlocks(content.intelBlocks).length === 0 && <p className="info-empty">No intelligence has been gathered yet.</p>}
+              <BlockView blocks={content.intelBlocks} />
+            </>
+          )}
+
+          {!editor && tab === 'mission' && content.missionHidden && <Classified what="orders" />}
+          {!editor && tab === 'mission' && !content.missionHidden && (
             hasMission ? (
               <>
                 {objectives.length > 0 && (
@@ -112,6 +142,7 @@ export default function InfoPanel({ kind, title, subtitle, color, content, statu
                     </ul>
                   </>
                 )}
+                <BlockView blocks={content.missionBlocks} />
               </>
             ) : (
               <p className="info-empty">The event host has not set a mission here.</p>
