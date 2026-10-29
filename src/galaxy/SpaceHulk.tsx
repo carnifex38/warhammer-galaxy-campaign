@@ -60,7 +60,11 @@ export class Builder {
 
   add(geo: THREE.BufferGeometry, base: THREE.Matrix4, pos: [number, number, number], scale: [number, number, number], color: THREE.Color, rot: [number, number, number] = [0, 0, 0]) {
     const g = geo.clone()
-    this.m.compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(...scale))
+    // Parts overlap and many have faces in the very same plane, which flickers (z-fighting). Every part is made a hair bigger or smaller
+    // than drawn (a fixed amount for each part, so the hulk looks the same every time) and no two faces stay in the same plane.
+    const k = this.parts.length
+    const jig = (axis: number) => 1 + (Math.sin(k * 12.9898 + axis * 78.233) * 43758.5453 % 1) * 0.016
+    this.m.compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(scale[0] * jig(0), scale[1] * jig(1), scale[2] * jig(2)))
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(base, this.m))
     const n = g.attributes.position.count
     const col = new Float32Array(n * 3)
