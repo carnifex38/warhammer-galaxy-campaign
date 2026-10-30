@@ -156,8 +156,10 @@ export class Builder {
     if (!c) return null
     const slot = this.find(this.slotsFor(c), slotId)
     if (!slot || slot.isGroup) return null
-    // adding a model or upgrade that is already there raises its number; every unit is its own selection
-    const existing = slot.node.type === 'unit' ? undefined : c.selections.find((s) => s.slot.id === slot.id)
+    // adding a model or upgrade that is already there raises its number; every unit is its own selection (and so is a single model
+    // added to a force, such as a tank: each one gets its own wargear)
+    const ownSelection = slot.node.type === 'unit' || (c.kind === 'force' && slot.node.type === 'model')
+    const existing = ownSelection ? undefined : c.selections.find((s) => s.slot.id === slot.id)
     const sel = existing ?? this.makeSel(c, slot, 0)
     sel.number += number
     if (!existing) this.populate(sel)

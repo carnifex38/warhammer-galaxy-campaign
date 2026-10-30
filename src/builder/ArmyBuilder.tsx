@@ -304,7 +304,7 @@ function UnitRow({ s }: { s: SelSummary }) {
     <div className="bld-unit">
       <button className="bld-unit-main" onClick={() => open({ kind: editing ? 'edit' : 'info', uid: s.uid })}>
         <span className="bld-unit-top">
-          <b>{s.name}</b>
+          <b>{s.number > 1 ? `${s.number}× ` : ''}{s.name}</b>
           <span className="chip pts">{Math.round(s.pts)} pts</span>
           {s.issues > 0 && <span className="chip bad">{s.issues}</span>}
         </span>
