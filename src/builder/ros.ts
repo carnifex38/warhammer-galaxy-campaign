@@ -24,6 +24,30 @@ export function toRos(b: Builder): string {
     return out.length ? `<categories>${out.join('')}</categories>` : ''
   }
 
+  // who leads or supports whom (40,000): each leader lists the unit it goes with, and that unit lists its leaders
+  type Link = { id: string; name: string; action: string; label: string; other: Sel }
+  const outgoing = new Map<Sel, Link[]>()
+  const incoming = new Map<Sel, Link[]>()
+  const scan = (list: Sel[]) => {
+    for (const s of list) {
+      for (const a of s.assoc ?? []) {
+        const def = [...(s.slot.node.associations ?? []), ...(s.slot.link?.associations ?? [])].find((d: { id: string }) => d.id === a.id)
+        const link = { id: a.id, name: String(def?.name ?? 'Leading'), action: String(def?.action ?? 'group'), label: String(def?.label ?? ''), other: a.to }
+        outgoing.set(s, [...(outgoing.get(s) ?? []), link])
+        incoming.set(a.to, [...(incoming.get(a.to) ?? []), { ...link, other: s }])
+      }
+      scan(s.selections)
+    }
+  }
+  const scanForces = (list: Force[]) => { for (const f of list) { scan(f.selections); scanForces(f.forces) } }
+  scanForces(b.roster.forces)
+  const associations = (s: Sel) => {
+    const out = outgoing.get(s)
+    const inc = incoming.get(s)
+    return (out ? `<associations>${out.map((l) => `<association type="outgoing" to="${l.other.uid}" associationId="${esc(l.id)}" name="${esc(l.name)}" action="${esc(l.action)}"/>`).join('')}</associations>` : '') +
+      (inc ? `<incomingAssociations>${inc.map((l) => `<incomingAssociation type="incoming" from="${l.other.uid}" amount="1" associationId="${esc(l.id)}" name="${esc(l.name)}" action="${esc(l.action)}"/>`).join('')}</incomingAssociations>` : '')
+  }
+
   const selection = (s: Sel): string => {
     const node = s.slot.node
     const kids = s.selections.map(selection).join('')
@@ -34,7 +58,7 @@ export function toRos(b: Builder): string {
     const groupAttrs = g
       ? ` entryGroupId="${esc([...(s.slot.link ? s.slot.links.slice(0, -1) : s.slot.links), g.id].join('::'))}" number="${s.number}" type="${esc(type)}" from="group" group="${esc(g.name)}"`
       : ` number="${s.number}" type="${esc(type)}" from="entry"`
-    return `<selection id="${uuid()}" name="${esc(name)}" entryId="${esc(s.slot.id)}"${groupAttrs}><costs>${costsOf(s)}</costs>${categories(s)}${kids ? `<selections>${kids}</selections>` : ''}</selection>`
+    return `<selection id="${s.uid}" name="${esc(name)}" entryId="${esc(s.slot.id)}"${groupAttrs}>${associations(s)}${kids ? `<selections>${kids}</selections>` : ''}<costs>${costsOf(s)}</costs>${categories(s)}</selection>`
   }
 
   const force = (f: Force): string => {

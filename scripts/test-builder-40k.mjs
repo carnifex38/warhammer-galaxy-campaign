@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildSystem } from '../src/builder/engine.ts'
 import { Builder } from '../src/builder/roster.ts'
+import { toRos } from '../src/builder/ros.ts'
 
 const dir = process.argv[2] ?? 'public/data/wh40k11e'
 const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
@@ -74,6 +75,27 @@ b.addSelection(sizeUid, over.id)
 b.roster.limits[b.pts] = 1500
 b.reconcile()
 check('overriding the points limit keeps the player\'s own', b.view().costs[0].limit === 1500, `limit ${b.view().costs[0].limit}`)
+
+// a leader goes with a unit: shown on both, kept when saved, written for New Recruit, dropped when the unit goes
+{
+  const b2 = new Builder(sys, undefined, 'Leaders')
+  b2.addForce(null, b2.view().forceChoices.find((c) => c.name === 'Army Roster').id, manifest.catalogues.find((c) => c.name.endsWith('Ultramarines')).id)
+  const fv = b2.view().forces[0]
+  const addUnit = (r, n) => b2.addSelection(fv.uid, fv.roles.find((x) => x.name === r).choices.find((c) => c.name === n).id)
+  const captain = addUnit('Character', 'Captain')
+  const squad = addUnit('Battleline', 'Intercessor Squad')
+  const terminators = addUnit('Infantry', 'Terminator Squad')
+  const attach = b2.detail(captain).attach[0]
+  check('a Captain can lead Intercessors but not Terminators', attach && attach.options.some((o) => o.uid === squad) && !attach.options.some((o) => o.uid === terminators), attach?.options.map((o) => o.name).join(', '))
+  b2.setAssociation(captain, attach.id, squad)
+  const lines = () => b2.view().forces[0].roles.flatMap((r) => r.selections).flatMap((s) => s.links)
+  check('both units say so', lines().join('|') === 'Leading Intercessor Squad|Led by Captain', lines().join(' | '))
+  check('a saved list keeps it', Builder.load(sys, JSON.parse(JSON.stringify(b2.save()))).builder.view().forces[0].roles.flatMap((r) => r.selections).flatMap((s) => s.links).length === 2)
+  const xml = toRos(b2)
+  check('the roster file for New Recruit has it, both ways', /<association type="outgoing" to="[^"]+" associationId="[^"]+" name="Leading"/.test(xml) && /<incomingAssociation type="incoming" from="[^"]+"/.test(xml))
+  b2.remove(squad)
+  check('it ends when the unit is removed', lines().length === 0)
+}
 
 console.log(`view() takes ${(() => { const t = performance.now(); b.view(); return (performance.now() - t).toFixed(1) })()} ms`)
 console.log(`total ${Math.round(performance.now() - t0)} ms ${failed ? failed + ' FAILED' : 'all passed'}`)

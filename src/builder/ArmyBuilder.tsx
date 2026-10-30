@@ -309,6 +309,7 @@ function UnitRow({ s }: { s: SelSummary }) {
           {s.issues > 0 && <span className="chip bad">{s.issues}</span>}
         </span>
         {s.brief && <small>{s.brief}</small>}
+        {s.links.map((l) => <small key={l} className="bld-link">{l}</small>)}
       </button>
       <button className="bld-icon" onClick={() => open({ kind: 'info', uid: s.uid })} aria-label={`${s.name} information`}><Eye /></button>
       {editing && <button className="bld-icon" onClick={() => void act({ op: 'remove', uid: s.uid })} aria-label={`Remove ${s.name}`}>✕</button>}
@@ -360,6 +361,15 @@ function UnitModal({ uid, mode, onClose }: { uid: string; mode: 'info' | 'edit';
       {!detail && <p className="muted">Opening…</p>}
       {detail && (shownTab === 'info' ? <UnitSheet d={detail} /> : (
         <>
+          {detail.attach.map((a) => (
+            <label key={a.id} className="bld-attach">
+              <span>{a.name}</span>
+              <select value={a.chosen} onChange={(e) => void act({ op: 'attach', uid: detail.uid, id: a.id, target: e.target.value || null })} aria-label={a.name}>
+                <option value="">{a.options.length ? 'Nobody' : 'No unit in this list to go with'}</option>
+                {a.options.map((o) => <option key={o.uid} value={o.uid}>{o.name}</option>)}
+              </select>
+            </label>
+          ))}
           <SlotList slots={detail.slots} container={detail.uid} act={act} />
           <div className="bld-done"><button className="primary" onClick={onClose}>Done</button></div>
         </>

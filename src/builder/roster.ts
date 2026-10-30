@@ -9,7 +9,7 @@ import { Engine, POINTS_NAME, flatEntries, newRoster, nextUid, rootSlots, slotsO
 
 export interface Choice { id: string; name: string; pts: number; hidden?: boolean }
 export interface Issue { uid: string; level: 'error' | 'warning'; text: string }
-export interface SelSummary { uid: string; name: string; number: number; pts: number; issues: number; /** one short line under the name: what is in the unit */ brief: string }
+export interface SelSummary { uid: string; name: string; number: number; pts: number; issues: number; /** one short line under the name: what is in the unit */ brief: string; /** who leads or supports whom (40,000): "Leading Intercessor Squad", "Led by Captain" */ links: string[] }
 export interface RoleView { id: string; name: string; count: number; min?: number; max?: number; selections: SelSummary[]; choices: Choice[] }
 export interface ForceView { uid: string; name: string; catalogue: string; pts: number; roles: RoleView[]; forces: ForceView[]; childChoices: Choice[]; issues: number }
 export interface CostView { id: string; name: string; total: number; limit: number }
@@ -29,8 +29,11 @@ export interface SlotView {
 }
 export interface StatTable { type: string; columns: string[]; rows: { name: string; values: string[] }[] }
 export interface RuleView { name: string; text: string }
+/** A choice of unit this one can lead or support (40,000): the rules data's association, and the units it may go with. */
+export interface AttachView { id: string; name: string; label: string; min: number; chosen: string; options: { uid: string; name: string }[] }
 export interface SelDetail {
   uid: string; name: string; number: number; pts: number
+  attach: AttachView[]
   slots: SlotView[] // every option, for the loadout editor
   issues: string[]
   // the unit as it is now (filled in for the selection that was opened, not for the ones inside it)
@@ -47,7 +50,7 @@ export interface ImportReport {
   ourPoints: number
 }
 
-export interface SavedSel { e: string; n: number; s?: SavedSel[] }
+export interface SavedSel { e: string; n: number; s?: SavedSel[]; /** a key, when another selection leads or supports this one */ k?: string; /** what this one leads or supports: the association's id and the key of the unit */ a?: { i: string; t: string }[] }
 export interface SavedForce { e: string; c: string; s: SavedSel[]; f: SavedForce[] }
 export interface SavedRoster { v: 1; sys: string; name: string; limits: Record<string, number>; forces: SavedForce[] }
 
@@ -330,6 +333,7 @@ export class Builder {
       for (const f of this.roster.forces) visit(f)
       if (!changed) break
     }
+    this.pruneAssociations()
     this.followBattleSize()
     this.eng.touch()
   }
@@ -451,8 +455,68 @@ export class Builder {
     return { id: slot.id, name: this.eng.nameOf(slot, ctx), pts: this.eng.unitCost(probe, this.pts) }
   }
 
-  private summary(s: Sel, counts: Map<string, number>): SelSummary {
-    return { uid: s.uid, name: label(this.eng, s), number: s.number, pts: this.eng.cost(s, this.pts), issues: counts.get(s.uid) ?? 0, brief: this.brief(s) }
+  private summary(s: Sel, counts: Map<string, number>, links: Map<Sel, string[]>): SelSummary {
+    return { uid: s.uid, name: label(this.eng, s), number: s.number, pts: this.eng.cost(s, this.pts), issues: counts.get(s.uid) ?? 0, brief: this.brief(s), links: links.get(s) ?? [] }
+  }
+
+  // ---- leaders and the units they lead (40,000) ----
+
+  private defsOf(s: Sel): Node[] { return [...(s.slot.node.associations ?? []), ...(s.slot.link?.associations ?? [])] }
+
+  private allSels(): Sel[] {
+    const out: Sel[] = []
+    const down = (list: Sel[]) => { for (const s of list) { out.push(s); down(s.selections) } }
+    const forces = (list: Force[]) => { for (const f of list) { down(f.selections); forces(f.forces) } }
+    forces(this.roster.forces)
+    return out
+  }
+
+  private forceOfSel(s: Sel): Force { let h: Sel | Force = s; while (h.kind === 'sel') h = h.parent; return h }
+
+  /** The units a leader (or supporter) may go with: those the rules data allows that are not already full. */
+  private attachOptions(s: Sel, def: Node, all: Sel[]): Sel[] {
+    const force = this.forceOfSel(s)
+    const room = Number(def.max ?? 1)
+    return all.filter((t) => {
+      if (t === s || (def.scope === 'force' && this.forceOfSel(t) !== force)) return false
+      if (['unit', 'model', 'upgrade'].includes(def.childId) ? t.slot.node.type !== def.childId : !t.slot.ids.includes(def.childId)) return false
+      if (!this.eng.eligible(def, t)) return false
+      const taken = all.filter((x) => x !== s && x.assoc?.some((a) => a.id === def.id && a.to === t)).length
+      return room < 0 || taken < room
+    })
+  }
+
+  /** Make a unit lead or support another (or nobody: no target). */
+  setAssociation(uid: string, id: string, target: string | null) {
+    const all = this.allSels()
+    const s = all.find((x) => x.uid === uid)
+    if (!s) return
+    const rest = (s.assoc ?? []).filter((a) => a.id !== id)
+    const to = target ? all.find((x) => x.uid === target) : undefined
+    if (to) rest.push({ id, to })
+    if (rest.length) s.assoc = rest
+    else delete s.assoc
+  }
+
+  /** Leaders whose unit is no longer in the list stop leading it. */
+  private pruneAssociations() {
+    const all = this.allSels()
+    const live = new Set(all)
+    for (const s of all) if (s.assoc) { s.assoc = s.assoc.filter((a) => live.has(a.to)); if (!s.assoc.length) delete s.assoc }
+  }
+
+  /** For every unit: the lines about who leads or supports whom. */
+  private linkTexts(): Map<Sel, string[]> {
+    const out = new Map<Sel, string[]>()
+    const add = (s: Sel, text: string) => out.set(s, [...(out.get(s) ?? []), text])
+    for (const s of this.allSels()) {
+      for (const a of s.assoc ?? []) {
+        const def = this.defsOf(s).find((d) => d.id === a.id)
+        add(s, `${def?.name ?? 'With'} ${label(this.eng, a.to)}`)
+        add(a.to, `${def?.label ?? 'Led by'} ${label(this.eng, s)}`)
+      }
+    }
+    return out
   }
 
   /** A short line for under a unit's name: its models (or, for a single model, what it carries). */
@@ -481,6 +545,7 @@ export class Builder {
     const counts = new Map<string, number>()
     for (const i of issues) if (i.level === 'error') counts.set(i.uid, (counts.get(i.uid) ?? 0) + 1)
 
+    const links = this.linkTexts()
     const forceView = (f: Force): ForceView => {
       const ctx: Ctx = { self: f, parent: f.parent }
       const roles: RoleView[] = []
@@ -507,7 +572,7 @@ export class Builder {
           count: sels.reduce((n, s) => n + s.number, 0),
           min: min || undefined,
           max: maxs.length ? Math.min(...maxs) : undefined,
-          selections: sels.map((s) => this.summary(s, counts)),
+          selections: sels.map((s) => this.summary(s, counts, links)),
           choices: (byRole.get(id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
         })
       }
@@ -657,7 +722,17 @@ export class Builder {
       return out
     }
     const info = top ? this.describe(s) : { loadout: [], stats: [], rules: [] }
-    return { uid: s.uid, name: label(e, s), number: s.number, pts: e.cost(s, this.pts), slots: build(slotsOf(this.sys, s.slot)), issues, ...info }
+    const attach: AttachView[] = []
+    if (top) {
+      const all = this.allSels()
+      for (const def of this.defsOf(s)) {
+        const chosen = s.assoc?.find((a) => a.id === def.id)?.to
+        const options = this.attachOptions(s, def, all)
+        if (chosen && !options.includes(chosen)) options.push(chosen)
+        attach.push({ id: String(def.id), name: String(def.name), label: String(def.label ?? def.name), min: Number(def.min ?? 0), chosen: chosen?.uid ?? '', options: options.map((t) => ({ uid: t.uid, name: label(e, t) })) })
+      }
+    }
+    return { uid: s.uid, name: label(e, s), number: s.number, pts: e.cost(s, this.pts), attach, slots: build(slotsOf(this.sys, s.slot)), issues, ...info }
   }
 
   // ---- importing ----
@@ -669,6 +744,8 @@ export class Builder {
   importRoster(r: ImportedRoster): ImportReport {
     const skipped: string[] = []
     let matched = 0
+    const theirs = new Map<string, Sel>() // the other app's id for each selection, to find who leads whom
+    const leading: [Sel, NonNullable<ImportedSel['assoc']>][] = []
     const load = (c: Holder, list: ImportedSel[], where: string) => {
       const slots = this.slotsFor(c)
       for (const x of list) {
@@ -681,6 +758,8 @@ export class Builder {
         if (!slot || slot.isGroup) { skipped.push(`${where} › ${x.name}`); continue }
         const s = this.makeSel(c, slot, x.number)
         matched++
+        if (x.id) theirs.set(x.id, s)
+        if (x.assoc?.length) leading.push([s, x.assoc])
         load(s, x.selections, `${where} › ${x.name}`)
       }
     }
@@ -698,6 +777,7 @@ export class Builder {
     this.roster.name = r.name
     if (r.limit >= 0) this.roster.limits[this.pts] = r.limit
     for (const f of r.forces) loadForce(f, this.roster)
+    for (const [s, list] of leading) for (const a of list) { const to = theirs.get(a.to); if (to) (s.assoc ??= []).push({ id: a.id, to }) }
     this.eng.touch()
     return { matched, skipped, theirPoints: r.points, ourPoints: this.eng.total(this.pts) }
   }
@@ -705,7 +785,14 @@ export class Builder {
   // ---- saving ----
 
   save(): SavedRoster {
-    const sel = (s: Sel): SavedSel => ({ e: s.slot.id, n: s.number, ...(s.selections.length ? { s: s.selections.map(sel) } : {}) })
+    const led = new Set<Sel>()
+    for (const s of this.allSels()) for (const a of s.assoc ?? []) led.add(a.to)
+    const sel = (s: Sel): SavedSel => ({
+      e: s.slot.id, n: s.number,
+      ...(led.has(s) ? { k: s.uid } : {}),
+      ...(s.assoc?.length ? { a: s.assoc.map((x) => ({ i: x.id, t: x.to.uid })) } : {}),
+      ...(s.selections.length ? { s: s.selections.map(sel) } : {}),
+    })
     const force = (f: Force): SavedForce => ({ e: f.link ? `${f.link.id}::${f.entry.id}` : f.entry.id, c: f.catalogueId, s: f.selections.map(sel), f: f.forces.map(force) })
     return { v: 1, sys: this.sys.gst.id, name: this.roster.name, limits: { ...this.roster.limits }, forces: this.roster.forces.map(force) }
   }
@@ -715,12 +802,16 @@ export class Builder {
     const b = new Builder(sys, undefined, saved.name)
     Object.assign(b.roster.limits, saved.limits)
     let dropped = 0
+    const keyed = new Map<string, Sel>()
+    const leading: [Sel, NonNullable<SavedSel['a']>][] = []
     const loadSel = (c: Holder, list: SavedSel[]) => {
       const slots = b.slotsFor(c)
       for (const x of list) {
         const slot = b.find(slots, x.e)
         if (!slot || slot.isGroup) { dropped++; continue }
         const s = b.makeSel(c, slot, x.n)
+        if (x.k) keyed.set(x.k, s)
+        if (x.a?.length) leading.push([s, x.a])
         loadSel(s, x.s ?? [])
       }
     }
@@ -735,6 +826,7 @@ export class Builder {
       for (const c of x.f) loadForce(c, f)
     }
     for (const x of saved.forces) loadForce(x, b.roster)
+    for (const [s, list] of leading) for (const a of list) { const to = keyed.get(a.t); if (to) (s.assoc ??= []).push({ id: a.i, to }) }
     b.eng.touch()
     return { builder: b, dropped }
   }

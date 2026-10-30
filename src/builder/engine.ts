@@ -133,7 +133,7 @@ export function flatEntries(slots: Slot[], out: Slot[] = []): Slot[] {
 // roster instances
 // ---------------------------------------------------------------------------------------------------------------
 
-export interface Sel { kind: 'sel'; uid: string; slot: Slot; number: number; selections: Sel[]; parent: Sel | Force; virtual?: boolean }
+export interface Sel { kind: 'sel'; uid: string; slot: Slot; number: number; selections: Sel[]; parent: Sel | Force; virtual?: boolean; /** 40,000: the unit this one leads or supports (the association's id from the rules data, and the unit) */ assoc?: { id: string; to: Sel }[] }
 export interface Force { kind: 'force'; uid: string; entry: Node; link?: Node; catalogueId: string; selections: Sel[]; forces: Force[]; parent: Force | Roster }
 export interface Roster { kind: 'roster'; name: string; limits: Record<string, number>; forces: Force[]; systemId: string }
 
@@ -145,7 +145,7 @@ export const nextUid = () => `u${(++counter).toString(36)}`
 
 export function newRoster(sys: System, name: string): Roster {
   const limits: Record<string, number> = {}
-  for (const c of sys.gst.costTypes ?? []) limits[c.id] = c.defaultCostLimit ?? -1
+  for (const c of sys.gst.costTypes ?? []) limits[c.id] = typeof c.defaultCostLimit === 'number' ? c.defaultCostLimit : -1 // (40,000 has a blank one for Enhancements: no limit)
   return { kind: 'roster', name, limits, forces: [], systemId: sys.gst.id }
 }
 
@@ -329,13 +329,47 @@ export class Engine {
     return false
   }
 
+  /**
+   * A local condition group counts the selections in a scope that each meet ALL of its inner conditions, then compares that count
+   * (40,000 uses it for "a unit costs more when two or more of the same unit come before it": inner conditions are "is before
+   * the entry the rule is on" and "is an instance of this unit").
+   */
+  private localGroupPasses(g: Node, ctx: Ctx): boolean {
+    const scope = this.scopeOf(g.scope, ctx)
+    if (!scope) return false
+    const all = this.collect(scope, !!g.includeChildSelections, !!g.includeChildForces)
+    const at = ctx.self && ctx.self.kind === 'sel' && !ctx.self.virtual ? all.findIndex((p) => p.s === ctx.self) : -1 // (an entry not added yet comes after everything there)
+    let have = 0
+    all.forEach(({ s, w }, i) => {
+      for (const c of g.conditions ?? []) {
+        if (c.type === 'before') { if (at >= 0 && i >= at) return }
+        else if (c.type === 'instanceOf') { if (!this.matches(s, c.childId)) return }
+        else if (c.type === 'notInstanceOf') { if (this.matches(s, c.childId)) return }
+      }
+      have += s.number * w
+    })
+    switch (g.type) {
+      case 'lessThan': return have < g.value
+      case 'greaterThan': return have > g.value
+      case 'equalTo': return have === g.value
+      case 'notEqualTo': return have !== g.value
+      case 'atLeast': return have >= g.value
+      case 'atMost': return have <= g.value
+    }
+    return false
+  }
+
   private groupPasses(g: Node, ctx: Ctx): boolean {
     const parts: boolean[] = []
     for (const c of g.conditions ?? []) parts.push(this.conditionPasses(c, ctx))
     for (const s of g.conditionGroups ?? []) parts.push(this.groupPasses(s, ctx))
+    for (const l of g.localConditionGroups ?? []) parts.push(this.localGroupPasses(l, ctx))
     if (parts.length === 0) return true
     return g.type === 'or' ? parts.some(Boolean) : parts.every(Boolean)
   }
+
+  /** Can this unit be the target of an association ("Leading", "Supporting"): does it meet the conditions the rules data puts on it? */
+  eligible(def: Node, target: Sel): boolean { return this.holderPasses(def, { self: target, parent: target.parent }) }
 
   private holderPasses(h: Node, ctx: Ctx): boolean {
     for (const c of h.conditions ?? []) if (!this.conditionPasses(c, ctx)) return false
