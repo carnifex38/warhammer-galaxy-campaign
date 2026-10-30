@@ -11,7 +11,8 @@
     "serve": "node server/index.mjs",
     "data": "node scripts/update-data.mjs",
     "test:gamemasters": "node scripts/test-multi-gm.mjs",
-    "test:media": "node scripts/test-media.mjs"
+    "test:media": "node scripts/test-media.mjs",
+    "test:40k": "node scripts/test-builder-40k.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

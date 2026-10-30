@@ -21,6 +21,7 @@ export type Request =
   | { op: 'setNumber'; uid: string; n: number }
   | { op: 'remove'; uid: string }
   | { op: 'split'; uid: string }
+  | { op: 'attach'; uid: string; id: string; target: string | null }
   | { op: 'detail'; uid: string }
   | { op: 'name'; name: string }
   | { op: 'limit'; id: string; value: number }
@@ -81,6 +82,7 @@ self.onmessage = async (e: MessageEvent<{ id: number; req: Request }>) => {
         case 'setNumber': b.setNumber(req.uid, req.n); break
         case 'remove': b.remove(req.uid); break
         case 'split': b.split(req.uid); break
+        case 'attach': b.setAssociation(req.uid, req.id, req.target); break
         case 'name': b.roster.name = req.name; break
         case 'limit': b.roster.limits[req.id] = req.value; break
         case 'import': {

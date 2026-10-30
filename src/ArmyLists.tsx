@@ -2,7 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type FormEve
 import { Unauthorized, createDummyProfile, deleteMyProfile, deleteProfile, getMyProfile, getProfile, listProfiles, saveMyProfile, saveProfile, type Army, type Profile, type ProfileSummary } from './api'
 import type { AuthApi } from './auth'
 import { DEV_PLAYER_ID, local } from './localProfiles' // DEV-TOOLS
-import type { StoredRoster } from './builder/ArmyBuilder'
+import type { Game, StoredRoster } from './builder/ArmyBuilder'
 import type { ClaimsApi, SeatList, Viewing } from './claims'
 import { useTeams } from './teams'
 
@@ -11,7 +11,7 @@ const ArmyBuilder = lazy(() => import('./builder/ArmyBuilder'))
 
 // The Army Lists tab. A player sees and edits the army lists on their own profile. The gamemaster sees every profile in a
 // list, can open any of them to read or edit its lists, can delete a profile, and can also have a profile of their own.
-// A 30K list is built in the army builder; a 40K one is notes for now.
+// Both a 30K and a 40K list are built in the army builder (each from its own rules data).
 
 /** Where the profiles are kept: on the server, or in this browser for the developer roles (DEV-TOOLS). */
 interface Backend {
@@ -44,7 +44,9 @@ function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemo
   onChange: (patch: Partial<Army>) => void
   onRemove: () => void
 }) {
-  const stored = a.roster as StoredRoster | undefined
+  const game: Game = a.era === '30k' ? 'hh3' : 'wh40k11e'
+  const built = a.roster as StoredRoster | undefined
+  const stored = built?.game === game ? built : undefined // (a list built under the other era's rules is not read as this one's)
   const pts = stored?.pts
   return (
     <div className={`army-card${open ? ' open' : ''}`}>
@@ -59,7 +61,7 @@ function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemo
           {editing && (
             <div className="army-row">
               <input value={a.name} maxLength={40} onChange={(e) => onChange({ name: e.target.value })} placeholder="Army name" aria-label="Army name" />
-              <select value={a.era} onChange={(e) => onChange({ era: e.target.value as Army['era'] })} aria-label="Era">
+              <select value={a.era} onChange={(e) => onChange({ era: e.target.value as Army['era'] })} disabled={!!stored} title={stored ? 'This list is built under these rules. Remove the army to start another era.' : undefined} aria-label="Era">
                 <option value="40k">40K</option>
                 <option value="30k">30K</option>
               </select>
@@ -69,13 +71,9 @@ function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemo
           {editing
             ? <textarea value={a.notes} maxLength={4000} rows={3} onChange={(e) => onChange({ notes: e.target.value })} placeholder="Notes, ideas for this army…" aria-label="Army notes" />
             : a.notes.trim() && <p className="army-notes">{a.notes}</p>}
-          {a.era === '30k' ? (
-            <Suspense fallback={<p className="muted">Opening the list…</p>}>
-              <ArmyBuilder key={undone} stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
-            </Suspense>
-          ) : (
-            <p className="muted army-build-note">The army builder for 40K is coming. For now, use the notes.</p>
-          )}
+          <Suspense fallback={<p className="muted">Opening the list…</p>}>
+            <ArmyBuilder key={`${undone}-${game}`} game={game} stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
+          </Suspense>
           <div className="army-foot">
             {editing
               ? <button className="primary" onClick={() => onEdit(false)}>Done</button>
@@ -343,8 +341,8 @@ function ViewedList({ v, claims, onClose, onBack }: { v: Viewing; claims: Claims
       {list && (
         <>
           {list.notes.trim() && <p className="army-notes">{list.notes}</p>}
-          {list.era === '30k' && stored
-            ? <Suspense fallback={<p className="muted">Opening the list…</p>}><ArmyBuilder key={loads} stored={stored} name={list.name} editing={false} onChange={() => undefined} /></Suspense>
+          {stored
+            ? <Suspense fallback={<p className="muted">Opening the list…</p>}><ArmyBuilder key={loads} game={stored.game} stored={stored} name={list.name} editing={false} onChange={() => undefined} /></Suspense>
             : !list.notes.trim() && <p className="muted">This list has no units written down.</p>}
         </>
       )}

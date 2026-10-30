@@ -1,8 +1,12 @@
 // Reading rosters made by other apps. New Recruit exports its lists as JSON, as a BattleScribe roster (.ros) or zipped
 // (.rosz); all three hold the same thing: forces holding selections, each pointing at the BSData entry it came from. They are
 // turned here into one small neutral shape, which the builder then matches against its own copy of the rules.
+import { POINTS_NAME } from './engine.ts'
 
-export interface ImportedSel { name: string; entryId: string; number: number; type: string; cost: number; selections: ImportedSel[] }
+/** A points limit as the other app wrote it: a number, or nothing (or blank) for no limit. */
+const limitOf = (v: unknown) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? -1 : Number(v))
+
+export interface ImportedSel { name: string; entryId: string; number: number; type: string; cost: number; selections: ImportedSel[]; /** the other app's id for this selection, and the units it leads or supports (by their ids there) */ id?: string; assoc?: { to: string; id: string }[] }
 export interface ImportedForce { name: string; entryId: string; catalogueId: string; selections: ImportedSel[]; forces: ImportedForce[] }
 export interface ImportedRoster {
   name: string
@@ -23,8 +27,10 @@ function fromJson(root: J): ImportedRoster {
     name: String(s.name ?? ''), entryId: String(s.entryId ?? ''), number: Number(s.number ?? 1), type: String(s.type ?? 'upgrade'),
     cost: Number(arr(s.costs).find((c) => c.typeId === pointsId)?.value ?? 0),
     selections: arr(s.selections).map((x) => sel(x, pointsId)),
+    id: s.id === undefined ? undefined : String(s.id),
+    assoc: arr(s.associations).filter((a) => a.to !== undefined).map((a) => ({ to: String(a.to), id: String(a.associationId ?? a.id ?? '') })),
   })
-  const pointsId = String(arr(r.costs).find((c) => /^point/i.test(c.name))?.typeId ?? '')
+  const pointsId = String(arr(r.costs).find((c) => POINTS_NAME.test(String(c.name)))?.typeId ?? '')
   const force = (f: J): ImportedForce => ({
     name: String(f.name ?? ''), entryId: String(f.entryId ?? ''), catalogueId: String(f.catalogueId ?? ''),
     selections: arr(f.selections).map((x) => sel(x, pointsId)), forces: arr(f.forces).map(force),
@@ -32,7 +38,7 @@ function fromJson(root: J): ImportedRoster {
   return {
     name: String(r.name ?? 'Imported roster'), gameSystemId: String(r.gameSystemId ?? ''), gameSystemName: String(r.gameSystemName ?? ''),
     points: Number(arr(r.costs).find((c) => c.typeId === pointsId)?.value ?? 0),
-    limit: Number(arr(r.costLimits).find((c) => c.typeId === pointsId)?.value ?? -1),
+    limit: limitOf(arr(r.costLimits).find((c) => c.typeId === pointsId)?.value),
     forces: arr(r.forces).map(force),
   }
 }
@@ -45,11 +51,13 @@ function fromXml(text: string): ImportedRoster {
   const kids = (el: Element, name: string) => [...el.children].filter((c) => c.localName === name)
   const first = (el: Element, name: string) => kids(el, name)[0]
   const costsOf = (el: Element) => kids(first(el, 'costs') ?? el, 'cost')
-  const pointsId = costsOf(root).find((c) => /^point/i.test(c.getAttribute('name') ?? ''))?.getAttribute('typeId') ?? ''
+  const pointsId = costsOf(root).find((c) => POINTS_NAME.test(c.getAttribute('name') ?? ''))?.getAttribute('typeId') ?? ''
   const sel = (e: Element): ImportedSel => ({
     name: e.getAttribute('name') ?? '', entryId: e.getAttribute('entryId') ?? '', number: Number(e.getAttribute('number') ?? 1), type: e.getAttribute('type') ?? 'upgrade',
     cost: Number(costsOf(e).find((c) => c.getAttribute('typeId') === pointsId)?.getAttribute('value') ?? 0),
     selections: kids(first(e, 'selections') ?? e, 'selection').map(sel).filter(Boolean),
+    id: e.getAttribute('id') ?? undefined,
+    assoc: kids(first(e, 'associations') ?? e, 'association').filter((a) => a.getAttribute('to')).map((a) => ({ to: a.getAttribute('to') ?? '', id: a.getAttribute('associationId') ?? '' })),
   })
   const force = (e: Element): ImportedForce => ({
     name: e.getAttribute('name') ?? '', entryId: e.getAttribute('entryId') ?? '', catalogueId: e.getAttribute('catalogueId') ?? '',
@@ -60,7 +68,7 @@ function fromXml(text: string): ImportedRoster {
   return {
     name: root.getAttribute('name') ?? 'Imported roster', gameSystemId: root.getAttribute('gameSystemId') ?? '', gameSystemName: root.getAttribute('gameSystemName') ?? '',
     points: Number(costsOf(root).find((c) => c.getAttribute('typeId') === pointsId)?.getAttribute('value') ?? 0),
-    limit: Number(limit?.getAttribute('value') ?? -1),
+    limit: limitOf(limit?.getAttribute('value')),
     forces: first(root, 'forces') ? kids(first(root, 'forces')!, 'force').map(force) : [],
   }
 }
