@@ -1,4 +1,5 @@
-// Adds every available unit of every army to a detachment, one after another, to catch crashes and slow spots:
+// Adds every available unit of every army to its force (the primary detachment in Horus Heresy, the army roster in 40,000), one
+// after another, to catch crashes and slow spots:
 //   node scripts/stress-builder.mjs <folder made by build-bsdata.mjs>
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -16,14 +17,15 @@ for (const army of manifest.catalogues.filter((c) => !c.library)) {
   try {
     const b = new Builder(sys, undefined, army.name)
     let v = b.view()
-    const orgChoice = v.forceChoices.find((c) => /Crusade Force/.test(c.name))
+    // Horus Heresy: a Crusade Force whose primary detachment holds the units; 40,000: the army roster holds them itself
+    const orgChoice = v.forceChoices.find((c) => /Crusade Force|Army Roster/.test(c.name))
     const org = b.addForce(null, orgChoice.id, army.id)
     v = b.view()
     const primChoice = v.forces[0].childChoices.find((c) => /Primary Detachment/.test(c.name))
-    if (!primChoice) { console.log(army.name, 'no primary detachment'); continue }
-    b.addForce(org, primChoice.id)
+    if (primChoice) b.addForce(org, primChoice.id)
+    else if (!/Army Roster/.test(orgChoice.name)) { console.log(army.name, 'no primary detachment'); continue }
     v = b.view()
-    const prim = v.forces[0].forces[0]
+    const prim = primChoice ? v.forces[0].forces[0] : v.forces[0]
     let n = 0
     for (const role of prim.roles) {
       for (const c of role.choices) {
@@ -34,7 +36,7 @@ for (const army of manifest.catalogues.filter((c) => !c.library)) {
         const ms = performance.now() - t
         if (ms > slowest.ms) slowest = { ms, what: `${army.name} / ${c.name}` }
         n++; units++
-        if (view.forces[0].forces[0].roles.length === 0) throw new Error('roles vanished')
+        if ((primChoice ? view.forces[0].forces[0] : view.forces[0]).roles.length === 0) throw new Error('roles vanished')
         b.remove(uid) // keep the roster small so every unit is tried on its own
       }
     }

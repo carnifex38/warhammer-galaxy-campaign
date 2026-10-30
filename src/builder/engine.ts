@@ -94,13 +94,29 @@ export function rootSlots(sys: System, catalogueId: string): Slot[] {
   if (have) return have
   const out: Slot[] = []
   const seen = new Set<string>()
-  const add = (owner: Node) => { for (const s of buildSlots(sys, owner, undefined, [], [])) if (!seen.has(s.id)) { seen.add(s.id); out.push(s) } }
+  // the settings every army has (40,000: "Detachment", "Battle Size", "Show/Hide Options") are in each catalogue that is imported as well:
+  // the army's own comes first, and a second copy would only ask for the same choice twice
+  const taken = new Set<string>() // the entries and (for the Configuration ones) the names of the settings so far
+  const isConfig = (s: Slot) => !!s.node.categoryLinks?.some((l: Node) => l.name === 'Configuration')
+  const add = (owner: Node, imported = false) => {
+    for (const s of buildSlots(sys, owner, undefined, [], [])) {
+      if (seen.has(s.id)) continue
+      const config = isConfig(s)
+      if (config || s.node.type === 'upgrade') {
+        if (taken.has(s.node.id) || (config && imported && taken.has(String(s.node.name)))) continue // (the same entry reached by another link, or another army's copy)
+        taken.add(s.node.id)
+        if (config) taken.add(String(s.node.name))
+      }
+      seen.add(s.id)
+      out.push(s)
+    }
+  }
   add(sys.gst)
   const visit = (id: string, guard: Set<string>) => {
     const c = sys.cats.get(id)
     if (!c || guard.has(id)) return
     guard.add(id)
-    add(c)
+    add(c, id !== catalogueId)
     for (const l of c.catalogueLinks ?? []) if (l.importRootEntries) visit(l.targetId, guard)
   }
   visit(catalogueId, new Set())
@@ -122,6 +138,9 @@ export interface Force { kind: 'force'; uid: string; entry: Node; link?: Node; c
 export interface Roster { kind: 'roster'; name: string; limits: Record<string, number>; forces: Force[]; systemId: string }
 
 let counter = 0
+/** The cost type that is the army's points: "Points" in Horus Heresy, "pts" in 40,000. */
+export const POINTS_NAME = /^(points?|pts)$/i
+
 export const nextUid = () => `u${(++counter).toString(36)}`
 
 export function newRoster(sys: System, name: string): Roster {

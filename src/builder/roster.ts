@@ -1,7 +1,7 @@
 // The roster side of the army builder: adding and removing forces and selections, keeping automatic selections correct,
 // checking the data's rules, and turning all of it into plain objects the screen can draw. Works on top of engine.ts.
 import type { ImportedForce, ImportedRoster, ImportedSel } from './importRoster.ts'
-import { Engine, flatEntries, newRoster, nextUid, rootSlots, slotsOf, type Ctx, type Force, type Node, type Roster, type Sel, type Slot, type System } from './engine.ts'
+import { Engine, POINTS_NAME, flatEntries, newRoster, nextUid, rootSlots, slotsOf, type Ctx, type Force, type Node, type Roster, type Sel, type Slot, type System } from './engine.ts'
 
 // ---------------------------------------------------------------------------------------------------------------
 // what the screen sees
@@ -52,6 +52,8 @@ export interface SavedForce { e: string; c: string; s: SavedSel[]; f: SavedForce
 export interface SavedRoster { v: 1; sys: string; name: string; limits: Record<string, number>; forces: SavedForce[] }
 
 const MAX = 999
+/** The kinds of profile drawn as a stat table, in the order shown: a unit's stats first, then its weapons (Horus Heresy names, then 40,000's). */
+const STAT_ORDER = ['Profile', 'Vehicle', 'Unit', 'Ranged Weapon', 'Ranged Weapons', 'Melee Weapon', 'Melee Weapons']
 
 type Holder = Sel | Force
 const label = (e: Engine, h: Holder): string => (h.kind === 'force' ? String(h.link?.name ?? h.entry.name) : e.nameOf(h.slot, { self: h, parent: h.parent }))
@@ -70,7 +72,7 @@ export class Builder {
     this.roster = roster ?? newRoster(sys, name)
     this.eng = new Engine(sys, this.roster)
     const types: Node[] = sys.gst.costTypes ?? []
-    this.pts = (types.find((t) => /^point/i.test(t.name)) ?? types[0])?.id ?? ''
+    this.pts = (types.find((t) => POINTS_NAME.test(t.name)) ?? types[0])?.id ?? ''
   }
 
   // ---- finding things ----
@@ -326,7 +328,29 @@ export class Builder {
       for (const f of this.roster.forces) visit(f)
       if (!changed) break
     }
+    this.followBattleSize()
     this.eng.touch()
+  }
+
+  /**
+   * 40,000 names the points limit in the battle size you pick ("2. Strike Force (2000 Point limit)") but gives it no rule, so the
+   * limit follows that choice here. Picking nothing leaves a limit set by hand alone.
+   */
+  private followBattleSize() {
+    const found = (list: Sel[]): number => {
+      for (const s of list) {
+        const m = /\((\d+)\s*Point limit\)/i.exec(String(s.slot.node.name ?? ''))
+        if (m) return Number(m[1])
+        const inner = found(s.selections)
+        if (inner) return inner
+      }
+      return 0
+    }
+    const walk = (forces: Force[]): number => { for (const f of forces) { const n = found(f.selections) || walk(f.forces); if (n) return n } return 0 }
+    const overridden = (list: Sel[]): boolean => list.some((s) => /^Override points limit/i.test(String(s.slot.node.name ?? '')) || overridden(s.selections))
+    const anyOverride = (forces: Force[]): boolean => forces.some((f) => overridden(f.selections) || anyOverride(f.forces))
+    const limit = anyOverride(this.roster.forces) ? 0 : walk(this.roster.forces) // ("Override points limit?" hands the limit back to the player)
+    if (limit && this.pts) this.roster.limits[this.pts] = limit
   }
 
   // ---- checking ----
@@ -359,6 +383,7 @@ export class Builder {
           if (e.isHidden(slot, ctx)) continue
           const name = e.nameOf(slot, ctx)
           for (const lim of e.limits([slot.node, slot.link], ctx)) {
+            if (lim.node.scope === 'self') continue // a limit on the entry itself says nothing until it is selected (40,000 has many, for Crusade)
             const count = e.countFor(slot, lim.node, ctx)
             if (lim.type === 'min' && count < lim.value) say(c.uid, 'error', `${owner}: needs at least ${lim.value} ${name} (has ${count}).`)
             if (lim.type === 'max' && count > lim.value) say(c.uid, 'error', `${owner}: at most ${lim.value} ${name} allowed (has ${count}).`)
@@ -509,7 +534,7 @@ export class Builder {
       forceChoices.push({ id: ch.entry.id, name: String(ch.entry.name), pts: 0 })
     }
     const costs: CostView[] = (this.sys.gst.costTypes ?? [])
-      .filter((t: Node) => !t.hidden)
+      .filter((t: Node) => !t.hidden || t.id === this.pts) // (40,000 marks its points cost hidden; it is still the one to show)
       .map((t: Node) => ({ id: t.id, name: t.name, total: e.total(t.id), limit: this.roster.limits[t.id] ?? -1 }))
     const armies = [...this.sys.cats.values()].filter((c) => !c.library).map((c) => ({ id: c.id, name: String(c.name) })).sort((a, b) => a.name.localeCompare(b.name))
     return { name: this.roster.name, costs, forces: this.roster.forces.map(forceView), issues, forceChoices, armies }
@@ -530,7 +555,7 @@ export class Builder {
     const tables = new Map<string, StatTable>()
     const rules: RuleView[] = []
     const seen = new Set<string>()
-    const TABLE_TYPES = new Set(['Profile', 'Vehicle', 'Ranged Weapon', 'Melee Weapon'])
+    const TABLE_TYPES = new Set(STAT_ORDER)
 
     const take = (sel: Sel) => {
       const ctx: Ctx = { self: sel, parent: sel.parent }
@@ -593,8 +618,7 @@ export class Builder {
     for (const o of others) { extra.push(o.number > 1 ? `${label(e, o)} ×${o.number}` : label(e, o)); items(o, extra) }
     if (extra.length) loadout.push(models.length ? `Upgrades: ${extra.join(', ')}` : extra.join(', '))
 
-    const order = ['Profile', 'Vehicle', 'Ranged Weapon', 'Melee Weapon']
-    const stats = [...tables.values()].sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type))
+    const stats = [...tables.values()].sort((a, b) => STAT_ORDER.indexOf(a.type) - STAT_ORDER.indexOf(b.type))
     return { loadout, stats, rules }
   }
 

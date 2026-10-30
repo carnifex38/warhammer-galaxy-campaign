@@ -9,10 +9,15 @@ import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, S
 // draws what it sends back.
 
 /** What a profile stores for one army list built here. */
-export interface StoredRoster { game: 'hh3'; armyId: string; saved: SavedRoster; /** the total when it was last saved, so a closed list can show it without loading anything */ pts?: number }
+export interface StoredRoster { game: Game; armyId: string; saved: SavedRoster; /** the total when it was last saved, so a closed list can show it without loading anything */ pts?: number }
 
+/** The rules each game is built from: the folder npm run data puts them in, and how the start screen names them. */
+export type Game = 'hh3' | 'wh40k11e'
 const DATA = `${import.meta.env.BASE_URL}data`
-const BASE: Record<StoredRoster['game'], string> = { hh3: `${DATA}/hh3` }
+const GAME: Record<Game, { base: string; rules: string }> = {
+  hh3: { base: `${DATA}/hh3`, rules: 'the Horus Heresy (3rd edition)' },
+  wh40k11e: { base: `${DATA}/wh40k11e`, rules: 'Warhammer 40,000 (11th edition)' },
+}
 
 type Call = (req: Request) => Promise<Response>
 type Act = (req: Request) => Promise<void>
@@ -85,8 +90,9 @@ function Modal({ title, sub, onClose, children }: { title: string; sub?: ReactNo
   )
 }
 
-export default function ArmyBuilder({ stored, name, onChange, editing = true }: { stored?: StoredRoster; name: string; onChange: (s: StoredRoster) => void; /** false: just show the list, with nothing to change */ editing?: boolean }) {
+export default function ArmyBuilder({ game, stored, name, onChange, editing = true }: { game: Game; stored?: StoredRoster; name: string; onChange: (s: StoredRoster) => void; /** false: just show the list, with nothing to change */ editing?: boolean }) {
   const call = useWorker()
+  const { base, rules } = GAME[game]
   const [armies, setArmies] = useState<{ id: string; name: string }[] | null>(null)
   const [armyId, setArmyId] = useState(stored?.armyId ?? '')
   const [view, setView] = useState<RosterView | null>(null)
@@ -101,25 +107,25 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
   // what armies the data has (a tiny file), and, if this list was built before, open it again
   useEffect(() => {
     let live = true
-    void call({ op: 'armies', base: BASE.hh3 }).then((r) => { if (live && r.ok) setArmies(r.armies ?? []); else if (live && !r.ok) setError(r.error) })
+    void call({ op: 'armies', base }).then((r) => { if (live && r.ok) setArmies(r.armies ?? []); else if (live && !r.ok) setError(r.error) })
     return () => { live = false }
-  }, [call])
+  }, [call, base])
 
   const apply = useCallback((r: Response) => {
     if (!r.ok) { setError(r.error); return }
     setError('')
     if (r.view) setView(r.view)
-    if (r.saved) onChange({ game: 'hh3', armyId: armyRef.current, saved: r.saved, pts: r.view?.costs[0] ? Math.round(r.view.costs[0].total) : undefined })
-  }, [onChange])
+    if (r.saved) onChange({ game, armyId: armyRef.current, saved: r.saved, pts: r.view?.costs[0] ? Math.round(r.view.costs[0].total) : undefined })
+  }, [onChange, game])
 
   const start = useCallback(async (id: string, saved?: SavedRoster) => {
     setBusy(true)
     setError('')
-    const r = await call({ op: 'load', base: BASE.hh3, armyId: id, saved })
+    const r = await call({ op: 'load', base, armyId: id, saved })
     setBusy(false)
     if (r.ok && r.dropped) setNote(`${r.dropped} entries are no longer in the rules data and were left out.`)
     apply(r)
-  }, [call, apply])
+  }, [call, apply, base])
 
   // open a list that was built before, once, when this screen appears (it runs again if React remounts the screen, because the
   // worker it asked is stopped then; the latest `start` is read through a ref so a changing callback does not re-run it)
@@ -152,7 +158,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
       if (!cat) throw new Error('That list has no army in it.')
       armyRef.current = cat
       setArmyId(cat)
-      const loaded = await call({ op: 'load', base: BASE.hh3, armyId: cat })
+      const loaded = await call({ op: 'load', base, armyId: cat })
       if (!loaded.ok) throw new Error(loaded.error)
       const r = await call({ op: 'import', roster })
       if (!r.ok) throw new Error(r.error)
@@ -164,7 +170,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
     } finally {
       setBusy(false)
     }
-  }, [call, apply])
+  }, [call, apply, base])
 
   const shared = useMemo<Shared | null>(() => (view ? { act, call, view, editing, open: setPopup } : null), [act, call, view, editing])
 
@@ -190,7 +196,7 @@ export default function ArmyBuilder({ stored, name, onChange, editing = true }: 
           <input ref={fileInput} type="file" accept=".json,.ros,.rosz,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importFile(f) }} />
         </div>
         {error && <p className="login-error" role="alert">{error}</p>}
-        <p className="muted bld-hint">The rules for the Horus Heresy (3rd edition) come from the community BSData files, the same data New Recruit uses. They download once, then work offline.</p>
+        <p className="muted bld-hint">The rules for {rules} come from the community BSData files, the same data New Recruit uses. They download once, then work offline.</p>
       </div>
     )
   }

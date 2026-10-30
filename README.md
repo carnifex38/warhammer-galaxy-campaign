@@ -16,6 +16,10 @@ short paraphrases written for the app.
 - **Information windows** for every sector, planet, space hulk and battlezone, with Info, Intel and Mission tabs.
 - **Gamemaster tools** (Host tab): show or hide planets, mark them in play or restricted, set battlezone counts, add space hulks,
   lock sectors behind void-shroud fog, rewrite any text, hide or reveal each section, quick reveal presets and a host preview.
+- **Army builders** for 30K (Horus Heresy 3rd edition) and 40K (11th edition), built on the community BSData rules that New Recruit
+  uses: points, wargear and the rules checks, and lists can be imported from and exported to New Recruit and BattleScribe. The rules
+  are downloaded by `npm run data`. The 40K rules are pinned to one commit (see `scripts/update-data.mjs`) so that points do not
+  change under saved lists in the middle of an event.
 - **Logins** for Guest, Player and Gamemaster.
 - Works on phones, tablets and desktop, and installs as an app (PWA).
 
@@ -85,7 +89,7 @@ For development run `npm run serve` (with a `GM_PASSWORD`) and `npm run dev` sid
 
 1. Live battlezone claiming.
 2. Organiser tools to place sectors and planets and upload battlezone layouts.
-3. Army builders for 40K and 30K.
+3. Army builders for 40K and 30K (done: see above; Crusade rules for 40K are not worked on yet).
 
 ## Built with
 
