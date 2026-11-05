@@ -304,11 +304,14 @@ function UnitRow({ s }: { s: SelSummary }) {
     <div className="bld-unit">
       <button className="bld-unit-main" onClick={() => open({ kind: editing ? 'edit' : 'info', uid: s.uid })}>
         <span className="bld-unit-top">
-          <b>{s.number > 1 ? `${s.number}× ` : ''}{s.name}</b>
+          <b>{s.look.size > 1 ? <span className="bld-size">{s.look.size}</span> : s.number > 1 ? <span className="bld-size">{s.number}×</span> : null}{s.name}</b>
           <span className="chip pts">{Math.round(s.pts)} pts</span>
           {s.issues > 0 && <span className="chip bad">{s.issues}</span>}
         </span>
-        {s.brief && <small>{s.brief}</small>}
+        {(s.look.gear || s.look.prime.length > 0) && (
+          <small className="bld-gear">{s.look.gear}{s.look.gear && s.look.prime.length > 0 ? ', ' : ''}{s.look.prime.length > 0 && <span className="bld-prime">{s.look.prime.join(', ')}</span>}</small>
+        )}
+        {s.look.models.map((m, i) => <small key={i} className="bld-model">• {m.n}× {m.name}{m.gear ? `: ${m.gear}` : ''}</small>)}
         {s.links.map((l) => <small key={l} className="bld-link">{l}</small>)}
       </button>
       <button className="bld-icon" onClick={() => open({ kind: 'info', uid: s.uid })} aria-label={`${s.name} information`}><Eye /></button>

@@ -632,6 +632,9 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-unit-top b { font-weight: 600; }
 .bld-unit-main small { color: #9aa6cc; font-size: 0.8rem; line-height: 1.3; }
 .bld-unit-main small.bld-link { color: #d9b45a; }
+.bld-unit-main .bld-size { color: #8f98b8; font-weight: 400; margin-right: 8px; }
+.bld-unit-main .bld-prime { color: #f2c14e; }
+.bld-unit-main small.bld-model { padding-left: 2px; }
 .bld-attach { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; font-size: 0.9rem; color: #c8d0ea; }
 .bld-attach select { flex: 1; min-width: 0; }
 .bld-add { padding: 12px; border-radius: 10px; border: 1px dashed #3a4672; background: none; color: #e0b650; cursor: pointer; font: inherit; }
