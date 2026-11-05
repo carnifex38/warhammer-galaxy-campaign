@@ -456,7 +456,6 @@ function StatModal({ t, col, row, onClose }: { t: StatTable; col: number; row: n
           ))}
         </tbody>
       </table>
-      <div className="bld-done"><button className="primary" onClick={onClose}>Close</button></div>
     </Modal>,
     document.body,
   )
