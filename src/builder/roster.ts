@@ -410,6 +410,9 @@ export class Builder {
     const checkSel = (s: Sel, owner: string) => {
       const ctx: Ctx = { self: s, parent: s.parent }
       const name = label(e, s)
+      // something picked that the rules have since hidden (e.g. a Loyalist-only hero after the Allegiance is changed to Traitor):
+      // New Recruit refuses it on import, so say so here too
+      if (s.parent.kind === 'force' && s.number > 0 && e.isHidden(s.slot, { parent: s.parent })) say(s.uid, 'error', `${name} cannot be selected while hidden (the rules hide it for this army or allegiance).`)
       for (const m of this.messages([s.slot.node, s.slot.link], 'error', ctx)) say(s.uid, 'error', `${name}: ${m}`)
       for (const m of this.messages([s.slot.node, s.slot.link], 'warning', ctx)) say(s.uid, 'warning', `${name}: ${m}`)
       checkSlots(s, `${owner} › ${name}`)
