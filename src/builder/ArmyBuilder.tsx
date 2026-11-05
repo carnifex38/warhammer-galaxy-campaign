@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Request, Response } from './worker.ts'
 import { readRosterFile } from './importRoster.ts'
 import { useBackClose } from '../navHistory.ts'
+import { statInfo } from './statGlossary.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen, laid out like New Recruit so it reads well on a phone: the list is flat blocks (a force, its roles, its
@@ -70,17 +72,20 @@ function Eye() {
 }
 
 /** A full-screen sheet over the page (a bottom sheet on a phone, a centred card on a wide screen). */
-function Modal({ title, sub, onClose, children }: { title: string; sub?: ReactNode; onClose: () => void; children: ReactNode }) {
+const openModals: object[] = [] // the windows now open, the newest last
+function Modal({ title, sub, onClose, small, children }: { title: string; sub?: ReactNode; onClose: () => void; /** a little card in the middle, for a short note over another window */ small?: boolean; children: ReactNode }) {
   useBackClose(onClose) // Back closes it
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const me = {}
+    openModals.push(me)
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && openModals[openModals.length - 1] === me) onClose() }
     window.addEventListener('keydown', key)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { window.removeEventListener('keydown', key); document.body.style.overflow = prev }
+    return () => { window.removeEventListener('keydown', key); document.body.style.overflow = prev; openModals.splice(openModals.indexOf(me), 1) }
   }, [onClose])
   return (
-    <div className="bld-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className={small ? 'bld-modal small' : 'bld-modal'} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bld-modal-card" role="dialog" aria-label={title}>
         <header>
           <div><h3>{title}</h3>{sub && <p>{sub}</p>}</div>
@@ -410,25 +415,50 @@ const WORDY = new Set(['Type', 'Special Rules', 'Traits', 'Transport Capacity', 
 
 /** One kind of stat line (models, ranged weapons...): the name, the numbers across, and the wordy parts underneath. */
 function StatBlock({ t }: { t: StatTable }) {
+  const [pick, setPick] = useState<{ col: number; row: number } | null>(null) // a column (and row) whose meaning is open
   const num = t.columns.map((c, i) => ({ c, i })).filter(({ c, i }) => !WORDY.has(c) && t.rows.some((r) => r.values[i]?.trim()))
   const words = t.columns.map((c, i) => ({ c, i })).filter(({ c }) => WORDY.has(c))
   return (
     <div className="bld-stats">
       <h5>{t.type}</h5>
       <table>
-        <thead><tr>{num.map(({ c }) => <th key={c}>{c}</th>)}</tr></thead>
+        <thead><tr>{num.map(({ c, i }) => <th key={c}><button className="stat-key" onClick={() => setPick({ col: i, row: -1 })} aria-label={`What ${c} means`}>{c}</button></th>)}</tr></thead>
         <tbody>
           {t.rows.map((r, n) => {
             const notes = words.map(({ c, i }) => (r.values[i]?.trim() && r.values[i].trim() !== '-' ? `${c === 'Type' ? '' : `${c}: `}${r.values[i]}` : '')).filter(Boolean)
             return [
               <tr key={`${n}n`} className="stat-name"><td colSpan={Math.max(1, num.length)}>{r.name}</td></tr>,
-              <tr key={`${n}v`} className="stat-vals">{num.map(({ i }) => <td key={i}>{r.values[i]}</td>)}</tr>,
+              <tr key={`${n}v`} className="stat-vals">{num.map(({ c, i }) => <td key={i}><button className="stat-val" onClick={() => setPick({ col: i, row: n })} aria-label={`${r.name} ${c}: what it means`}>{r.values[i]}</button></td>)}</tr>,
               notes.length > 0 && <tr key={`${n}t`} className="stat-notes"><td colSpan={Math.max(1, num.length)}>{notes.join(' · ')}</td></tr>,
             ]
           })}
         </tbody>
       </table>
+      {pick && <StatModal t={t} col={pick.col} row={pick.row} onClose={() => setPick(null)} />}
     </div>
+  )
+}
+
+/** What a stat is called in full, what it does, and the numbers of everything on that stat line (the one tapped is marked). */
+function StatModal({ t, col, row, onClose }: { t: StatTable; col: number; row: number; onClose: () => void }) {
+  const c = t.columns[col]
+  const info = statInfo(t.type, c)
+  return createPortal(
+    <Modal title={info && info.name !== c ? `${c} · ${info.name}` : c} sub={t.type} onClose={onClose} small>
+      {info ? <p className="stat-what">{info.text}</p> : <p className="muted">No description for this one yet.</p>}
+      <table className="stat-list">
+        <tbody>
+          {t.rows.map((r, n) => (
+            <tr key={n} className={n === row ? 'on' : ''}>
+              <th scope="row">{r.name}</th>
+              <td>{r.values[col]?.trim() || '–'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="bld-done"><button className="primary" onClick={onClose}>Close</button></div>
+    </Modal>,
+    document.body,
   )
 }
 
