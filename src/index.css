@@ -738,6 +738,16 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-stats td { color: #d6dae6; border-color: #272c37; }
 .bld-stats tr.stat-name td { background: #1c2028; }
 .bld-stats tr.stat-notes td { color: #9fb0e6; }
+.bld-stats .stat-key, .bld-stats .stat-val { width: 100%; background: none; border: 0; color: inherit; font: inherit; padding: 6px 0; cursor: pointer; }
+.bld-stats .stat-key { font-weight: 600; text-decoration: underline dotted; text-underline-offset: 3px; }
+.bld-stats .stat-key:hover, .bld-stats .stat-val:hover { background: rgba(224, 182, 80, 0.12); }
+.bld-modal.small { z-index: 70; align-items: center; padding: 16px; }
+.bld-modal.small .bld-modal-card { width: min(420px, 100%); height: auto; max-height: 80dvh; border-radius: 14px; }
+.stat-what { margin: 0; line-height: 1.45; color: #d6dae6; }
+.stat-list { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.stat-list th { text-align: left; font-weight: 500; color: #aab3cf; padding: 6px 8px; border-top: 1px solid #272c37; }
+.stat-list td { text-align: right; font-weight: 600; color: #fff; padding: 6px 8px; border-top: 1px solid #272c37; }
+.stat-list tr.on th, .stat-list tr.on td { color: #f2c14e; background: rgba(224, 182, 80, 0.1); }
 .bld-rules { border-color: #2e333f; }
 .bld-slotlist .bld-slotlist { border-left-color: #2e333f; }
 .bld-group-name { color: #98a0b3; }
