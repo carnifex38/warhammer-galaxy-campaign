@@ -10,6 +10,7 @@ import { useServerRestarting, useUpdateReady } from './updateReady'
 import type { GalaxySelection } from './galaxy/GalaxyView'
 import { TeamsProvider, setTeamsNow, teamVars } from './teams'
 import { loadPlace, savePlace } from './lastPlace'
+import { usePlaceHistory } from './navHistory'
 
 // the 3D galaxy and the host screen are separate downloads, fetched in the background while the player is on the login screen
 const GalaxyView = lazy(() => import('./galaxy/GalaxyView'))
@@ -65,6 +66,8 @@ export default function App() {
   const galaxySel = useRef<GalaxySelection | undefined>(saved.galaxy)
   const remember = () => savePlace({ tab, galaxy: galaxySel.current, territoryTeam, viewing })
   useEffect(remember, [tab, territoryTeam, viewing]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Back and Forward step between the screens the player has been on
+  usePlaceHistory<{ tab: TabId; viewing: Viewing | null }>({ tab, viewing }, (p) => { setTab(p.tab); setViewing(p.viewing) })
   const online = useOnline()
   useEffect(() => { preloadGalaxy() }, [])
   const serverUp = events.sync !== 'offline'

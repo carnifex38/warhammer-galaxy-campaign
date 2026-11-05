@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Request, Response } from './worker.ts'
 import { readRosterFile } from './importRoster.ts'
+import { useBackClose } from '../navHistory.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen, laid out like New Recruit so it reads well on a phone: the list is flat blocks (a force, its roles, its
@@ -70,6 +71,7 @@ function Eye() {
 
 /** A full-screen sheet over the page (a bottom sheet on a phone, a centred card on a wide screen). */
 function Modal({ title, sub, onClose, children }: { title: string; sub?: ReactNode; onClose: () => void; children: ReactNode }) {
+  useBackClose(onClose) // Back closes it
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', key)
@@ -304,11 +306,14 @@ function UnitRow({ s }: { s: SelSummary }) {
     <div className="bld-unit">
       <button className="bld-unit-main" onClick={() => open({ kind: editing ? 'edit' : 'info', uid: s.uid })}>
         <span className="bld-unit-top">
-          <b>{s.number > 1 ? `${s.number}× ` : ''}{s.name}</b>
+          <b>{s.look.size > 1 ? <span className="bld-size">{s.look.size}</span> : s.number > 1 ? <span className="bld-size">{s.number}×</span> : null}{s.name}</b>
           <span className="chip pts">{Math.round(s.pts)} pts</span>
           {s.issues > 0 && <span className="chip bad">{s.issues}</span>}
         </span>
-        {s.brief && <small>{s.brief}</small>}
+        {(s.look.gear || s.look.prime.length > 0) && (
+          <small className="bld-gear">{s.look.gear}{s.look.gear && s.look.prime.length > 0 ? ', ' : ''}{s.look.prime.length > 0 && <span className="bld-prime">{s.look.prime.join(', ')}</span>}</small>
+        )}
+        {s.look.models.map((m, i) => <small key={i} className="bld-model">• {m.n}× {m.name}{m.gear ? `: ${m.gear}` : ''}</small>)}
         {s.links.map((l) => <small key={l} className="bld-link">{l}</small>)}
       </button>
       <button className="bld-icon" onClick={() => open({ kind: 'info', uid: s.uid })} aria-label={`${s.name} information`}><Eye /></button>
