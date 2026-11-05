@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Request, Response } from './worker.ts'
 import { readRosterFile } from './importRoster.ts'
+import { useBackClose } from '../navHistory.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen, laid out like New Recruit so it reads well on a phone: the list is flat blocks (a force, its roles, its
@@ -70,6 +71,7 @@ function Eye() {
 
 /** A full-screen sheet over the page (a bottom sheet on a phone, a centred card on a wide screen). */
 function Modal({ title, sub, onClose, children }: { title: string; sub?: ReactNode; onClose: () => void; children: ReactNode }) {
+  useBackClose(onClose) // Back closes it
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', key)

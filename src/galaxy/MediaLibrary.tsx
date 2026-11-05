@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useBackClose } from '../navHistory'
 import { deleteMediaFile, deleteMediaFolder, listMedia, makeMediaFolder, uploadMedia, ProfileError, Unauthorized, type MediaListing } from '../api'
 import { IMAGE_ACCEPT, prepareImage } from './prepareImage'
 
@@ -72,6 +73,7 @@ export default function MediaLibrary({ gmToken, onPick, onClose }: {
     void run('Making folder…', async () => { await makeMediaFolder(gmToken, folder, name); setNaming(null) })
   }
 
+  useBackClose(onClose) // Back closes it
   const crumbs = folder ? folder.split('/') : []
   const open = (name: string) => setFolder(folder ? `${folder}/${name}` : name)
 
