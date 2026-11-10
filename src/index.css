@@ -1001,3 +1001,8 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .nav .version { display: none; }
 .options > .version { margin: 24px 0 0; }
 @media (min-width: 768px) { .nav .version { display: block; margin-top: auto; padding: 8px 14px 0; } }
+
+.bld-pick-head { margin: 14px 0 6px; font-size: 0.85rem; color: #aab3cf; }
+
+.stat-changed, .stat-changed .stat-val { color: #f2c14e !important; font-weight: 700; }
+.bld-stats td.stat-changed { background: rgba(242, 193, 78, 0.14); }

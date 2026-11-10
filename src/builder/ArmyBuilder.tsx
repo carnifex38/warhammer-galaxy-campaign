@@ -60,7 +60,7 @@ const download = (name: string, bytes: Uint8Array) => {
 type Popup =
   | { kind: 'info'; uid: string }
   | { kind: 'edit'; uid: string }
-  | { kind: 'add'; title: string; choices: Choice[]; pick: (id: string) => Req }
+  | { kind: 'add'; title: string; choices: Choice[]; pick: (id: string) => Req; /** more lists under the first (the detachments each force can take) */ more?: { title: string; choices: Choice[]; pick: (id: string) => Req }[] }
 type Req = Request
 
 interface Shared { act: Act; call: Call; view: RosterView; editing: boolean; open: (p: Popup) => void }
@@ -244,12 +244,12 @@ export default function ArmyBuilder({ game, stored, name, onChange, editing = tr
         {view.forces.map((f) => <ForceBlock key={f.uid} f={f} depth={0} />)}
 
         {editing && (
-          <button className="bld-add" onClick={() => setPopup({ kind: 'add', title: 'Add a force', choices: view.forceChoices, pick: (id) => ({ op: 'addForce', parent: null, entry: id, army: armyId }) })}>
+          <button className="bld-add" onClick={() => setPopup({ kind: 'add', title: 'Add a force', choices: view.forceChoices, pick: (id) => ({ op: 'addForce', parent: null, entry: id, army: armyId }), more: detachmentLists(view.forces) })}>
             + Add a force
           </button>
         )}
 
-        {popup?.kind === 'add' && <PickerModal title={popup.title} choices={popup.choices} onPick={(id) => { void act(popup.pick(id)); setPopup(null) }} onClose={() => setPopup(null)} />}
+        {popup?.kind === 'add' && <PickerModal title={popup.title} choices={popup.choices} more={popup.more} onPick={(id, pick) => { void act((pick ?? popup.pick)(id)); setPopup(null) }} onClose={() => setPopup(null)} />}
         {popup?.kind === 'info' && <UnitModal uid={popup.uid} mode="info" onClose={() => setPopup(null)} />}
         {popup?.kind === 'edit' && <UnitModal uid={popup.uid} mode="edit" onClose={() => setPopup(null)} />}
       </div>
@@ -329,9 +329,24 @@ function UnitRow({ s }: { s: SelSummary }) {
 
 // ---- pop-ups ----
 
-function PickerModal({ title, choices, onPick, onClose }: { title: string; choices: Choice[]; onPick: (id: string) => void; onClose: () => void }) {
+/** For each force already in the list that can hold detachments, the ones that can be added to it (as New Recruit's Add a force shows them). */
+function detachmentLists(forces: ForceView[]): { title: string; choices: Choice[]; pick: (id: string) => Req }[] {
+  const out: { title: string; choices: Choice[]; pick: (id: string) => Req }[] = []
+  const walk = (list: ForceView[]) => {
+    for (const f of list) {
+      if (f.childChoices.length) out.push({ title: `Detachments in ${f.name}`, choices: f.childChoices, pick: (id) => ({ op: 'addForce', parent: f.uid, entry: id }) })
+      walk(f.forces)
+    }
+  }
+  walk(forces)
+  return out
+}
+
+function PickerModal({ title, choices, more, onPick, onClose }: { title: string; choices: Choice[]; more?: { title: string; choices: Choice[]; pick: (id: string) => Req }[]; onPick: (id: string, pick?: (id: string) => Req) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
-  const list = choices.filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()))
+  const match = (c: Choice) => c.name.toLowerCase().includes(q.trim().toLowerCase())
+  const list = choices.filter(match)
+  const extra = (more ?? []).map((m) => ({ ...m, list: m.choices.filter(match) })).filter((m) => m.list.length > 0)
   return (
     <Modal title={title} onClose={onClose}>
       <input className="bld-search" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" aria-label="Search" />
@@ -341,8 +356,16 @@ function PickerModal({ title, choices, onPick, onClose }: { title: string; choic
             <button onClick={() => onPick(c.id)}><span>{c.name}</span>{c.pts > 0 && <span className="chip pts">{c.pts} pts</span>}</button>
           </li>
         ))}
-        {list.length === 0 && <li className="muted">Nothing matches.</li>}
+        {list.length === 0 && extra.length === 0 && <li className="muted">Nothing matches.</li>}
       </ul>
+      {extra.map((m, n) => (
+        <div key={n}>
+          <h5 className="bld-pick-head">{m.title}</h5>
+          <ul className="bld-pick">
+            {m.list.map((c) => <li key={c.id}><button onClick={() => onPick(c.id, m.pick)}><span>{c.name}</span></button></li>)}
+          </ul>
+        </div>
+      ))}
     </Modal>
   )
 }
@@ -428,7 +451,7 @@ function StatBlock({ t }: { t: StatTable }) {
             const notes = words.map(({ c, i }) => (r.values[i]?.trim() && r.values[i].trim() !== '-' ? `${c === 'Type' ? '' : `${c}: `}${r.values[i]}` : '')).filter(Boolean)
             return [
               <tr key={`${n}n`} className="stat-name"><td colSpan={Math.max(1, num.length)}>{r.name}</td></tr>,
-              <tr key={`${n}v`} className="stat-vals">{num.map(({ c, i }) => <td key={i}><button className="stat-val" onClick={() => setPick({ col: i, row: n })} aria-label={`${r.name} ${c}: what it means`}>{r.values[i]}</button></td>)}</tr>,
+              <tr key={`${n}v`} className="stat-vals">{num.map(({ c, i }) => <td key={i} className={r.changed?.[i] ? 'stat-changed' : undefined}><button className="stat-val" onClick={() => setPick({ col: i, row: n })} aria-label={`${r.name} ${c}: what it means`}>{r.values[i]}</button></td>)}</tr>,
               notes.length > 0 && <tr key={`${n}t`} className="stat-notes"><td colSpan={Math.max(1, num.length)}>{notes.join(' · ')}</td></tr>,
             ]
           })}
@@ -451,7 +474,7 @@ function StatModal({ t, col, row, onClose }: { t: StatTable; col: number; row: n
           {t.rows.map((r, n) => (
             <tr key={n} className={n === row ? 'on' : ''}>
               <th scope="row">{r.name}</th>
-              <td>{r.values[col]?.trim() || '–'}</td>
+              <td className={r.changed?.[col] ? 'stat-changed' : undefined}>{r.values[col]?.trim() || '–'}</td>
             </tr>
           ))}
         </tbody>

@@ -34,7 +34,7 @@ export interface SlotView {
   children?: SlotView[]
   selected?: SelDetail // the selection, when this entry is selected: its own options
 }
-export interface StatTable { type: string; columns: string[]; rows: { name: string; values: string[] }[] }
+export interface StatTable { type: string; columns: string[]; rows: { name: string; values: string[]; /** the columns whose value the rules have changed from the printed one (a Prime Advantage, a wargear choice) */ changed?: boolean[] }[] }
 export interface RuleView { name: string; text: string }
 /** A choice of unit this one can lead or support (40,000): the rules data's association, and the units it may go with. */
 export interface AttachView { id: string; name: string; label: string; min: number; chosen: string; options: { uid: string; name: string }[] }
@@ -682,11 +682,16 @@ export class Builder {
           if (e.modded(!!p.hidden, [p], 'hidden', ctx)) continue
           const name = e.modded(String(p.name), [p], 'name', ctx)
           const values: Record<string, string> = {}
-          for (const c of p.characteristics ?? []) values[c.name] = String(e.modded(c.$text ?? '', [p], c.typeId, ctx))
+          const changedBy: Record<string, boolean> = {}
+          for (const c of p.characteristics ?? []) {
+            const base = String(c.$text ?? '')
+            values[c.name] = String(e.modded(base, [p], c.typeId, ctx))
+            changedBy[c.name] = values[c.name].trim() !== base.trim()
+          }
           if (TABLE_TYPES.has(p.typeName)) {
             const cols = columnsOf(p)
             const t: StatTable = tables.get(p.typeName) ?? { type: p.typeName, columns: cols, rows: [] }
-            t.rows.push({ name, values: cols.map((c: string) => values[c] ?? '') })
+            t.rows.push({ name, values: cols.map((c: string) => values[c] ?? ''), changed: cols.map((c: string) => !!changedBy[c]) })
             tables.set(p.typeName, t)
           } else {
             const text = Object.entries(values).map(([k, v]) => (k === 'Description' || k === 'Summary' ? v : `${k}: ${v}`)).filter(Boolean).join(' ')
