@@ -434,9 +434,18 @@ export class Builder {
           walk(holder.kind === 'roster' ? holder.forces : holder.forces)
         } else {
           count = e.forceCost(f, lim.node.field)
+          // what a detachment is worth of this cost on its own (each Auxiliary Detachment counts as one), here and in those under it
+          const own = (x: Force): number => (x.link?.costs ?? x.entry.costs ?? []).filter((c: Node) => c.typeId === lim.node.field).reduce((n: number, c: Node) => n + Number(c.value ?? 0), 0) + x.forces.reduce((n, y) => n + own(y), 0)
+          count += own(f)
         }
-        if (lim.type === 'max' && count > lim.value && lim.node.field === 'forces') say(f.uid, 'error', `${name}: at most ${lim.value} allowed (has ${count}).`)
-        if (lim.type === 'min' && count < lim.value && lim.node.field === 'forces') say(f.uid, 'error', `${name}: needs at least ${lim.value}.`)
+        if (lim.node.field === 'forces') {
+          if (lim.type === 'max' && count > lim.value) say(f.uid, 'error', `${name}: at most ${lim.value} allowed (has ${count}).`)
+          if (lim.type === 'min' && count < lim.value) say(f.uid, 'error', `${name}: needs at least ${lim.value}.`)
+        } else if (this.sys.gst.costTypes?.some((c: Node) => c.id === lim.node.field)) {
+          // a limit on a kind of cost (e.g. one Auxiliary Detachment for each Command unit): the force and what is in it must stay within it
+          const what = String(this.sys.gst.costTypes.find((c: Node) => c.id === lim.node.field)?.name ?? 'Cost')
+          if (lim.type === 'max' && count > lim.value) say(f.uid, 'error', `${name}: ${what} ${count} is more than the ${lim.value} it allows.`)
+        }
       }
       for (const m of this.messages([f.entry, f.link], 'error', ctx)) say(f.uid, 'error', `${name}: ${m}`)
       for (const m of this.messages([f.entry, f.link], 'warning', ctx)) say(f.uid, 'warning', `${name}: ${m}`)
