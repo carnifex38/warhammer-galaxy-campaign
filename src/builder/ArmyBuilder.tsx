@@ -342,6 +342,20 @@ function detachmentLists(forces: ForceView[]): { title: string; choices: Choice[
   return out
 }
 
+/** A loadout line, with the Prime Unit and its advantages in yellow. */
+function loadoutLine(line: string, prime: string[]): ReactNode {
+  if (!prime.length) return line
+  const head = line.startsWith('Upgrades: ') ? 'Upgrades: ' : ''
+  const parts = line.slice(head.length).split(', ')
+  if (!parts.some((p) => prime.includes(p))) return line
+  return (
+    <>
+      {head}
+      {parts.map((p, i) => <span key={i}>{i > 0 && ', '}{prime.includes(p) ? <span className="bld-prime">{p}</span> : p}</span>)}
+    </>
+  )
+}
+
 function PickerModal({ title, choices, more, onPick, onClose }: { title: string; choices: Choice[]; more?: { title: string; choices: Choice[]; pick: (id: string) => Req }[]; onPick: (id: string, pick?: (id: string) => Req) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
   const match = (c: Choice) => c.name.toLowerCase().includes(q.trim().toLowerCase())
@@ -416,7 +430,7 @@ function UnitSheet({ d }: { d: SelDetail }) {
   return (
     <div className="bld-sheet">
       {d.issues.length > 0 && <ul className="bld-sheet-issues">{d.issues.map((t, i) => <li key={i}>{t}</li>)}</ul>}
-      <ul className="bld-loadout">{d.loadout.map((l, i) => <li key={i}>{l}</li>)}</ul>
+      <ul className="bld-loadout">{d.loadout.map((l, i) => <li key={i}>{loadoutLine(l, d.prime)}</li>)}</ul>
       {d.stats.map((t) => <StatBlock key={t.type} t={t} />)}
       {d.rules.length > 0 && (
         <details className="bld-rules">

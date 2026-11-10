@@ -1006,3 +1006,5 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 
 .stat-changed, .stat-changed .stat-val { color: #f2c14e !important; font-weight: 700; }
 .bld-stats td.stat-changed { background: rgba(242, 193, 78, 0.14); }
+
+.bld-loadout .bld-prime { color: #f2c14e; font-weight: 600; }

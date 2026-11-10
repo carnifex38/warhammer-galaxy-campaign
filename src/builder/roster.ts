@@ -45,6 +45,7 @@ export interface SelDetail {
   issues: string[]
   // the unit as it is now (filled in for the selection that was opened, not for the ones inside it)
   loadout: string[] // what each kind of model carries
+  prime: string[] // the parts of the loadout that are the Prime Unit and its advantages (drawn in yellow)
   stats: StatTable[] // the stat lines and weapon lines of what is selected
   rules: RuleView[] // special rules and wargear descriptions that apply
 }
@@ -647,7 +648,7 @@ export class Builder {
   }
 
   /** The stat lines, weapon lines, rules and a one-line-per-model loadout for what is selected inside a unit. */
-  private describe(root: Sel): { loadout: string[]; stats: StatTable[]; rules: RuleView[] } {
+  private describe(root: Sel): { loadout: string[]; prime: string[]; stats: StatTable[]; rules: RuleView[] } {
     const e = this.eng
     const profileTypes: Node[] = this.sys.gst.profileTypes ?? []
     const columnsOf = (p: Node) => (profileTypes.find((t) => t.id === p.typeId || t.name === p.typeName)?.characteristicTypes ?? []).map((c: Node) => c.name as string)
@@ -719,11 +720,16 @@ export class Builder {
     const others = root.selections.filter((c) => shown(c) && c.slot.node.type !== 'model')
     for (const m of models) { const list = items(m); loadout.push(`${m.number} × ${label(e, m)}${list.length ? ': ' + list.join(', ') : ''}`) }
     const extra: string[] = []
-    for (const o of others) { extra.push(o.number > 1 ? `${label(e, o)} ×${o.number}` : label(e, o)); items(o, extra) }
+    const prime: string[] = []
+    for (const o of others) {
+      const at = extra.length
+      extra.push(o.number > 1 ? `${label(e, o)} ×${o.number}` : label(e, o)); items(o, extra)
+      if (/prime unit/i.test(label(e, o))) prime.push(...extra.slice(at))
+    }
     if (extra.length) loadout.push(models.length ? `Upgrades: ${extra.join(', ')}` : extra.join(', '))
 
     const stats = [...tables.values()].sort((a, b) => STAT_ORDER.indexOf(a.type) - STAT_ORDER.indexOf(b.type))
-    return { loadout, stats, rules }
+    return { loadout, prime, stats, rules }
   }
 
   private selDetail(s: Sel, top = false, all: Issue[] = []): SelDetail {
@@ -758,7 +764,7 @@ export class Builder {
       }
       return out
     }
-    const info = top ? this.describe(s) : { loadout: [], stats: [], rules: [] }
+    const info = top ? this.describe(s) : { loadout: [], prime: [], stats: [], rules: [] }
     const attach: AttachView[] = []
     if (top) {
       const all = this.allSels()
