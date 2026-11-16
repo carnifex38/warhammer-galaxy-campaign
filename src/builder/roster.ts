@@ -38,6 +38,9 @@ export interface StatTable { type: string; columns: string[]; rows: { name: stri
 export interface RuleView { name: string; text: string }
 /** A choice of unit this one can lead or support (40,000): the rules data's association, and the units it may go with. */
 export interface AttachView { id: string; name: string; label: string; min: number; chosen: string; options: { uid: string; name: string }[] }
+/** Something a piece of wargear gives its model (e.g. the Heavy sub-type from a shield): what it is, what it does, and where it comes from. */
+export interface GrantView { name: string; rule: string; from: string; fromText: string }
+
 export interface SelDetail {
   uid: string; name: string; number: number; pts: number
   attach: AttachView[]
@@ -48,6 +51,7 @@ export interface SelDetail {
   prime: string[] // the parts of the loadout that are the Prime Unit and its advantages (drawn in yellow)
   stats: StatTable[] // the stat lines and weapon lines of what is selected
   rules: RuleView[] // special rules and wargear descriptions that apply
+  grants: GrantView[] // what the wargear gives the models (shown in yellow, tap to see where it comes from)
 }
 
 /** What came of reading another app's roster. */
@@ -656,8 +660,26 @@ export class Builder {
     return this.selDetail(s, true, this.validate())
   }
 
+  private ruleIndex?: Map<string, string>
+  /** The rules text for a named special rule, sub-type or trait, as the rules data words it ('' when it has none). */
+  private ruleText(name: string, kind: string): string {
+    if (!this.ruleIndex) {
+      const idx = new Map<string, string>()
+      for (const n of this.sys.byId.values()) {
+        const txt = typeof n.description === 'string' ? n.description : ''
+        if (!txt || !n.name || n.characteristics) continue
+        const keys = [String(n.name), ...((n.alias as string[] | undefined) ?? [])]
+        for (const k of keys) { const key = k.toLowerCase(); if (!idx.has(key)) idx.set(key, txt) }
+      }
+      this.ruleIndex = idx
+    }
+    const n = name.toLowerCase()
+    const k = kind.toLowerCase().replace(/-/g, '')
+    return this.ruleIndex.get(n) ?? this.ruleIndex.get(n + ' ' + (k === 'subtype' ? 'sub-type' : k)) ?? this.ruleIndex.get(n + ' special rule') ?? ''
+  }
+
   /** The stat lines, weapon lines, rules and a one-line-per-model loadout for what is selected inside a unit. */
-  private describe(root: Sel): { loadout: string[]; prime: string[]; stats: StatTable[]; rules: RuleView[] } {
+  private describe(root: Sel): { loadout: string[]; prime: string[]; stats: StatTable[]; rules: RuleView[]; grants: GrantView[] } {
     const e = this.eng
     const profileTypes: Node[] = this.sys.gst.profileTypes ?? []
     const columnsOf = (p: Node) => (profileTypes.find((t) => t.id === p.typeId || t.name === p.typeName)?.characteristicTypes ?? []).map((c: Node) => c.name as string)
@@ -738,7 +760,55 @@ export class Builder {
     if (extra.length) loadout.push(models.length ? `Upgrades: ${extra.join(', ')}` : extra.join(', '))
 
     const stats = [...tables.values()].sort((a, b) => STAT_ORDER.indexOf(a.type) - STAT_ORDER.indexOf(b.type))
-    return { loadout, prime, stats, rules }
+    // what wargear gives the models (a shield makes them Heavy): where it comes from is shown with it
+    const grants: GrantView[] = []
+    const gseen = new Set<string>()
+    const grantWalk = (s: Sel) => {
+      for (const id of e.grants(s)) {
+        const cat = this.sys.byId.get(id)
+        if (!cat) continue
+        const from = label(e, s)
+        const key = id + '|' + from
+        if (gseen.has(key)) continue
+        gseen.add(key)
+        const bits: string[] = []
+        for (const o of [s.slot.node, s.slot.link]) {
+          for (const p of o?.profiles ?? []) for (const c of p.characteristics ?? []) if (c.name === 'Description' && c.$text) bits.push(String(c.$text))
+          for (const r of o?.rules ?? []) if (r.description) bits.push(String(r.description))
+        }
+        grants.push({
+          name: String(cat.name ?? '').replace(/\s*(Model )?Sub-?type$/i, '').replace(/\s*Trait$/i, '').trim() || String(cat.name),
+          rule: (cat.rules ?? []).map((r: Node) => String(r.description ?? '')).filter(Boolean).join('\n\n'),
+          from,
+          fromText: [...new Set(bits)].join('\n\n'),
+        })
+      }
+      // wargear whose text says it gives a sub-type, trait or special rule ("gains the Deep Strike Special Rule") when the data does not
+      // record that as an effect of its own (worked out from the wording, so shown with where it comes from)
+      const from = label(e, s)
+      const descs: string[] = []
+      for (const o of [s.slot.node, s.slot.link]) for (const p of o?.profiles ?? []) if (p.typeName === 'Wargear') for (const c of p.characteristics ?? []) if (c.name === 'Description' && c.$text) descs.push(String(c.$text))
+      for (const text of descs) {
+        for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+          const at = sentence.search(/\bgains?\s+(?:the\s+|a\s+|an\s+)?[A-Z]/)
+          if (at < 0) continue
+          // "gains the Shield Trait and the Heavy Sub-Type": each name must follow straight on from the verb (or the "and" before it)
+          let rest = sentence.slice(at).replace(/^gains?\s+/, '')
+          for (;;) {
+            const m = /^(?:(?:,|and)\s*)?(?:the\s+|a\s+|an\s+)?([A-Z][A-Za-z'-]*(?:\s[A-Za-z'-]+){0,3}?)\s+([Ss]ub-?[Tt]ype|[Tt]rait|[Ss]pecial [Rr]ule)\b/.exec(rest)
+            if (!m) break
+            rest = rest.slice(m[0].length).trimStart()
+            const name = m[1].trim()
+            // (what the data's own record of the effect already gave is not shown twice)
+            if (grants.some((g) => g.from === from && g.name.toLowerCase() === name.toLowerCase())) continue
+            grants.push({ name, rule: this.ruleText(name, m[2]), from, fromText: [...new Set(descs)].join('\n\n') })
+          }
+        }
+      }
+      for (const c of s.selections) if (c.number > 0) grantWalk(c)
+    }
+    grantWalk(root)
+    return { loadout, prime, stats, rules, grants }
   }
 
   private selDetail(s: Sel, top = false, all: Issue[] = []): SelDetail {
@@ -773,7 +843,7 @@ export class Builder {
       }
       return out
     }
-    const info = top ? this.describe(s) : { loadout: [], prime: [], stats: [], rules: [] }
+    const info = top ? this.describe(s) : { loadout: [], prime: [], stats: [], rules: [], grants: [] }
     const attach: AttachView[] = []
     if (top) {
       const all = this.allSels()

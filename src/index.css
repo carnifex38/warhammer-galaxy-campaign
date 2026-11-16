@@ -1008,3 +1008,10 @@ button.danger:hover:not(:disabled) { background: #3a191d; }
 .bld-stats td.stat-changed { background: rgba(242, 193, 78, 0.14); }
 
 .bld-loadout .bld-prime { color: #f2c14e; font-weight: 600; }
+
+.bld-grants { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bld-grants-label { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: #aab3cf; }
+.bld-grant { background: rgba(242, 193, 78, 0.12); border: 1px solid #f2c14e; color: #f2c14e; font-weight: 700; border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; }
+.bld-grant small { font-weight: 500; opacity: 0.85; }
+.bld-grant:hover { background: rgba(242, 193, 78, 0.22); }
+.stat-what { white-space: pre-line; }

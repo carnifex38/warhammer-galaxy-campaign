@@ -4,7 +4,7 @@ import type { Request, Response } from './worker.ts'
 import { readRosterFile } from './importRoster.ts'
 import { useBackClose } from '../navHistory.ts'
 import { statInfo } from './statGlossary.ts'
-import type { Choice, ForceView, RoleView, RosterView, SavedRoster, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
+import type { Choice, ForceView, RoleView, RosterView, SavedRoster, GrantView, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
 
 // The army builder screen, laid out like New Recruit so it reads well on a phone: the list is flat blocks (a force, its roles, its
 // units, each unit one row with a short line of what is in it). The eye opens the unit's stat lines and rules; tapping the name
@@ -431,6 +431,7 @@ function UnitSheet({ d }: { d: SelDetail }) {
     <div className="bld-sheet">
       {d.issues.length > 0 && <ul className="bld-sheet-issues">{d.issues.map((t, i) => <li key={i}>{t}</li>)}</ul>}
       <ul className="bld-loadout">{d.loadout.map((l, i) => <li key={i}>{loadoutLine(l, d.prime)}</li>)}</ul>
+      <Grants grants={d.grants} />
       {d.stats.map((t) => <StatBlock key={t.type} t={t} />)}
       {d.rules.length > 0 && (
         <details className="bld-rules">
@@ -442,6 +443,32 @@ function UnitSheet({ d }: { d: SelDetail }) {
             </details>
           ))}
         </details>
+      )}
+    </div>
+  )
+}
+
+/** What the wargear gives the models (e.g. Heavy from a shield), in yellow: tap one to see what it does and which wargear it comes from. */
+function Grants({ grants }: { grants: GrantView[] }) {
+  const [pick, setPick] = useState<GrantView | null>(null)
+  if (!grants.length) return null
+  return (
+    <div className="bld-grants">
+      <span className="bld-grants-label">From wargear</span>
+      {grants.map((g, i) => (
+        <button key={i} className="bld-grant" onClick={() => setPick(g)} aria-label={`${g.name}, from ${g.from}: what it does`}>{g.name} <small>({g.from})</small></button>
+      ))}
+      {pick && createPortal(
+        <Modal title={pick.name} sub={`from ${pick.from}`} onClose={() => setPick(null)} small>
+          {pick.rule ? <p className="stat-what">{pick.rule}</p> : <p className="muted">No description for this in the data.</p>}
+          {pick.fromText && (
+            <>
+              <h5 className="bld-pick-head">Where it comes from: {pick.from}</h5>
+              <p className="stat-what">{pick.fromText}</p>
+            </>
+          )}
+        </Modal>,
+        document.body,
       )}
     </div>
   )

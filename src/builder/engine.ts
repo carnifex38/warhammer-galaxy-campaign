@@ -447,6 +447,21 @@ export class Engine {
     return r
   }
 
+  /** The tags (sub-types, traits) a selected piece of wargear gives the model it is on, e.g. a shield that makes it Heavy. */
+  grants(s: Sel): string[] {
+    const out: string[] = []
+    const ctx: Ctx = { self: s, parent: s.parent }
+    for (const o of [s.slot.node, s.slot.link]) {
+      if (!o) continue
+      for (const { mod: m, holders } of flatMods(this.sys, o)) {
+        if (m.field !== 'category' || m.type !== 'add' || m.scope !== 'parent') continue
+        if (holders.length && !holders.every((h) => this.holderPasses(h, ctx))) continue
+        if (!out.includes(m.value)) out.push(m.value)
+      }
+    }
+    return out
+  }
+
   /** The primary category a not-yet-selected slot would have in a force. */
   slotCategory(slot: Slot, parent: Holder): string | undefined {
     const probe: Sel = { kind: 'sel', uid: '', slot, number: 0, selections: [], parent: parent as Sel | Force, virtual: true }
