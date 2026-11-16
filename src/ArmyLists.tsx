@@ -45,6 +45,7 @@ function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemo
   onRemove: () => void
 }) {
   const game: Game = a.era === '30k' ? 'hh3' : 'wh40k11e'
+  const [pending, setPending] = useState<File | null>(null) // a list that was made for the other era: opened as soon as the screen has switched
   const built = a.roster as StoredRoster | undefined
   const stored = built?.game === game ? built : undefined // (a list built under the other era's rules is not read as this one's)
   const pts = stored?.pts
@@ -72,7 +73,8 @@ function ArmyCard({ a, open, editing, undone, onToggle, onEdit, onChange, onRemo
             ? <textarea value={a.notes} maxLength={4000} rows={3} onChange={(e) => onChange({ notes: e.target.value })} placeholder="Notes, ideas for this army…" aria-label="Army notes" />
             : a.notes.trim() && <p className="army-notes">{a.notes}</p>}
           <Suspense fallback={<p className="muted">Opening the list…</p>}>
-            <ArmyBuilder key={`${undone}-${game}`} game={game} stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }} />
+            <ArmyBuilder key={`${undone}-${game}`} game={game} stored={stored} name={a.name} editing={editing} onChange={(r) => { if (editing) onChange({ roster: r }) }}
+              onOtherGame={editing ? (g, file) => { setPending(file); onChange({ era: g === 'hh3' ? '30k' : '40k' }) } : undefined} autoImport={pending} onAutoImported={() => setPending(null)} />
           </Suspense>
           <div className="army-foot">
             {editing

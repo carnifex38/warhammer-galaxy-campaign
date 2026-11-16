@@ -17,6 +17,13 @@ export interface ImportedRoster {
   forces: ImportedForce[]
 }
 
+/** Which game a list was made for, from the game system the other app wrote into it (null when it says nothing we know). */
+export function gameOf(r: { gameSystemId: string; gameSystemName: string }): 'hh3' | 'wh40k11e' | null {
+  if (r.gameSystemId === 'sys-9fe4-1dc3-b7c2-73cf' || /horus heresy/i.test(r.gameSystemName)) return 'hh3'
+  if (r.gameSystemId === 'sys-352e-adc2-7639-d610' || /warhammer 40,?000/i.test(r.gameSystemName)) return 'wh40k11e'
+  return null
+}
+
 type J = Record<string, any>
 
 const arr = (v: unknown): J[] => (Array.isArray(v) ? (v as J[]) : [])

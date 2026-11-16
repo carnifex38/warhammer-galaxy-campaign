@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Request, Response } from './worker.ts'
-import { readRosterFile } from './importRoster.ts'
+import { gameOf, readRosterFile } from './importRoster.ts'
 import { useBackClose } from '../navHistory.ts'
 import { statInfo } from './statGlossary.ts'
 import type { Choice, ForceView, RoleView, RosterView, SavedRoster, GrantView, SelDetail, SelSummary, SlotView, StatTable } from './roster.ts'
@@ -97,7 +97,15 @@ function Modal({ title, sub, onClose, small, children }: { title: string; sub?: 
   )
 }
 
-export default function ArmyBuilder({ game, stored, name, onChange, editing = true }: { game: Game; stored?: StoredRoster; name: string; onChange: (s: StoredRoster) => void; /** false: just show the list, with nothing to change */ editing?: boolean }) {
+export default function ArmyBuilder({ game, stored, name, onChange, editing = true, onOtherGame, autoImport, onAutoImported }: {
+  game: Game; stored?: StoredRoster; name: string; onChange: (s: StoredRoster) => void
+  /** false: just show the list, with nothing to change */
+  editing?: boolean
+  /** a file that was made for the other game: the screen switches to that game and hands the file back through autoImport */
+  onOtherGame?: (game: Game, file: File) => void
+  autoImport?: File | null
+  onAutoImported?: () => void
+}) {
   const call = useWorker()
   const { base, rules } = GAME[game]
   const [armies, setArmies] = useState<{ id: string; name: string }[] | null>(null)
@@ -154,6 +162,8 @@ export default function ArmyBuilder({ game, stored, name, onChange, editing = tr
     void act({ op: 'name', name })
   }, [name, view, editing, act])
 
+  const importGate = useRef<Promise<void>>(Promise.resolve())
+
   /** Open a list made in New Recruit or BattleScribe (.json, .ros or .rosz). */
   const importFile = useCallback(async (file: File) => {
     setBusy(true)
@@ -161,13 +171,21 @@ export default function ArmyBuilder({ game, stored, name, onChange, editing = tr
     setNote('')
     try {
       const roster = await readRosterFile({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })
+      // a Horus Heresy list in a 40,000 screen (or the other way round): the screen follows the list, not the other way round
+      const theirs = gameOf(roster)
+      if (theirs && theirs !== game && onOtherGame) { onOtherGame(theirs, file); return }
       const cat = roster.forces[0]?.catalogueId
       if (!cat) throw new Error('That list has no army in it.')
       armyRef.current = cat
       setArmyId(cat)
-      const loaded = await call({ op: 'load', base, armyId: cat })
-      if (!loaded.ok) throw new Error(loaded.error)
-      const r = await call({ op: 'import', roster })
+      // (one after another: two opens at the same moment would otherwise put the list in twice)
+      const run = importGate.current.then(async () => {
+        const loaded = await call({ op: 'load', base, armyId: cat })
+        if (!loaded.ok) throw new Error(loaded.error)
+        return call({ op: 'import', roster })
+      })
+      importGate.current = run.then(() => undefined, () => undefined)
+      const r = await run
       if (!r.ok) throw new Error(r.error)
       apply(r)
       const rep = r.report
@@ -177,7 +195,19 @@ export default function ArmyBuilder({ game, stored, name, onChange, editing = tr
     } finally {
       setBusy(false)
     }
-  }, [call, apply, base])
+  }, [call, apply, base, game, onOtherGame])
+
+  // a list that was dropped on the other game's screen arrives here, on the right one, and is opened (the latest importFile is read
+  // through a ref; it runs again if React remounts the screen, because the worker it asked is stopped then)
+  const importRef = useRef(importFile)
+  useEffect(() => { importRef.current = importFile })
+  const autoRef = useRef(autoImport)
+  const doneRef = useRef(onAutoImported)
+  useEffect(() => { doneRef.current = onAutoImported })
+  useEffect(() => {
+    const f = autoRef.current
+    if (f) void importRef.current(f).then(() => doneRef.current?.())
+  }, [])
 
   const shared = useMemo<Shared | null>(() => (view ? { act, call, view, editing, open: setPopup } : null), [act, call, view, editing])
 
