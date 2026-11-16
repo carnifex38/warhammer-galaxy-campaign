@@ -23,6 +23,7 @@ const cache = '.bsdata-cache'
 mkdirSync(cache, { recursive: true })
 for (const g of GAMES) {
   const dir = join(cache, g.key)
+  try {
   if (g.pin) {
     if (!existsSync(dir)) { git('init', '-q', dir); git('-C', dir, 'remote', 'add', 'origin', g.repo) }
     if (head(dir) !== g.pin) {
@@ -33,4 +34,10 @@ for (const g of GAMES) {
   else git('clone', '--depth', '1', g.repo, dir)
   const commit = execFileSync('git', ['-C', dir, 'rev-parse', '--short', 'HEAD']).toString().trim()
   execFileSync('node', ['scripts/build-bsdata.mjs', dir, join('public', 'data', g.key), commit], { stdio: 'inherit' })
+  } catch (e) {
+    // The rules are also kept in the repository (public/data). When BSData cannot be reached (its GitHub repositories disappeared on
+    // 16 Nov 2026) the copy that is already there is used, so a build does not fail for it.
+    if (existsSync(join('public', 'data', g.key, 'manifest.json'))) console.warn(`Could not download the ${g.key} rules (${e instanceof Error ? e.message.split('\n')[0] : e}); keeping the copy in public/data/${g.key}.`)
+    else throw e
+  }
 }

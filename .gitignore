@@ -30,6 +30,7 @@ dev-dist
 data
 .env
 
-# army builder rules data (made from BSData by npm run data)
-/public/data/
+# army builder rules data: made from BSData by npm run data, and kept in the repository (the BSData repositories on GitHub went away
+# on 16 Nov 2026, so a build can no longer download them); the line below undoes the general "data" rule above for it
+!/public/data/
 /.bsdata-cache/

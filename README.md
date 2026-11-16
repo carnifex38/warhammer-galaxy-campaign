@@ -18,7 +18,8 @@ short paraphrases written for the app.
   lock sectors behind void-shroud fog, rewrite any text, hide or reveal each section, quick reveal presets and a host preview.
 - **Army builders** for 30K (Horus Heresy 3rd edition) and 40K (11th edition), built on the community BSData rules that New Recruit
   uses: points, wargear and the rules checks, and lists can be imported from and exported to New Recruit and BattleScribe. The rules
-  are downloaded by `npm run data`. The 40K rules are pinned to one commit (see `scripts/update-data.mjs`) so that points do not
+  are downloaded by `npm run data`, and a copy is kept in `public/data` (the BSData repositories on GitHub went away on 16 Nov 2026, so
+  builds use that copy when the download fails). The 40K rules are pinned to one commit (see `scripts/update-data.mjs`) so that points do not
   change under saved lists in the middle of an event.
 - **Logins** for Guest, Player and Gamemaster.
 - Works on phones, tablets and desktop, and installs as an app (PWA).
