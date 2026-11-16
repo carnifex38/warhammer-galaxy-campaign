@@ -2,5 +2,4 @@ node_modules
 dist
 data
 .env
-public/data
 .bsdata-cache

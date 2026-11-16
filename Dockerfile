@@ -1,12 +1,10 @@
 FROM node:24-alpine AS build
 WORKDIR /app
-# git: npm run data downloads the army builder's rules (BSData) with it
+# git: the build reads the commit hash from .git
 RUN apk add --no-cache git
 COPY package*.json ./
 RUN npm ci
-# the rules data gets its own layer, so code changes do not download it again. For newer rules: docker compose build --no-cache
-COPY scripts ./scripts
-RUN npm run data
+# the army builder's rules come with the checkout (public/data is committed, as BSData's repositories are gone); `npm run data` refreshes them when wanted
 COPY . .
 # the version shown in the app is the commit being built: read from the checkout's .git (which is why .dockerignore lets it in), or
 # given with --build-arg GIT_HASH=... when there is no .git
