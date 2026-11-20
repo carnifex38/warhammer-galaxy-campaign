@@ -76,7 +76,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
   const [pendingEra, setPendingEra] = useState<Era | null>(null)
   const [fading, setFading] = useState(false)
   // the captured-territory layer on the map (on unless the player switched it off; remembered)
-  const [territory, setTerritoryState] = useState(() => { try { return localStorage.getItem(TERRITORY_KEY) !== 'off' } catch { return true } })
+  const [territory, setTerritoryState] = useState(() => { try { return localStorage.getItem(TERRITORY_KEY) === 'on' } catch { return false } })
   const setTerritory = (on: boolean) => { setTerritoryState(on); try { localStorage.setItem(TERRITORY_KEY, on ? 'on' : 'off') } catch { /* not remembered */ } }
   const eraTimers = useRef<number[]>([])
   useEffect(() => () => eraTimers.current.forEach((t) => window.clearTimeout(t)), [])
