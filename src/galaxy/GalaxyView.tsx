@@ -17,6 +17,7 @@ import type { RevealField } from './InfoEditor'
 import { useTeams } from '../teams'
 
 const ERA_KEY = 'galaxy-era'
+const TERRITORY_KEY = 'galaxy-territory'
 const ERA_LABEL: Record<Era, string> = { '40k': 'The Dark Imperium', '30k': 'The Horus Heresy' }
 
 function savedEra(): Era {
@@ -74,6 +75,9 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
   // switching era dips the map into darkness, changes underneath, then brings it back, instead of a hard cut
   const [pendingEra, setPendingEra] = useState<Era | null>(null)
   const [fading, setFading] = useState(false)
+  // the captured-territory layer on the map (on unless the player switched it off; remembered)
+  const [territory, setTerritoryState] = useState(() => { try { return localStorage.getItem(TERRITORY_KEY) !== 'off' } catch { return true } })
+  const setTerritory = (on: boolean) => { setTerritoryState(on); try { localStorage.setItem(TERRITORY_KEY, on ? 'on' : 'off') } catch { /* not remembered */ } }
   const eraTimers = useRef<number[]>([])
   useEffect(() => () => eraTimers.current.forEach((t) => window.clearTimeout(t)), [])
   const applyEra = (e: Era) => {
@@ -283,6 +287,7 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
     <div className={`galaxy${infoPanel ? ' info-open' : ''}`}>
       {infoPanel}
       <Galaxy3D
+        territory={territory}
         sectorId={sectorId}
         planetId={planetId}
         onSelectSector={goSector}
@@ -312,6 +317,9 @@ export default function GalaxyView({ events, auth, claims, calendar, onOpenEvent
           <div className="holder-key" role="group" aria-label="Planets held">
             <button className="holder-row a" onClick={() => onOpenHeld('A')}><i aria-hidden="true" />{teams.A.name} holds {held.A}</button>
             <button className="holder-row b" onClick={() => onOpenHeld('B')}><i aria-hidden="true" />{teams.B.name} holds {held.B}</button>
+            <button className={`holder-toggle${territory ? ' on' : ''}`} role="switch" aria-checked={territory} onClick={() => setTerritory(!territory)}>
+              <span>Territory</span><b>{territory ? 'ON' : 'OFF'}</b>
+            </button>
           </div>
         )}
         {events.hostPreview && (

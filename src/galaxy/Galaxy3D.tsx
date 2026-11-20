@@ -19,6 +19,7 @@ import { HulkMarker } from './SpaceHulk'
 import { lookNameFor, type Era } from './planetLooks'
 import { GALAXY_BOX, bbox, isHulkId, openCount, toWorld, type Planet, type Sector } from './data'
 import { teamsNow } from '../teams'
+import { TerritoryField, type TerritoryPlanet } from './TerritoryField'
 
 export interface PlanetInfo {
   enabled: boolean
@@ -58,6 +59,8 @@ interface Props {
   lockedSectors?: string[]
   /** Pixels at the left of the map covered by the information window: the view glides sideways to keep its subject in the clear area. */
   viewInset?: number
+  /** Show the territory the teams have captured (the shaded regions and the front lines between them). */
+  territory?: boolean
   /** Extra controls drawn over the map. */
   children?: ReactNode
 }
@@ -1283,7 +1286,7 @@ function Later({ ms, children }: { ms: number; children: ReactNode }) {
 
 // ---------- scene ----------
 
-function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, hoverZone, playZones, shieldZones, shieldTotal, shieldMajority, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
+function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, hoverSectorId, hoverPlanetId, hoverZone, playZones, shieldZones, shieldTotal, shieldMajority, era, planetInfo, sectors: SECTORS, viewInset = 0, lockedSectors = [], territory = true, layer }: Props & { layer: RefObject<HTMLDivElement | null> }) {
   const sector = SECTORS.find((s) => s.id === sectorId)
   const planet = sector?.planets.find((p) => p.id === planetId)
   const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height))
@@ -1301,6 +1304,18 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       lines: [p.forge ? `⚙ ${p.name}` : p.name, planetInfo[p.id]?.enabled === false ? 'Restricted' : planetInfo[p.id]?.zonesHidden ? '' : `${planetInfo[p.id]?.open ?? openCount(p.tables)}/${planetInfo[p.id]?.total ?? p.tables.length} open`].filter(Boolean),
     }))
   }, [sector, planetId, planetInfo])
+
+  // the planets a team holds (a locked sector shows none), and how far apart neighbouring planets typically are (sets the reach of a territory)
+  const held = useMemo<TerritoryPlanet[]>(() => SECTORS.filter((s) => !lockedSectors.includes(s.id)).flatMap((s) => s.planets.flatMap((p) => {
+    const team = planetInfo[p.id]?.holder
+    return team && !isHulkId(p.id) ? [{ x: p.x, z: p.z, team, sector: s.id }] : []
+  })), [SECTORS, planetInfo, lockedSectors])
+  const polygons = useMemo(() => SECTORS.filter((s) => !lockedSectors.includes(s.id)).map((s) => ({ id: s.id, polygon: s.polygon })), [SECTORS, lockedSectors])
+  const spacing = useMemo(() => {
+    const all = SECTORS.flatMap((s) => s.planets.filter((p) => !isHulkId(p.id)))
+    const nn = all.map((a) => Math.min(...all.filter((b) => b !== a).map((b) => Math.hypot(a.x - b.x, a.z - b.z)))).filter(Number.isFinite).sort((a, b) => a - b)
+    return nn.length ? nn[Math.floor(nn.length / 2)] : 1
+  }, [SECTORS])
 
   const focus = useMemo(() => {
     if (planet) {
@@ -1332,6 +1347,7 @@ function Scene({ sectorId, planetId, onSelectSector, onSelectPlanet, onClear, ho
       <Later ms={820}><WarpStorms era={era} /></Later>
       <PlanetBackdrop hidden={useOptions().hideStarfield} planetId={planetId} era={era} anchor={planet ? [planet.x, PLANET_FOCUS_Y, planet.z] : null} />
       <Labels specs={specs} layer={layer} />
+      <TerritoryField planets={held} teams={teamsNow()} box={GALAXY_BOX} spacing={spacing} polygons={polygons} on={territory && held.length > 0} getFade={() => 1 - 0.97 * backdropLevel.v} />
 
       {SECTORS.map((s) => {
         const state = !sector ? 'idle' : s.id === sector.id ? 'active' : 'dim'
